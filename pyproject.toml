@@ -10,6 +10,10 @@ dependencies = [
 ]
 
 [dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
 # Optional analysis extras — installed with `uv sync --group notebook`.
 notebook = [
     "jupyter",
