@@ -1,0 +1,19 @@
+# Keep the build context (and image) small and free of secrets.
+.git/
+.github/
+.claude/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+.ipynb_checkpoints/
+
+# Not needed at serve time.
+data/
+evals/
+README.md
+CLAUDE.md
+requirements.txt
+src/generate.py
+src/eval.py

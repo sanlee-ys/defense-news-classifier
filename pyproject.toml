@@ -1,0 +1,25 @@
+[project]
+name = "defense-news-classifier"
+version = "0.1.0"
+description = "Classifies public defense-related news snippets into a category and an operational domain using an LLM with structured output."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic",
+    "pandas",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+# Optional analysis extras — installed with `uv sync --group notebook`.
+notebook = [
+    "jupyter",
+]
+
+[tool.uv]
+# Keep the project lean: no build backend, this is a set of runnable scripts,
+# not a published package.
+package = false
