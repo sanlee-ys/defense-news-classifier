@@ -12,8 +12,8 @@ import pytest
 
 import classify
 
-
 # --- label sets / tool schema stay in sync -------------------------------
+
 
 def test_tool_schema_enums_match_label_constants():
     props = classify.CLASSIFY_TOOL["input_schema"]["properties"]
@@ -28,6 +28,7 @@ def test_tool_requires_both_fields():
 
 # --- classify() ----------------------------------------------------------
 
+
 def test_classify_returns_tool_input(tool_client):
     client = tool_client({"category": "procurement", "operational_domain": "air"})
     result = classify.classify(client, "Pentagon awards F-35 contract.")
@@ -37,6 +38,7 @@ def test_classify_returns_tool_input(tool_client):
 def test_classify_skips_non_tool_blocks(tool_client):
     # A leading text block must be ignored; the tool_use block is what counts.
     from conftest import make_text_block
+
     client = tool_client(
         {"category": "operations", "operational_domain": "sea"},
         extra_blocks=[make_text_block("thinking out loud")],
@@ -61,6 +63,7 @@ def test_classify_sends_expected_request(tool_client):
 
 # --- make_client() -------------------------------------------------------
 
+
 def test_make_client_raises_without_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(EnvironmentError):
@@ -76,10 +79,12 @@ def test_make_client_builds_with_key(monkeypatch):
 
 # --- main() (CLI entry point) --------------------------------------------
 
+
 def test_main_classifies_text_from_argv(monkeypatch, capsys):
     monkeypatch.setattr(classify, "make_client", lambda: object())
     monkeypatch.setattr(
-        classify, "classify",
+        classify,
+        "classify",
         lambda _c, _t: {"category": "policy", "operational_domain": "multi"},
     )
     monkeypatch.setattr(sys, "argv", ["classify.py", "New", "defense", "strategy"])
@@ -94,7 +99,8 @@ def test_main_classifies_text_from_argv(monkeypatch, capsys):
 def test_main_reads_from_stdin_when_no_argv(monkeypatch, capsys):
     monkeypatch.setattr(classify, "make_client", lambda: object())
     monkeypatch.setattr(
-        classify, "classify",
+        classify,
+        "classify",
         lambda _c, _t: {"category": "operations", "operational_domain": "air"},
     )
     monkeypatch.setattr(sys, "argv", ["classify.py"])

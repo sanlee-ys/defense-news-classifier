@@ -14,12 +14,11 @@ import eval as evalmod
 
 def _frame(rows):
     """Build a merged-style frame from (true_cat, pred_cat) tuples."""
-    return pd.DataFrame(
-        [{"category": t, "pred_category": p} for t, p in rows]
-    )
+    return pd.DataFrame([{"category": t, "pred_category": p} for t, p in rows])
 
 
 # --- compute_metrics -----------------------------------------------------
+
 
 def test_perfect_predictions_give_unit_scores():
     df = _frame([("air", "air"), ("air", "air"), ("land", "land")])
@@ -64,6 +63,7 @@ def test_support_sums_to_row_count():
 
 # --- confusion_matrix ----------------------------------------------------
 
+
 def test_confusion_matrix_is_square_over_all_labels():
     df = _frame([("a", "a"), ("a", "b"), ("b", "b")])
     cm = evalmod.confusion_matrix(df, "category")
@@ -83,6 +83,7 @@ def test_confusion_matrix_diagonal_equals_correct_count():
 
 # --- build_report --------------------------------------------------------
 
+
 def _full_frame(rows):
     """rows = (cat, pred_cat, dom, pred_dom)."""
     return pd.DataFrame(
@@ -99,22 +100,25 @@ def _full_frame(rows):
 
 
 def test_report_reports_accuracy_and_counts():
-    df = _full_frame([
-        ("procurement", "procurement", "air", "air"),     # both right
-        ("operations", "policy", "land", "land"),          # category wrong
-        ("policy", "policy", "sea", "air"),                # domain wrong
-        ("technology", "technology", "cyber", "cyber"),    # both right
-    ])
+    df = _full_frame(
+        [
+            ("procurement", "procurement", "air", "air"),  # both right
+            ("operations", "policy", "land", "land"),  # category wrong
+            ("policy", "policy", "sea", "air"),  # domain wrong
+            ("technology", "technology", "cyber", "cyber"),  # both right
+        ]
+    )
     report = evalmod.build_report(df)
 
     assert "Articles evaluated : 4" in report
-    assert "Category accuracy           : 75.0%" in report   # 3/4
-    assert "Operational domain accuracy : 75.0%" in report   # 3/4
+    assert "Category accuracy           : 75.0%" in report  # 3/4
+    assert "Operational domain accuracy : 75.0%" in report  # 3/4
     # Two rows have at least one wrong field.
     assert "Misclassified : 2 / 4" in report
 
 
 # --- classify_with_retry -------------------------------------------------
+
 
 class _FakeRateLimit(Exception):
     pass
@@ -171,13 +175,26 @@ def test_retry_reraises_after_exhausting_attempts(monkeypatch):
 
 # --- main() + run_predictions (end-to-end on a tiny dataset) --------------
 
+
 def _write_dataset(tmp_path):
     """Create data/synthetic_articles.csv under tmp_path and return the frame."""
     (tmp_path / "data").mkdir()
-    df = pd.DataFrame([
-        {"id": 0, "text": "Air strike reported.", "category": "operations", "operational_domain": "air"},
-        {"id": 1, "text": "New treaty signed.", "category": "policy", "operational_domain": "sea"},
-    ])
+    df = pd.DataFrame(
+        [
+            {
+                "id": 0,
+                "text": "Air strike reported.",
+                "category": "operations",
+                "operational_domain": "air",
+            },
+            {
+                "id": 1,
+                "text": "New treaty signed.",
+                "category": "policy",
+                "operational_domain": "sea",
+            },
+        ]
+    )
     df.to_csv(tmp_path / "data" / "synthetic_articles.csv", index=False)
     return df
 
@@ -214,10 +231,12 @@ def test_main_skips_api_when_predictions_already_complete(monkeypatch, tmp_path)
 
     # Pre-seed a complete predictions file so the resume branch is taken.
     (tmp_path / "evals").mkdir()
-    pd.DataFrame([
-        {"id": 0, "pred_category": "operations", "pred_operational_domain": "air"},
-        {"id": 1, "pred_category": "policy", "pred_operational_domain": "sea"},
-    ]).to_csv(tmp_path / "evals" / "predictions.csv", index=False)
+    pd.DataFrame(
+        [
+            {"id": 0, "pred_category": "operations", "pred_operational_domain": "air"},
+            {"id": 1, "pred_category": "policy", "pred_operational_domain": "sea"},
+        ]
+    ).to_csv(tmp_path / "evals" / "predictions.csv", index=False)
 
     def boom():
         raise AssertionError("make_client must not be called when preds are complete")
