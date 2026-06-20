@@ -1,0 +1,29 @@
+name: tests
+
+# Run the offline unit suite on every push and PR to main.
+# The tests mock the Anthropic API, so no API key is needed in CI.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies (locked)
+        run: uv sync --locked
+
+      - name: Run tests
+        run: uv run pytest

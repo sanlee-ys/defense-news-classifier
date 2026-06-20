@@ -10,6 +10,10 @@ dependencies = [
 ]
 
 [dependency-groups]
+# Dev tooling — the offline test suite. Installed by `uv sync` (default group).
+dev = [
+    "pytest",
+]
 # Optional analysis extras — installed with `uv sync --group notebook`.
 notebook = [
     "jupyter",
