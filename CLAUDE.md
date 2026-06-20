@@ -46,7 +46,17 @@ These labels are a starting point. If a cleaner set emerges once you see the dat
 - LLM via the **Anthropic API** (or OpenAI — confirm which key I'm using). Read the API key from an environment variable; **never hardcode keys**.
 - Structured outputs / JSON schema for the classifier response.
 - Minimal dependencies: the LLM client (`anthropic` or `openai`) plus `pandas` for the eval tables. Avoid heavy frameworks.
-- Dependency management via **uv**: `pyproject.toml` declares deps, `uv.lock` pins them, `uv sync` builds the env, `uv run` executes scripts. `requirements.txt` is kept as a pip fallback.
+- Dependency management via **uv**: `pyproject.toml` declares deps, `uv.lock` pins them, `uv sync` builds the env, and `uv run` executes scripts. `requirements.txt` is kept as a pip fallback.
+
+  Quick uv workflow:
+  ```bash
+  uv sync --group dev          # install project and test dependencies
+  uv run pytest                # run unit tests
+  uv run pytest --cov=src      # run tests with coverage
+  uv run python src/generate.py  # generate the synthetic dataset
+  uv run python src/classify.py "<article text>"  # classify one article
+  uv run python src/eval.py    # run the full evaluation
+  ```
 - Eval is plain Python; a Jupyter notebook for the analysis is fine.
 
 ## Project structure
