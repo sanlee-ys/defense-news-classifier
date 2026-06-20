@@ -12,6 +12,8 @@ dependencies = [
 [dependency-groups]
 dev = [
     "black",
+    "mypy",
+    "pandas-stubs",
     "pre-commit",
     "ruff",
     "pytest",
@@ -27,6 +29,12 @@ dev = [
 notebook = [
     "jupyter",
 ]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+strict = false
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 88
