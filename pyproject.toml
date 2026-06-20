@@ -12,6 +12,8 @@ dependencies = [
 [dependency-groups]
 dev = [
     "black",
+    "pre-commit",
+    "ruff",
     "pytest",
     "pytest-cov",
     "uv",
@@ -24,6 +26,21 @@ dev = [
 # Optional analysis extras — installed with `uv sync --group notebook`.
 notebook = [
     "jupyter",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes (unused imports, undefined names)
+    "I",   # isort (import ordering)
+    "UP",  # pyupgrade (modernise syntax)
+]
+ignore = [
+    "E501",  # line too long — Black handles line length; strings/comments can't be auto-wrapped
 ]
 
 [tool.black]

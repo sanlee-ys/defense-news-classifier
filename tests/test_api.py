@@ -23,7 +23,9 @@ def client(monkeypatch):
 
 def test_health_does_not_touch_the_llm(client, monkeypatch):
     # If /health called classify, this would blow up.
-    monkeypatch.setattr(api, "classify", lambda *a, **k: pytest.fail("health hit the LLM"))
+    monkeypatch.setattr(
+        api, "classify", lambda *a, **k: pytest.fail("health hit the LLM")
+    )
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
@@ -53,7 +55,9 @@ def test_classify_rejects_empty_text(client):
 
 def test_classify_rejects_whitespace_only(client, monkeypatch):
     # A space passes min_length but is blank after strip() — handler returns 422.
-    monkeypatch.setattr(api, "classify", lambda *a, **k: pytest.fail("blank text reached the LLM"))
+    monkeypatch.setattr(
+        api, "classify", lambda *a, **k: pytest.fail("blank text reached the LLM")
+    )
     resp = client.post("/classify", json={"text": "   "})
     assert resp.status_code == 422
     assert resp.json()["detail"] == "text must not be blank."

@@ -14,8 +14,16 @@ import generate
 def test_generate_combo_returns_articles_list(tool_client):
     payload = {
         "articles": [
-            {"text": "snippet one", "category": "industry", "operational_domain": "land"},
-            {"text": "snippet two", "category": "industry", "operational_domain": "land"},
+            {
+                "text": "snippet one",
+                "category": "industry",
+                "operational_domain": "land",
+            },
+            {
+                "text": "snippet two",
+                "category": "industry",
+                "operational_domain": "land",
+            },
         ]
     }
     client = tool_client(payload)
@@ -45,14 +53,18 @@ def test_generate_tool_schema_enums_match_constants():
 
 # --- main() --------------------------------------------------------------
 
+
 def test_main_writes_one_csv_row_per_generated_article(monkeypatch, tmp_path):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     monkeypatch.setattr(generate.time, "sleep", lambda *_: None)  # no real waiting
 
     # One article per (category, domain) combo; echo the requested labels back.
     monkeypatch.setattr(
-        generate, "generate_combo",
-        lambda _c, cat, dom: [{"text": f"{cat}-{dom}", "category": cat, "operational_domain": dom}],
+        generate,
+        "generate_combo",
+        lambda _c, cat, dom: [
+            {"text": f"{cat}-{dom}", "category": cat, "operational_domain": dom}
+        ],
     )
 
     out = tmp_path / "articles.csv"
@@ -62,8 +74,8 @@ def test_main_writes_one_csv_row_per_generated_article(monkeypatch, tmp_path):
 
     df = pd.read_csv(out)
     n_combos = len(generate.CATEGORIES) * len(generate.DOMAINS)
-    assert len(df) == n_combos                       # 30 combos × 1 article each
-    assert list(df["id"]) == list(range(n_combos))   # ids are sequential
+    assert len(df) == n_combos  # 30 combos × 1 article each
+    assert list(df["id"]) == list(range(n_combos))  # ids are sequential
     assert set(df["category"]) == set(generate.CATEGORIES)
 
 

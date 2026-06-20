@@ -8,7 +8,6 @@ Usable as a module (import classify) or as a CLI tool.
 import json
 import os
 import sys
-
 from typing import cast
 
 import anthropic
@@ -107,7 +106,7 @@ def make_client() -> anthropic.Anthropic:
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        raise EnvironmentError(
+        raise OSError(
             "ANTHROPIC_API_KEY is not set. "
             "Export it before running: export ANTHROPIC_API_KEY=sk-ant-..."
         )

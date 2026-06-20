@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.abspath(SRC))
 # that surface, so we build tiny stand-ins instead of importing the SDK.
 # ---------------------------------------------------------------------------
 
+
 def make_tool_block(payload: dict):
     """A content block that looks like a tool_use block."""
     return ToolUseBlock(id="toolu_fake", input=payload, name="tool", type="tool_use")
@@ -56,7 +57,9 @@ class FakeClient:
 @pytest.fixture
 def tool_client():
     """Factory: build a FakeClient that returns one tool_use block with `payload`."""
+
     def _make(payload, extra_blocks=None):
         blocks = list(extra_blocks or []) + [make_tool_block(payload)]
         return FakeClient(blocks)
+
     return _make

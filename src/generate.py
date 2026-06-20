@@ -14,8 +14,8 @@ import time
 from typing import cast
 
 import anthropic
-from anthropic.types import ToolParam, ToolUseBlock
 import pandas as pd
+from anthropic.types import ToolParam, ToolUseBlock
 
 CATEGORIES = ["procurement", "operations", "policy", "technology", "industry"]
 DOMAINS = ["air", "land", "sea", "cyber", "space", "multi"]
@@ -105,7 +105,7 @@ def main() -> None:
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        raise EnvironmentError(
+        raise OSError(
             "ANTHROPIC_API_KEY is not set. "
             "Export it before running: export ANTHROPIC_API_KEY=sk-ant-..."
         )
