@@ -44,7 +44,7 @@ The following are explicitly out of scope. They may be revisited in v2.
 This is a personal portfolio project. The primary audience is:
 
 - **The author** — building and evaluating the system
-- **Technical reviewers** — hiring managers, peers, or collaborators assessing the work
+- **Technical reviewers** — peers or collaborators assessing the work
 
 There are no end-users, no service-level requirements, and no operational deployment target.
 
