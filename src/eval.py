@@ -89,7 +89,7 @@ def confusion_matrix(df: pd.DataFrame, field: str) -> pd.DataFrame:
 # Prediction loop
 # ---------------------------------------------------------------------------
 
-def classify_with_retry(client, text: str, max_retries: int = 3) -> dict:
+def classify_with_retry(client: anthropic.Anthropic, text: str, max_retries: int = 3) -> dict:
     """Call classify(), retrying on transient errors with exponential backoff.
 
     Args:
@@ -113,9 +113,10 @@ def classify_with_retry(client, text: str, max_retries: int = 3) -> dict:
             wait = 2 ** (attempt + 1)  # 2s then 4s
             print(f"  [{exc.__class__.__name__}] retrying in {wait}s...", flush=True)
             time.sleep(wait)
+    raise ValueError("max_retries must be >= 1")
 
 
-def run_predictions(client, df: pd.DataFrame, done_ids: set) -> None:
+def run_predictions(client: anthropic.Anthropic, df: pd.DataFrame, done_ids: set) -> None:
     """Classify every article not yet in done_ids and append results to PREDS_PATH.
 
     Each prediction is written immediately after the API call, so a crash
@@ -131,7 +132,7 @@ def run_predictions(client, df: pd.DataFrame, done_ids: set) -> None:
     total = len(todo)
     write_header = not os.path.exists(PREDS_PATH)
 
-    for i, row in todo.iterrows():
+    for i, (_, row) in enumerate(todo.iterrows()):
         print(
             f"[{i + 1:3d}/{total}] id={row['id']:3d}  "
             f"{row['category']} × {row['operational_domain']}",

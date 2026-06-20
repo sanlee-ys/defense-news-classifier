@@ -11,7 +11,10 @@ Columns: id, text, category, operational_domain
 
 import os
 import time
+from typing import cast
+
 import anthropic
+from anthropic.types import ToolParam, ToolUseBlock
 import pandas as pd
 
 CATEGORIES = ["procurement", "operations", "policy", "technology", "industry"]
@@ -22,7 +25,7 @@ OUTPUT_PATH = "data/synthetic_articles.csv"
 
 # Tool schema — defines the exact shape Claude must return.
 # Enums lock the labels so Claude can't drift to synonyms like "aerial" or "navy".
-GENERATE_TOOL = {
+GENERATE_TOOL: ToolParam = {
     "name": "generate_articles",
     "description": "Return a list of synthetic defense-news article snippets.",
     "input_schema": {
@@ -84,8 +87,8 @@ def generate_combo(client: anthropic.Anthropic, category: str, domain: str) -> l
     )
 
     # With tool_choice forcing the tool, the first content block is always a tool_use block.
-    tool_block = next(b for b in response.content if b.type == "tool_use")
-    return tool_block.input["articles"]
+    tool_block = next(b for b in response.content if isinstance(b, ToolUseBlock))
+    return cast(dict, tool_block.input)["articles"]
 
 
 def main() -> None:

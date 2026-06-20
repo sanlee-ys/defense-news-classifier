@@ -10,6 +10,7 @@ import sys
 import types
 
 import pytest
+from anthropic.types import TextBlock, ToolUseBlock
 
 SRC = os.path.join(os.path.dirname(__file__), "..", "src")
 sys.path.insert(0, os.path.abspath(SRC))
@@ -25,12 +26,12 @@ sys.path.insert(0, os.path.abspath(SRC))
 
 def make_tool_block(payload: dict):
     """A content block that looks like a tool_use block."""
-    return types.SimpleNamespace(type="tool_use", input=payload)
+    return ToolUseBlock(id="toolu_fake", input=payload, name="tool", type="tool_use")
 
 
 def make_text_block(text: str = ""):
     """A content block that looks like a plain text block."""
-    return types.SimpleNamespace(type="text", text=text)
+    return TextBlock(text=text, type="text")
 
 
 class FakeMessages:
