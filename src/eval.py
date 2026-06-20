@@ -31,6 +31,7 @@ SLEEP_BETWEEN_CALLS = 0.3  # seconds; small buffer to stay inside rate limits
 # Metrics (plain Python + pandas — no sklearn dependency)
 # ---------------------------------------------------------------------------
 
+
 def compute_metrics(df: pd.DataFrame, field: str) -> pd.DataFrame:
     """Compute per-label precision, recall, F1, and support for one field.
 
@@ -52,16 +53,21 @@ def compute_metrics(df: pd.DataFrame, field: str) -> pd.DataFrame:
         fp = int(((df[true_col] != label) & (df[pred_col] == label)).sum())
         fn = int(((df[true_col] == label) & (df[pred_col] != label)).sum())
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        recall    = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1 = (2 * precision * recall / (precision + recall)
-              if (precision + recall) > 0 else 0.0)
-        rows.append({
-            "label": label,
-            "precision": round(precision, 3),
-            "recall": round(recall, 3),
-            "f1": round(f1, 3),
-            "support": tp + fn,
-        })
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = (
+            2 * precision * recall / (precision + recall)
+            if (precision + recall) > 0
+            else 0.0
+        )
+        rows.append(
+            {
+                "label": label,
+                "precision": round(precision, 3),
+                "recall": round(recall, 3),
+                "f1": round(f1, 3),
+                "support": tp + fn,
+            }
+        )
     return pd.DataFrame(rows).set_index("label")
 
 
@@ -89,7 +95,10 @@ def confusion_matrix(df: pd.DataFrame, field: str) -> pd.DataFrame:
 # Prediction loop
 # ---------------------------------------------------------------------------
 
-def classify_with_retry(client: anthropic.Anthropic, text: str, max_retries: int = 3) -> dict:
+
+def classify_with_retry(
+    client: anthropic.Anthropic, text: str, max_retries: int = 3
+) -> dict:
     """Call classify(), retrying on transient errors with exponential backoff.
 
     Args:
@@ -116,7 +125,9 @@ def classify_with_retry(client: anthropic.Anthropic, text: str, max_retries: int
     raise ValueError("max_retries must be >= 1")
 
 
-def run_predictions(client: anthropic.Anthropic, df: pd.DataFrame, done_ids: set) -> None:
+def run_predictions(
+    client: anthropic.Anthropic, df: pd.DataFrame, done_ids: set
+) -> None:
     """Classify every article not yet in done_ids and append results to PREDS_PATH.
 
     Each prediction is written immediately after the API call, so a crash
@@ -144,7 +155,9 @@ def run_predictions(client: anthropic.Anthropic, df: pd.DataFrame, done_ids: set
             "pred_category": pred["category"],
             "pred_operational_domain": pred["operational_domain"],
         }
-        pd.DataFrame([result]).to_csv(PREDS_PATH, mode="a", header=write_header, index=False)
+        pd.DataFrame([result]).to_csv(
+            PREDS_PATH, mode="a", header=write_header, index=False
+        )
         write_header = False
 
         if i + 1 < total:
@@ -154,6 +167,7 @@ def run_predictions(client: anthropic.Anthropic, df: pd.DataFrame, done_ids: set
 # ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
+
 
 def build_report(merged: pd.DataFrame) -> str:
     """Format a human-readable eval report string from the merged predictions DataFrame.
@@ -171,8 +185,10 @@ def build_report(merged: pd.DataFrame) -> str:
     cat_metrics = compute_metrics(merged, "category")
     dom_metrics = compute_metrics(merged, "operational_domain")
     n_misc = int(
-        ((merged["category"] != merged["pred_category"]) |
-         (merged["operational_domain"] != merged["pred_operational_domain"])).sum()
+        (
+            (merged["category"] != merged["pred_category"])
+            | (merged["operational_domain"] != merged["pred_operational_domain"])
+        ).sum()
     )
 
     lines = [
@@ -202,6 +218,7 @@ def build_report(merged: pd.DataFrame) -> str:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     """Run the full eval pipeline: predict, score, and save all artefacts.
@@ -246,10 +263,18 @@ def main() -> None:
     confusion_matrix(merged, "operational_domain").to_csv(CONFUSION_DOM_PATH)
 
     misclassified = merged[
-        (merged["category"] != merged["pred_category"]) |
-        (merged["operational_domain"] != merged["pred_operational_domain"])
-    ][["id", "text", "category", "pred_category",
-       "operational_domain", "pred_operational_domain"]]
+        (merged["category"] != merged["pred_category"])
+        | (merged["operational_domain"] != merged["pred_operational_domain"])
+    ][
+        [
+            "id",
+            "text",
+            "category",
+            "pred_category",
+            "operational_domain",
+            "pred_operational_domain",
+        ]
+    ]
     misclassified.to_csv(MISCLASS_PATH, index=False)
 
     report = build_report(merged)

@@ -40,8 +40,12 @@ app = FastAPI(
 class ClassifyRequest(BaseModel):
     # Bound the input: empty text is meaningless, and a hard cap protects us from
     # someone pasting a whole document (and the token bill that comes with it).
-    text: str = Field(..., min_length=1, max_length=10_000,
-                      description="The defense-news article snippet to classify.")
+    text: str = Field(
+        ...,
+        min_length=1,
+        max_length=10_000,
+        description="The defense-news article snippet to classify.",
+    )
 
 
 class ClassifyResponse(BaseModel):
@@ -78,5 +82,7 @@ def classify_article(req: ClassifyRequest) -> ClassifyResponse:
     except Exception as exc:
         # The upstream LLM call failed (network, rate limit, API error). Surface
         # a 502 rather than a 500: the fault is an upstream dependency, not us.
-        raise HTTPException(status_code=502, detail=f"Classification failed: {exc}") from exc
+        raise HTTPException(
+            status_code=502, detail=f"Classification failed: {exc}"
+        ) from exc
     return ClassifyResponse(**result)

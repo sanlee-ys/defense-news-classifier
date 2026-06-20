@@ -11,6 +11,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "black",
     "pytest",
     "pytest-cov",
     "uv",
@@ -24,6 +25,10 @@ dev = [
 notebook = [
     "jupyter",
 ]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
 
 [tool.uv]
 # Keep the project lean: no build backend, this is a set of runnable scripts,

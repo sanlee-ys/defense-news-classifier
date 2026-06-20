@@ -55,7 +55,9 @@ GENERATE_TOOL: ToolParam = {
 }
 
 
-def generate_combo(client: anthropic.Anthropic, category: str, domain: str) -> list[dict]:
+def generate_combo(
+    client: anthropic.Anthropic, category: str, domain: str
+) -> list[dict]:
     """Ask Claude to produce ARTICLES_PER_COMBO snippets for one (category, domain) pair.
 
     Uses tool_choice to force Claude to call generate_articles — no free-text fallback.
@@ -117,7 +119,9 @@ def main() -> None:
     for i, category in enumerate(CATEGORIES):
         for j, domain in enumerate(DOMAINS):
             combo_num = i * len(DOMAINS) + j + 1
-            print(f"[{combo_num:2d}/{total_combos}] {category} × {domain} ...", flush=True)
+            print(
+                f"[{combo_num:2d}/{total_combos}] {category} × {domain} ...", flush=True
+            )
 
             articles = generate_combo(client, category, domain)
 
@@ -141,7 +145,12 @@ def main() -> None:
 
     print(f"\nSaved {len(df)} articles to {OUTPUT_PATH}")
     print("\nArticle counts by (category, domain):")
-    print(df.groupby(["category", "operational_domain"]).size().unstack(fill_value=0).to_string())
+    print(
+        df.groupby(["category", "operational_domain"])
+        .size()
+        .unstack(fill_value=0)
+        .to_string()
+    )
 
 
 if __name__ == "__main__":
