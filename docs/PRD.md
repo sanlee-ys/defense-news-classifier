@@ -2,7 +2,7 @@
 
 **Version:** 1.0  
 **Status:** Complete (v1)  
-**Author:** sanlee  
+**Author:** San Lee  
 **Last updated:** 2026-06-20
 
 ---
