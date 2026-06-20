@@ -5,6 +5,9 @@ The single LLM call is mocked — these check the wiring around it: that we
 send the right request and correctly pull the structured result back out.
 """
 
+import io
+import sys
+
 import pytest
 
 import classify
@@ -69,3 +72,43 @@ def test_make_client_builds_with_key(monkeypatch):
     client = classify.make_client()
     # Don't assert on SDK internals — just that we got a client object back.
     assert client is not None
+
+
+# --- main() (CLI entry point) --------------------------------------------
+
+def test_main_classifies_text_from_argv(monkeypatch, capsys):
+    monkeypatch.setattr(classify, "make_client", lambda: object())
+    monkeypatch.setattr(
+        classify, "classify",
+        lambda _c, _t: {"category": "policy", "operational_domain": "multi"},
+    )
+    monkeypatch.setattr(sys, "argv", ["classify.py", "New", "defense", "strategy"])
+
+    classify.main()
+
+    out = capsys.readouterr().out
+    assert '"category": "policy"' in out
+    assert '"operational_domain": "multi"' in out
+
+
+def test_main_reads_from_stdin_when_no_argv(monkeypatch, capsys):
+    monkeypatch.setattr(classify, "make_client", lambda: object())
+    monkeypatch.setattr(
+        classify, "classify",
+        lambda _c, _t: {"category": "operations", "operational_domain": "air"},
+    )
+    monkeypatch.setattr(sys, "argv", ["classify.py"])
+    monkeypatch.setattr(sys, "stdin", io.StringIO("Air strikes reported.\n"))
+
+    classify.main()
+    assert '"category": "operations"' in capsys.readouterr().out
+
+
+def test_main_exits_when_no_text_given(monkeypatch):
+    monkeypatch.setattr(classify, "make_client", lambda: object())
+    monkeypatch.setattr(sys, "argv", ["classify.py"])
+    monkeypatch.setattr(sys, "stdin", io.StringIO("   \n"))  # blank after strip
+
+    with pytest.raises(SystemExit) as exc:
+        classify.main()
+    assert exc.value.code == 1
