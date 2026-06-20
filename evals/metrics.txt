@@ -1,5 +1,5 @@
 ==============================================================
-DEFENSE NEWS CLASSIFIER — EVAL RESULTS
+DEFENSE NEWS CLASSIFIER â€” EVAL RESULTS
 ==============================================================
 
 Articles evaluated : 300

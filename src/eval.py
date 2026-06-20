@@ -198,7 +198,7 @@ def main() -> None:
     misclassified.to_csv(MISCLASS_PATH, index=False)
 
     report = build_report(merged)
-    with open(METRICS_PATH, "w") as f:
+    with open(METRICS_PATH, "w", encoding="utf-8") as f:
         f.write(report)
 
     print("\n" + report)
