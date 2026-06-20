@@ -9,21 +9,7 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
-### Added
-- Black for code formatting (`uv run black src/ tests/`); configured in `pyproject.toml`
-- Ruff for linting (`uv run ruff check src/ tests/`); configured in `pyproject.toml`
-- mypy for static type checking (`uv run mypy src/`); configured in `pyproject.toml`
-- pre-commit for running checks before each commit
-
-### Investigated
-- **Prompt experiment — sharpening the procurement/industry definitions (reverted).**
-  Hypothesis: adding an explicit "a firm *winning a specific contract* is procurement; a firm
-  *reporting earnings or merging* is industry" distinction to the system prompt would lift
-  `industry` recall, the weakest label (0.217). Re-ran the full 300-article eval — the change
-  **regressed** the target: category accuracy 79.0% → 76.7%, `industry` recall 0.217 → 0.100.
-  The sharper wording made the model even more willing to route borderline company stories into
-  `procurement`. Reverted the prompt and kept the 79.0% baseline. Recorded as a negative result —
-  the eval, not intuition, decided.
+_Nothing yet._
 
 ---
 
@@ -44,8 +30,26 @@ First complete version of the defense news classifier. All v1 success criteria m
 - `docs/PRD.md` — product requirements document
 - `CLAUDE.md` — project guidance for Claude Code
 
+### Tooling
+- Black for code formatting (`uv run black src/ tests/`); configured in `pyproject.toml`
+- Ruff for linting (`uv run ruff check src/ tests/`); configured in `pyproject.toml`
+- mypy for static type checking (`uv run mypy src/`); configured in `pyproject.toml`
+- pre-commit for running the above checks before each commit
+- GitHub Actions CI running the test suite on push and pull request
+- `.gitattributes` marking notebooks as documentation so the GitHub language bar reflects the Python source rather than embedded notebook output
+
 ### Fixed
 - `metrics.txt` written with explicit UTF-8 encoding to avoid platform-default encoding errors on Windows (`2cf797c`)
+
+### Investigated
+- **Prompt experiment — sharpening the procurement/industry definitions (reverted).**
+  Hypothesis: adding an explicit "a firm *winning a specific contract* is procurement; a firm
+  *reporting earnings or merging* is industry" distinction to the system prompt would lift
+  `industry` recall, the weakest label (0.217). Re-ran the full 300-article eval — the change
+  **regressed** the target: category accuracy 79.0% → 76.7%, `industry` recall 0.217 → 0.100.
+  The sharper wording made the model even more willing to route borderline company stories into
+  `procurement`. Reverted the prompt and kept the 79.0% baseline. Recorded as a negative result —
+  the eval, not intuition, decided.
 
 ---
 
@@ -58,6 +62,8 @@ First complete version of the defense news classifier. All v1 success criteria m
 
 ---
 
-[Unreleased]: https://github.com/sanlee/defense-news-classifier/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/sanlee/defense-news-classifier/compare/v0.1.0...v1.0.0
-[0.1.0]: https://github.com/sanlee/defense-news-classifier/releases/tag/v0.1.0
+[Unreleased]: https://github.com/sanlee-ys/defense-news-classifier/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v0.1.0...v1.0.0
+[0.1.0]: https://github.com/sanlee-ys/defense-news-classifier/releases/tag/v0.1.0
+</content>
+</invoke>
