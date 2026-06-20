@@ -130,7 +130,7 @@ limits of your own measurement is part of the measurement.
 
 The limitations above are about the *system*; these are about whether the **numbers
 themselves can be trusted**. Naming them is the point — each is a known seam with a
-named fix, not a surprise waiting in an interview.
+named fix, not a surprise lurking in the results.
 
 1. **The "negative result" is a single run (n=1).** The prompt experiment that regressed
    category accuracy 79.0% → 76.7% was one run of each config, and the calls are
