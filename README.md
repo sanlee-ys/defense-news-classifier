@@ -1,5 +1,10 @@
 # Defense News Classifier
 
+[![tests](https://github.com/sanlee-ys/defense-news-classifier/actions/workflows/tests.yml/badge.svg)](https://github.com/sanlee-ys/defense-news-classifier/actions/workflows/tests.yml)
+[![release](https://img.shields.io/github/v/release/sanlee-ys/defense-news-classifier)](https://github.com/sanlee-ys/defense-news-classifier/releases)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![python: 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+
 An NLP pipeline that classifies public defense-related news snippets into a **category**
 (what the article is about) and an **operational domain** (the warfighting domain involved).
 Built entirely on synthetic, publicly safe data. The measured eval numbers are the centerpiece.
@@ -58,6 +63,9 @@ way, and only the measurement caught it. (See `CHANGELOG.md` for the full before
 ---
 
 ## Design
+
+> For a plain-language walkthrough of the three-stage pipeline and why the
+> classifier/evaluator separation matters, see [`docs/how-it-works.md`](docs/how-it-works.md).
 
 ### Problem
 

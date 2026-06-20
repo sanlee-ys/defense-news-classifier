@@ -9,7 +9,13 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- `LICENSE` — MIT license
+- README status badges (CI, release, license, Python version)
+- `docs/how-it-works.md` — plain-language one-pager on the three-stage pipeline and why the classifier/evaluator separation is the point
+
+### Changed
+- `pyproject.toml` version bumped `0.1.0` → `1.0.0` to match the released tag
 
 ---
 
