@@ -8,6 +8,7 @@ uv sync --group dev
 
 # Optional: Jupyter for analysis notebook
 uv sync --group notebook
+uv run jupyter notebook   # opens browser tab with file browser
 
 # Set your API key before running anything that calls the API
 $env:ANTHROPIC_API_KEY = "sk-ant-..."   # PowerShell
