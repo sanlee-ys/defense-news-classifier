@@ -94,7 +94,9 @@ evals/
   confusion_category.csv    # Category confusion matrix
   confusion_domain.csv      # Domain confusion matrix
   misclassifications.csv    # Every article where a prediction was wrong
-requirements.txt
+pyproject.toml              # Project metadata + dependencies (uv)
+uv.lock                     # Pinned, reproducible dependency versions
+requirements.txt            # pip fallback (kept in sync with pyproject.toml)
 README.md
 CLAUDE.md
 ```
@@ -103,19 +105,26 @@ CLAUDE.md
 
 ## Running it
 
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
+`uv sync` installs the exact versions pinned in `uv.lock` into a local `.venv`,
+and `uv run` executes a command inside it — no manual virtualenv activation needed.
+
 ```bash
-pip install -r requirements.txt
-export ANTHROPIC_API_KEY=sk-ant-...   # Windows: $env:ANTHROPIC_API_KEY = "sk-ant-..."
+uv sync                                # create .venv from the lockfile
+export ANTHROPIC_API_KEY=sk-ant-...    # Windows: $env:ANTHROPIC_API_KEY = "sk-ant-..."
 
 # 1. Generate the dataset (~30 API calls, ~1 min)
-python src/generate.py
+uv run python src/generate.py
 
 # 2. Sanity-check the classifier on one article
-python src/classify.py "The Pentagon awarded a \$4.2B contract for 24 F-35 fighters."
+uv run python src/classify.py "The Pentagon awarded a \$4.2B contract for 24 F-35 fighters."
 
 # 3. Run the full eval (~300 API calls, ~5 min)
-python src/eval.py
+uv run python src/eval.py
 ```
+
+> No uv? Install it from the [uv docs](https://docs.astral.sh/uv/getting-started/installation/),
+> or fall back to plain pip: `pip install -r requirements.txt` then run the scripts with `python` directly.
 
 The eval script saves predictions as it goes and supports resuming: if interrupted, rerun
 `python src/eval.py` and it will pick up from where it left off.
@@ -139,6 +148,7 @@ The eval script saves predictions as it goes and supports resuming: if interrupt
 ## Stack
 
 - Python 3.11+
+- [`uv`](https://docs.astral.sh/uv/) — dependency management and reproducible environments
 - [`anthropic`](https://github.com/anthropics/anthropic-sdk-python) — LLM calls
 - [`pandas`](https://pandas.pydata.org/) — eval tables and CSV I/O
 - Model: `claude-sonnet-4-6`
