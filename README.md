@@ -108,7 +108,16 @@ CLAUDE.md
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
 `uv sync` installs the exact versions pinned in `uv.lock` into a local `.venv`,
 and `uv run` executes a command inside it — no manual virtualenv activation needed.
+### Quick uv commands
 
+```bash
+uv sync --group dev          # install project deps + dev/test libs
+uv run pytest                # run the test suite
+uv run pytest --cov=src      # run tests with coverage
+uv run python src/generate.py  # generate the synthetic dataset
+uv run python src/classify.py "<article text>"  # classify one text
+uv run python src/eval.py    # run the full evaluation
+```
 ```bash
 uv sync                                # create .venv from the lockfile
 export ANTHROPIC_API_KEY=sk-ant-...    # Windows: $env:ANTHROPIC_API_KEY = "sk-ant-..."
