@@ -9,6 +9,9 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
+### Added
+- Black for code formatting (`uv run black src/ tests/`); configured in `pyproject.toml`
+
 ---
 
 ## [1.0.0] — 2026-06-20

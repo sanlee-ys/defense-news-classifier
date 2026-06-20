@@ -58,6 +58,7 @@ These labels are a starting point. If a cleaner set emerges once you see the dat
   uv run python src/eval.py    # run the full evaluation
   ```
 - Eval is plain Python; a Jupyter notebook for the analysis is fine.
+- Code style: **Black** (`uv run black src/ tests/`). Line length default (88). Run before committing.
 
 ## Project structure
 ```
