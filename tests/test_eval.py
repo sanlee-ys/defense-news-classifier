@@ -167,3 +167,63 @@ def test_retry_reraises_after_exhausting_attempts(monkeypatch):
     monkeypatch.setattr(evalmod, "classify", always_fails)
     with pytest.raises(_FakeRateLimit):
         evalmod.classify_with_retry(None, "x", max_retries=2)
+
+
+# --- main() + run_predictions (end-to-end on a tiny dataset) --------------
+
+def _write_dataset(tmp_path):
+    """Create data/synthetic_articles.csv under tmp_path and return the frame."""
+    (tmp_path / "data").mkdir()
+    df = pd.DataFrame([
+        {"id": 0, "text": "Air strike reported.", "category": "operations", "operational_domain": "air"},
+        {"id": 1, "text": "New treaty signed.", "category": "policy", "operational_domain": "sea"},
+    ])
+    df.to_csv(tmp_path / "data" / "synthetic_articles.csv", index=False)
+    return df
+
+
+def test_main_runs_predictions_and_writes_all_outputs(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)  # DATA_PATH/PREDS_PATH/etc are relative paths
+    _write_dataset(tmp_path)
+
+    monkeypatch.setattr(evalmod, "make_client", lambda: object())
+    monkeypatch.setattr(evalmod.time, "sleep", lambda *_: None)
+    # Predict ground truth for id 0 and a wrong domain for id 1, so the
+    # misclassification log has exactly one entry.
+    preds = {
+        "Air strike reported.": {"category": "operations", "operational_domain": "air"},
+        "New treaty signed.": {"category": "policy", "operational_domain": "air"},
+    }
+    monkeypatch.setattr(evalmod, "classify", lambda _c, text: preds[text])
+
+    evalmod.main()
+
+    pred_df = pd.read_csv(tmp_path / "evals" / "predictions.csv")
+    assert len(pred_df) == 2
+    assert (tmp_path / "evals" / "metrics.txt").exists()
+    assert (tmp_path / "evals" / "confusion_category.csv").exists()
+    assert (tmp_path / "evals" / "confusion_domain.csv").exists()
+
+    misc = pd.read_csv(tmp_path / "evals" / "misclassifications.csv")
+    assert list(misc["id"]) == [1]  # only id 1 was wrong
+
+
+def test_main_skips_api_when_predictions_already_complete(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    _write_dataset(tmp_path)
+
+    # Pre-seed a complete predictions file so the resume branch is taken.
+    (tmp_path / "evals").mkdir()
+    pd.DataFrame([
+        {"id": 0, "pred_category": "operations", "pred_operational_domain": "air"},
+        {"id": 1, "pred_category": "policy", "pred_operational_domain": "sea"},
+    ]).to_csv(tmp_path / "evals" / "predictions.csv", index=False)
+
+    def boom():
+        raise AssertionError("make_client must not be called when preds are complete")
+
+    monkeypatch.setattr(evalmod, "make_client", boom)
+
+    evalmod.main()  # should not raise — no API client built
+
+    assert (tmp_path / "evals" / "metrics.txt").exists()
