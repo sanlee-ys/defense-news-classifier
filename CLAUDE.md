@@ -58,7 +58,7 @@ These labels are a starting point. If a cleaner set emerges once you see the dat
   uv run python src/eval.py    # run the full evaluation
   ```
 - Eval is plain Python; a Jupyter notebook for the analysis is fine.
-- Code style: **Black** (`uv run black src/ tests/`). Line length default (88). Run before committing.
+- Code style: **Black** (`uv run black src/ tests/`), **Ruff** for linting (`uv run ruff check src/ tests/`), **mypy** for type checking (`uv run mypy src/`). All at line length 88, targeting Python 3.11. **pre-commit** runs these automatically before each commit.
 
 ## Project structure
 ```
