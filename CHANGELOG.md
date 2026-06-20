@@ -12,10 +12,13 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 ### Added
 - `LICENSE` — MIT license
 - README status badges (CI, release, license, Python version)
-- `docs/how-it-works.md` — plain-language one-pager on the three-stage pipeline and why the classifier/evaluator separation is the point
+- `docs/how-it-works.md` — plain-language one-pager on the three-stage pipeline and why the classifier/evaluator separation is the point, with a "Threats to validity" section
+- **Macro-averaged precision/recall/F1** in the eval report (`macro_average` in `src/eval.py`) — every label weighted equally, so a collapsed minority class is no longer hidden by raw accuracy. Category macro-F1 is **0.765** (below its 79.0% accuracy); domain is **0.973**. Two new unit tests cover it.
 
 ### Changed
 - `pyproject.toml` version bumped `0.1.0` → `1.0.0` to match the released tag
+- README results table now reports macro-F1 alongside accuracy
+- `evals/metrics.txt` regenerated to include the macro-average rows (recomputed from existing predictions — no re-classification)
 
 ---
 

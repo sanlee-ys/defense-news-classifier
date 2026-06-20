@@ -151,9 +151,10 @@ named fix, not a surprise waiting in an interview.
 
 4. **Accuracy hides class imbalance.** Raw accuracy is propped up by the easy classes;
    `industry` recall of 0.22 barely dents it. **Macro-F1** (every class weighted equally)
-   is the more honest single number for an imbalanced problem and would report lower. The
-   per-label table is published right next to the headline precisely so the weakness is
-   visible.
+   is the more honest single number for an imbalanced problem. *Addressed in v1.1:* the eval
+   now reports macro-F1 alongside accuracy — category is **0.765** (below its 79.0% accuracy,
+   because the collapsed `industry` class counts fully), domain is **0.973** (balanced, so
+   the two agree).
 
 5. **Reliability ≠ correctness.** Forced tool-use guarantees a *valid* label (in-enum),
    not a *correct* one — it's a format guarantee. And forcing exactly one label on a
