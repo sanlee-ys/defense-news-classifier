@@ -46,6 +46,7 @@ These labels are a starting point. If a cleaner set emerges once you see the dat
 - LLM via the **Anthropic API** (or OpenAI — confirm which key I'm using). Read the API key from an environment variable; **never hardcode keys**.
 - Structured outputs / JSON schema for the classifier response.
 - Minimal dependencies: the LLM client (`anthropic` or `openai`) plus `pandas` for the eval tables. Avoid heavy frameworks.
+- Dependency management via **uv**: `pyproject.toml` declares deps, `uv.lock` pins them, `uv sync` builds the env, `uv run` executes scripts. `requirements.txt` is kept as a pip fallback.
 - Eval is plain Python; a Jupyter notebook for the analysis is fine.
 
 ## Project structure
