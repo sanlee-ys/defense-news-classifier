@@ -123,3 +123,43 @@ before/after in `CHANGELOG.md`; the reasoning behind each design choice is in
 
 These aren't hidden — they're in the README, the ADRs, and stated up front. Knowing the
 limits of your own measurement is part of the measurement.
+
+---
+
+## Threats to validity
+
+The limitations above are about the *system*; these are about whether the **numbers
+themselves can be trusted**. Naming them is the point — each is a known seam with a
+named fix, not a surprise waiting in an interview.
+
+1. **The "negative result" is a single run (n=1).** The prompt experiment that regressed
+   category accuracy 79.0% → 76.7% was one run of each config, and the calls are
+   non-deterministic. A 2.3-point move on 300 items is *directional, not statistically
+   established* — it could be within run-to-run noise. To claim a real regression I'd run
+   each config 3–5 times (or fix temperature) and compare distributions. What the result
+   *does* defend is the decision process — measure before shipping — not the precise delta.
+
+2. **Circular eval can flatter or deflate.** Because the same model generates and grades
+   the data, the score measures self-consistency, not generalization. That cuts both ways:
+   one could argue agreement *should* be near-ceiling, which reframes 79% as a ceiling to
+   beat rather than a floor. Real-world news would almost certainly score lower.
+
+3. **"Ground truth" is model-asserted, not human-verified.** The generator attached the
+   labels; no human checked them. Some misclassifications may be cases where the classifier
+   was right and the label was wrong. Fix: hand-label a sample of the misses to separate
+   *classifier error* from *bad label*.
+
+4. **Accuracy hides class imbalance.** Raw accuracy is propped up by the easy classes;
+   `industry` recall of 0.22 barely dents it. **Macro-F1** (every class weighted equally)
+   is the more honest single number for an imbalanced problem and would report lower. The
+   per-label table is published right next to the headline precisely so the weakness is
+   visible.
+
+5. **Reliability ≠ correctness.** Forced tool-use guarantees a *valid* label (in-enum),
+   not a *correct* one — it's a format guarantee. And forcing exactly one label on a
+   genuinely multi-category article (a drone *contract* is both `procurement` and
+   `technology`) can manufacture errors. Multi-label output with a threshold is the more
+   correct model and a v2 candidate.
+
+None of these break the project — they're the *next* questions. A measurement you can
+attack on five specific, ranked grounds, each with a fix, is a measurement you understand.
