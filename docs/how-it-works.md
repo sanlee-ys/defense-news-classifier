@@ -135,9 +135,11 @@ named fix, not a surprise lurking in the results.
 1. **The "negative result" is a single run (n=1).** The prompt experiment that regressed
    category accuracy 79.0% → 76.7% was one run of each config, and the calls are
    non-deterministic. A 2.3-point move on 300 items is *directional, not statistically
-   established* — it could be within run-to-run noise. To claim a real regression I'd run
-   each config 3–5 times (or fix temperature) and compare distributions. What the result
-   *does* defend is the decision process — measure before shipping — not the precise delta.
+   established* — it could be within run-to-run noise. What the result *does* defend is the
+   decision process — measure before shipping — not the precise delta. *Addressed in v1.1:*
+   `src/stability.py` runs the full eval N times and reports mean / std / min / max per
+   metric, so you can size the run-to-run noise floor and check whether a config difference
+   clears ~2x that std before believing it. (`uv run python src/stability.py --runs 5`)
 
 2. **Circular eval can flatter or deflate.** Because the same model generates and grades
    the data, the score measures self-consistency, not generalization. That cuts both ways:
