@@ -63,7 +63,9 @@ CLASSIFY_TOOL: ToolParam = {
 }
 
 
-def classify(client: anthropic.Anthropic, text: str) -> dict:
+def classify(
+    client: anthropic.Anthropic, text: str, temperature: float | None = None
+) -> dict:
     """Classify a single defense-news article snippet.
 
     Makes one LLM call with forced tool use so the response is always
@@ -72,10 +74,15 @@ def classify(client: anthropic.Anthropic, text: str) -> dict:
     Args:
         client: Authenticated Anthropic client.
         text: Raw article snippet to classify.
+        temperature: Optional sampling temperature. Left at the API default
+            when ``None``; set to ``0`` for the most repeatable output, or pass
+            a fixed value when measuring run-to-run variance.
 
     Returns:
         Dict with keys ``category`` and ``operational_domain``, both str.
     """
+    # Pass the SDK's `omit` sentinel when no temperature is requested, so the
+    # API uses its own default rather than us forcing a value.
     response = client.messages.create(
         model=MODEL,
         max_tokens=256,
@@ -83,6 +90,7 @@ def classify(client: anthropic.Anthropic, text: str) -> dict:
         tools=[CLASSIFY_TOOL],
         tool_choice={"type": "tool", "name": "classify_article"},
         messages=[{"role": "user", "content": text}],
+        temperature=anthropic.omit if temperature is None else temperature,
     )
     tool_block = next(b for b in response.content if isinstance(b, ToolUseBlock))
     return cast(dict, tool_block.input)

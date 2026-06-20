@@ -157,7 +157,10 @@ uv run python src/classify.py "The Pentagon awarded a \$4.2B contract for 24 F-3
 # 3. Run the full eval (~300 API calls, ~5 min)
 uv run python src/eval.py
 
-# 4. Explore results interactively
+# 4. (Optional) Measure run-to-run stability — run the eval N times
+uv run python src/stability.py --runs 5     # ~300 calls per run
+
+# 5. Explore results interactively
 uv sync --group notebook
 uv run jupyter notebook     # open notebooks/eval_analysis.ipynb
 ```

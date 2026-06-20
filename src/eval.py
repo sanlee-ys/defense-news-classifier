@@ -118,7 +118,10 @@ def confusion_matrix(df: pd.DataFrame, field: str) -> pd.DataFrame:
 
 
 def classify_with_retry(
-    client: anthropic.Anthropic, text: str, max_retries: int = 3
+    client: anthropic.Anthropic,
+    text: str,
+    max_retries: int = 3,
+    temperature: float | None = None,
 ) -> dict:
     """Call classify(), retrying on transient errors with exponential backoff.
 
@@ -126,6 +129,8 @@ def classify_with_retry(
         client: Authenticated Anthropic client.
         text: Article snippet to classify.
         max_retries: Maximum number of attempts before re-raising.
+        temperature: Optional sampling temperature forwarded to ``classify``.
+            Left unset (API default) when ``None``.
 
     Returns:
         Dict with keys ``category`` and ``operational_domain``.
@@ -136,7 +141,9 @@ def classify_with_retry(
     """
     for attempt in range(max_retries):
         try:
-            return classify(client, text)
+            if temperature is None:
+                return classify(client, text)
+            return classify(client, text, temperature)
         except (anthropic.InternalServerError, anthropic.RateLimitError) as exc:
             if attempt == max_retries - 1:
                 raise
