@@ -13,10 +13,16 @@ Built entirely on synthetic, publicly safe data. The measured eval numbers are t
 
 ## Results
 
-| Field | Accuracy |
-|---|---|
-| Category | **79.0%** |
-| Operational domain | **97.3%** |
+| Field | Accuracy | Macro-F1 |
+|---|---|---|
+| Category | **79.0%** | **0.765** |
+| Operational domain | **97.3%** | **0.973** |
+
+Accuracy is the headline; **macro-F1** (every label weighted equally) is the more honest
+single number for an imbalanced problem. For category the two diverge — macro-F1 falls
+*below* accuracy because the collapsed `industry` class (F1 0.356) is hidden by raw
+accuracy but counts fully in the macro average. For operational domain the classes are
+balanced, so the two agree.
 
 ### Category — per-label precision / recall / F1
 

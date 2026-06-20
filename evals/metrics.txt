@@ -4,8 +4,11 @@ DEFENSE NEWS CLASSIFIER — EVAL RESULTS
 
 Articles evaluated : 300
 
-Category accuracy           : 79.0%
-Operational domain accuracy : 97.3%
+Category accuracy           : 79.0%   (macro-F1 0.765)
+Operational domain accuracy : 97.3%   (macro-F1 0.973)
+
+Accuracy can hide a collapsed minority class; macro-F1 (every label
+weighted equally) is the more honest single number for this problem.
 
 --- Category: per-label metrics ---
              precision  recall    f1  support
@@ -15,6 +18,7 @@ operations       1.000   0.933 0.966       60
 policy           1.000   0.967 0.983       60
 procurement      0.561   1.000 0.719       60
 technology       0.769   0.833 0.800       60
+macro avg    precision 0.866  recall 0.790  f1 0.765
 
 --- Operational domain: per-label metrics ---
        precision  recall    f1  support
@@ -25,6 +29,7 @@ land       0.980   0.980 0.980       50
 multi      0.943   1.000 0.971       50
 sea        0.980   1.000 0.990       50
 space      0.980   1.000 0.990       50
+macro avg    precision 0.973  recall 0.973  f1 0.973
 
 Misclassified : 67 / 300 (22.3%)
   Full log    : evals/misclassifications.csv

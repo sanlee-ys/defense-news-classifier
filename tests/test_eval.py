@@ -61,6 +61,30 @@ def test_support_sums_to_row_count():
     assert m["support"].sum() == len(df)
 
 
+# --- macro_average -------------------------------------------------------
+
+
+def test_macro_average_is_unweighted_mean_of_per_label_metrics():
+    # "a": 1 TP, 1 FP, 0 FN -> P=0.5, R=1.0, F1=0.667.
+    # "b": 1 TP, 0 FP, 1 FN -> P=1.0, R=0.5, F1=0.667.
+    df = _frame([("a", "a"), ("b", "a"), ("b", "b")])
+    m = evalmod.compute_metrics(df, "category")
+    macro = evalmod.macro_average(m)
+    # Macro = unweighted mean across labels (support ignored).
+    assert macro["precision"] == round((0.5 + 1.0) / 2, 3)  # 0.75
+    assert macro["recall"] == round((1.0 + 0.5) / 2, 3)  # 0.75
+    assert macro["f1"] == round((0.667 + 0.667) / 2, 3)  # 0.667
+
+
+def test_macro_average_penalizes_collapsed_class_below_accuracy():
+    # 9 correct "a" plus 1 "b" always missed: accuracy 0.9, but "b" F1 = 0,
+    # so macro-F1 is dragged well below the accuracy number.
+    df = _frame([("a", "a")] * 9 + [("b", "a")])
+    m = evalmod.compute_metrics(df, "category")
+    macro = evalmod.macro_average(m)
+    assert macro["f1"] < 0.9
+
+
 # --- confusion_matrix ----------------------------------------------------
 
 
@@ -115,6 +139,9 @@ def test_report_reports_accuracy_and_counts():
     assert "Operational domain accuracy : 75.0%" in report  # 3/4
     # Two rows have at least one wrong field.
     assert "Misclassified : 2 / 4" in report
+    # Macro-F1 is surfaced next to accuracy and under each per-label table.
+    assert "macro-F1" in report
+    assert "macro avg" in report
 
 
 # --- classify_with_retry -------------------------------------------------

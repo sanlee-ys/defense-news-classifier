@@ -71,6 +71,27 @@ def compute_metrics(df: pd.DataFrame, field: str) -> pd.DataFrame:
     return pd.DataFrame(rows).set_index("label")
 
 
+def macro_average(metrics: pd.DataFrame) -> dict:
+    """Unweighted mean of per-label precision, recall, and F1 (macro average).
+
+    Macro-averaging weights every class equally regardless of how many examples
+    it has, so a collapsed minority class (e.g. ``industry`` recall 0.217) pulls
+    the summary number down instead of being hidden by raw accuracy. This is the
+    more honest single-number summary for an imbalanced problem.
+
+    Args:
+        metrics: Per-label metrics DataFrame as returned by ``compute_metrics``.
+
+    Returns:
+        Dict with keys ``precision``, ``recall``, ``f1`` (macro-averaged).
+    """
+    return {
+        "precision": round(float(metrics["precision"].mean()), 3),
+        "recall": round(float(metrics["recall"].mean()), 3),
+        "f1": round(float(metrics["f1"].mean()), 3),
+    }
+
+
 def confusion_matrix(df: pd.DataFrame, field: str) -> pd.DataFrame:
     """Build a confusion matrix for one classification field.
 
@@ -184,6 +205,8 @@ def build_report(merged: pd.DataFrame) -> str:
     dom_acc = (merged["operational_domain"] == merged["pred_operational_domain"]).mean()
     cat_metrics = compute_metrics(merged, "category")
     dom_metrics = compute_metrics(merged, "operational_domain")
+    cat_macro = macro_average(cat_metrics)
+    dom_macro = macro_average(dom_metrics)
     n_misc = int(
         (
             (merged["category"] != merged["pred_category"])
@@ -198,14 +221,21 @@ def build_report(merged: pd.DataFrame) -> str:
         "",
         f"Articles evaluated : {len(merged)}",
         "",
-        f"Category accuracy           : {cat_acc:.1%}",
-        f"Operational domain accuracy : {dom_acc:.1%}",
+        f"Category accuracy           : {cat_acc:.1%}   (macro-F1 {cat_macro['f1']:.3f})",
+        f"Operational domain accuracy : {dom_acc:.1%}   (macro-F1 {dom_macro['f1']:.3f})",
+        "",
+        "Accuracy can hide a collapsed minority class; macro-F1 (every label",
+        "weighted equally) is the more honest single number for this problem.",
         "",
         "--- Category: per-label metrics ---",
         cat_metrics.to_string(float_format="{:.3f}".format),
+        f"macro avg    precision {cat_macro['precision']:.3f}  "
+        f"recall {cat_macro['recall']:.3f}  f1 {cat_macro['f1']:.3f}",
         "",
         "--- Operational domain: per-label metrics ---",
         dom_metrics.to_string(float_format="{:.3f}".format),
+        f"macro avg    precision {dom_macro['precision']:.3f}  "
+        f"recall {dom_macro['recall']:.3f}  f1 {dom_macro['f1']:.3f}",
         "",
         f"Misclassified : {n_misc} / {len(merged)} ({n_misc / len(merged):.1%})",
         f"  Full log    : {MISCLASS_PATH}",
