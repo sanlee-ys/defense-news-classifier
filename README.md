@@ -127,7 +127,21 @@ uv run python src/eval.py
 > or fall back to plain pip: `pip install -r requirements.txt` then run the scripts with `python` directly.
 
 The eval script saves predictions as it goes and supports resuming: if interrupted, rerun
-`python src/eval.py` and it will pick up from where it left off.
+`uv run python src/eval.py` and it will pick up from where it left off.
+
+---
+
+## Tests
+
+Unit tests live in [`tests/`](tests/) and cover the logic that doesn't need the network:
+the eval metrics (precision/recall/F1, confusion matrices, report text) and the wiring
+around the LLM calls (request shape, structured-output parsing, retry/backoff). The API
+itself is mocked, so the suite runs offline and needs no API key.
+
+```bash
+uv sync           # installs the dev group (pytest) by default
+uv run pytest
+```
 
 ---
 

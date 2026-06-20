@@ -10,6 +10,10 @@ dependencies = [
 ]
 
 [dependency-groups]
+# Dev tooling — installed by default with `uv sync` (uv syncs the `dev` group automatically).
+dev = [
+    "pytest",
+]
 # Optional analysis extras — installed with `uv sync --group notebook`.
 notebook = [
     "jupyter",
