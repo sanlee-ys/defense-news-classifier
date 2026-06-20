@@ -131,6 +131,20 @@ The eval script saves predictions as it goes and supports resuming: if interrupt
 
 ---
 
+## Tests
+
+Unit tests live in [`tests/`](tests/) and cover the logic that doesn't need the network:
+the eval metrics (precision/recall/F1, confusion matrices, report text) and the wiring
+around the LLM calls (request shape, structured-output parsing, retry/backoff). The API
+itself is mocked, so the suite runs offline and needs no API key.
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+---
+
 ## Limitations
 
 - **Circular eval:** the same model generates and classifies the data. Numbers measure

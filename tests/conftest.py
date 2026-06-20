@@ -1,0 +1,61 @@
+"""
+Shared test fixtures and helpers.
+
+Puts src/ on the import path so tests can `import classify`, `import eval`,
+`import generate` the same way the scripts import each other at runtime.
+"""
+
+import os
+import sys
+import types
+
+import pytest
+
+SRC = os.path.join(os.path.dirname(__file__), "..", "src")
+sys.path.insert(0, os.path.abspath(SRC))
+
+
+# ---------------------------------------------------------------------------
+# Fakes for the Anthropic SDK response shape.
+#
+# The real client returns an object whose `.content` is a list of blocks,
+# each with a `.type` and (for tool calls) an `.input` dict. We only need
+# that surface, so we build tiny stand-ins instead of importing the SDK.
+# ---------------------------------------------------------------------------
+
+def make_tool_block(payload: dict):
+    """A content block that looks like a tool_use block."""
+    return types.SimpleNamespace(type="tool_use", input=payload)
+
+
+def make_text_block(text: str = ""):
+    """A content block that looks like a plain text block."""
+    return types.SimpleNamespace(type="text", text=text)
+
+
+class FakeMessages:
+    """Stands in for client.messages; records the last create() call."""
+
+    def __init__(self, content_blocks):
+        self._content_blocks = content_blocks
+        self.last_kwargs = None
+
+    def create(self, **kwargs):
+        self.last_kwargs = kwargs
+        return types.SimpleNamespace(content=self._content_blocks)
+
+
+class FakeClient:
+    """Stands in for anthropic.Anthropic."""
+
+    def __init__(self, content_blocks):
+        self.messages = FakeMessages(content_blocks)
+
+
+@pytest.fixture
+def tool_client():
+    """Factory: build a FakeClient that returns one tool_use block with `payload`."""
+    def _make(payload, extra_blocks=None):
+        blocks = list(extra_blocks or []) + [make_tool_block(payload)]
+        return FakeClient(blocks)
+    return _make
