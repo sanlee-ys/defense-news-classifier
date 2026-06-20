@@ -1,0 +1,7 @@
+true,air,cyber,land,multi,sea,space
+air,49,0,0,1,0,0
+cyber,1,44,1,2,1,1
+land,0,1,49,0,0,0
+multi,0,0,0,50,0,0
+sea,0,0,0,0,50,0
+space,0,0,0,0,0,50
