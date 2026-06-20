@@ -127,7 +127,7 @@ uv run python src/eval.py
 > or fall back to plain pip: `pip install -r requirements.txt` then run the scripts with `python` directly.
 
 The eval script saves predictions as it goes and supports resuming: if interrupted, rerun
-`python src/eval.py` and it will pick up from where it left off.
+`uv run python src/eval.py` and it will pick up from where it left off.
 
 ---
 
@@ -139,8 +139,8 @@ around the LLM calls (request shape, structured-output parsing, retry/backoff). 
 itself is mocked, so the suite runs offline and needs no API key.
 
 ```bash
-pip install -r requirements-dev.txt
-pytest
+uv sync           # installs the dev group (pytest, pytest-cov) by default
+uv run pytest
 ```
 
 ---
