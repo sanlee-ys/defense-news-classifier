@@ -14,6 +14,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "uv",
+    "httpx2",
     # Needed to import and test src/api.py (the FastAPI service). httpx, pulled
     # in transitively, provides the TestClient transport. These are serving
     # deps (see requirements-api.txt) but the test suite needs them too.
