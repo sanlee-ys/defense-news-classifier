@@ -36,6 +36,14 @@ Built entirely on synthetic, publicly safe data. The measured eval numbers are t
 
 Confusion matrices and a full misclassification log are in [`evals/`](evals/).
 
+### What the numbers say
+
+Operational domain is essentially solved at 97.3% — the model reliably distinguishes air, land, sea, cyber, space, and multi from brief text snippets.
+
+Category is harder at 79.0%, and the failure is concentrated in one place: **`industry` recall is 0.22**, meaning the model correctly identifies only 1 in 5 industry articles. The other 4 get predicted as `procurement`. This makes sense — both labels involve defense companies and money. The distinction is subtle: procurement is about a purchase (the buyer's perspective); industry is about a company's own business news (earnings, mergers). Short snippets often don't give enough signal to tell them apart, and the model defaults to the more common framing.
+
+The misclassification log and the interactive notebook (`notebooks/eval_analysis.ipynb`) are the best places to study these cases.
+
 ---
 
 ## Design
@@ -94,6 +102,8 @@ evals/
   confusion_category.csv    # Category confusion matrix
   confusion_domain.csv      # Domain confusion matrix
   misclassifications.csv    # Every article where a prediction was wrong
+notebooks/
+  eval_analysis.ipynb       # Interactive analysis: heatmaps, F1 charts, misclassification browser
 pyproject.toml              # Project metadata + dependencies (uv)
 uv.lock                     # Pinned, reproducible dependency versions
 requirements.txt            # pip fallback (kept in sync with pyproject.toml)
@@ -108,18 +118,9 @@ CLAUDE.md
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
 `uv sync` installs the exact versions pinned in `uv.lock` into a local `.venv`,
 and `uv run` executes a command inside it — no manual virtualenv activation needed.
-### Quick uv commands
 
 ```bash
-uv sync --group dev          # install project deps + dev/test libs
-uv run pytest                # run the test suite
-uv run pytest --cov=src      # run tests with coverage
-uv run python src/generate.py  # generate the synthetic dataset
-uv run python src/classify.py "<article text>"  # classify one text
-uv run python src/eval.py    # run the full evaluation
-```
-```bash
-uv sync                                # create .venv from the lockfile
+uv sync --group dev                    # install project deps + dev/test tools
 export ANTHROPIC_API_KEY=sk-ant-...    # Windows: $env:ANTHROPIC_API_KEY = "sk-ant-..."
 
 # 1. Generate the dataset (~30 API calls, ~1 min)
@@ -130,6 +131,10 @@ uv run python src/classify.py "The Pentagon awarded a \$4.2B contract for 24 F-3
 
 # 3. Run the full eval (~300 API calls, ~5 min)
 uv run python src/eval.py
+
+# 4. Explore results interactively
+uv sync --group notebook
+uv run jupyter notebook     # open notebooks/eval_analysis.ipynb
 ```
 
 > No uv? Install it from the [uv docs](https://docs.astral.sh/uv/getting-started/installation/),
