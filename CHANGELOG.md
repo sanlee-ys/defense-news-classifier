@@ -48,6 +48,6 @@ First complete version of the defense news classifier. All v1 success criteria m
 
 ---
 
-[Unreleased]: https://github.com/sanle/defense-news-classifier/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/sanle/defense-news-classifier/compare/v0.1.0...v1.0.0
-[0.1.0]: https://github.com/sanle/defense-news-classifier/releases/tag/v0.1.0
+[Unreleased]: https://github.com/sanlee/defense-news-classifier/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/sanlee/defense-news-classifier/compare/v0.1.0...v1.0.0
+[0.1.0]: https://github.com/sanlee/defense-news-classifier/releases/tag/v0.1.0
