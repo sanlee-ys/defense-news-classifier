@@ -1,0 +1,7 @@
+# Keep the GitHub language bar representative of the actual engineering.
+# The analysis notebook is mostly embedded cell output (JSON-encoded tables and
+# plots), which Linguist counts by bytes and would otherwise report as ~80%
+# "Jupyter Notebook". Mark notebooks as documentation so they're excluded from
+# the repository language statistics; the Python source then dominates, which is
+# an honest reflection of the codebase.
+*.ipynb linguist-documentation
