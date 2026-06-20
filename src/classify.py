@@ -9,7 +9,10 @@ import json
 import os
 import sys
 
+from typing import cast
+
 import anthropic
+from anthropic.types import ToolParam, ToolUseBlock
 
 CATEGORIES = ["procurement", "operations", "policy", "technology", "industry"]
 DOMAINS = ["air", "land", "sea", "cyber", "space", "multi"]
@@ -46,7 +49,7 @@ Operational domains:
 Pick the single best label for each field. If the article spans two categories or domains, \
 choose the one that is most prominent."""
 
-CLASSIFY_TOOL = {
+CLASSIFY_TOOL: ToolParam = {
     "name": "classify_article",
     "description": "Return the category and operational domain for a defense-news snippet.",
     "input_schema": {
@@ -89,8 +92,8 @@ def classify(client: anthropic.Anthropic, text: str) -> dict:
         tool_choice={"type": "tool", "name": "classify_article"},
         messages=[{"role": "user", "content": text}],
     )
-    tool_block = next(b for b in response.content if b.type == "tool_use")
-    return tool_block.input
+    tool_block = next(b for b in response.content if isinstance(b, ToolUseBlock))
+    return cast(dict, tool_block.input)
 
 
 def make_client() -> anthropic.Anthropic:
