@@ -11,6 +11,9 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ### Added
 - Black for code formatting (`uv run black src/ tests/`); configured in `pyproject.toml`
+- Ruff for linting (`uv run ruff check src/ tests/`); configured in `pyproject.toml`
+- mypy for static type checking (`uv run mypy src/`); configured in `pyproject.toml`
+- pre-commit for running checks before each commit
 
 ---
 
