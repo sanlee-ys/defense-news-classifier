@@ -57,6 +57,18 @@ def health() -> dict:
 
 @app.post("/classify", response_model=ClassifyResponse)
 def classify_article(req: ClassifyRequest) -> ClassifyResponse:
+    """Classify a defense-news snippet into a category and operational domain.
+
+    Args:
+        req: Request body containing the article ``text`` (1–10 000 chars).
+
+    Returns:
+        ClassifyResponse with ``category`` and ``operational_domain`` fields.
+
+    Raises:
+        HTTPException: 422 if text is blank after stripping whitespace;
+            502 if the upstream LLM call fails.
+    """
     text = req.text.strip()
     if not text:
         # min_length catches "", but a whitespace-only string slips through.
