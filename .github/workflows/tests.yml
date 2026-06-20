@@ -1,0 +1,31 @@
+name: tests
+
+# Run the offline unit suite on every push and PR. The tests mock the
+# Anthropic API, so no API key/secret is needed in CI.
+on:
+  push:
+  pull_request:
+
+# Cancel an in-progress run if the same ref is pushed again.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --frozen makes CI fail if uv.lock is out of date rather than silently
+      # resolving new versions — keeps the reproducible-install guarantee honest.
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run tests
+        run: uv run pytest
