@@ -32,9 +32,16 @@ SLEEP_BETWEEN_CALLS = 0.3  # seconds; small buffer to stay inside rate limits
 # ---------------------------------------------------------------------------
 
 def compute_metrics(df: pd.DataFrame, field: str) -> pd.DataFrame:
-    """
-    Per-label precision, recall, F1, and support for one classification field.
-    Rows = labels, columns = [precision, recall, f1, support].
+    """Compute per-label precision, recall, F1, and support for one field.
+
+    Args:
+        df: Merged DataFrame containing both ground-truth and prediction
+            columns. Ground truth is ``field``; predictions are ``pred_{field}``.
+        field: Column name of the ground-truth label (e.g. ``"category"``).
+
+    Returns:
+        DataFrame indexed by label with columns
+        ``precision``, ``recall``, ``f1``, ``support``.
     """
     true_col = field
     pred_col = f"pred_{field}"
@@ -59,7 +66,16 @@ def compute_metrics(df: pd.DataFrame, field: str) -> pd.DataFrame:
 
 
 def confusion_matrix(df: pd.DataFrame, field: str) -> pd.DataFrame:
-    """Rows = true label, columns = predicted label."""
+    """Build a confusion matrix for one classification field.
+
+    Args:
+        df: Merged DataFrame with ground-truth column ``field`` and
+            prediction column ``pred_{field}``.
+        field: Column name of the ground-truth label (e.g. ``"category"``).
+
+    Returns:
+        DataFrame with true labels as rows and predicted labels as columns.
+    """
     labels = sorted(df[field].unique())
     return pd.crosstab(
         df[field],
@@ -74,7 +90,20 @@ def confusion_matrix(df: pd.DataFrame, field: str) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def classify_with_retry(client, text: str, max_retries: int = 3) -> dict:
-    """Retry on transient 500 / rate-limit errors with exponential backoff."""
+    """Call classify(), retrying on transient errors with exponential backoff.
+
+    Args:
+        client: Authenticated Anthropic client.
+        text: Article snippet to classify.
+        max_retries: Maximum number of attempts before re-raising.
+
+    Returns:
+        Dict with keys ``category`` and ``operational_domain``.
+
+    Raises:
+        anthropic.InternalServerError: If all retries are exhausted on a 500.
+        anthropic.RateLimitError: If all retries are exhausted on a 429.
+    """
     for attempt in range(max_retries):
         try:
             return classify(client, text)
@@ -87,10 +116,16 @@ def classify_with_retry(client, text: str, max_retries: int = 3) -> dict:
 
 
 def run_predictions(client, df: pd.DataFrame, done_ids: set) -> None:
-    """
-    Classify every article whose id is not in done_ids.
-    Each prediction is appended to PREDS_PATH immediately after the API call
-    so a crash never loses more than one call's work.
+    """Classify every article not yet in done_ids and append results to PREDS_PATH.
+
+    Each prediction is written immediately after the API call, so a crash
+    never loses more than one call's work.
+
+    Args:
+        client: Authenticated Anthropic client.
+        df: Full dataset DataFrame with at least columns ``id`` and ``text``.
+        done_ids: Set of article IDs that already have predictions and can
+            be skipped.
     """
     todo = df[~df["id"].isin(done_ids)].reset_index(drop=True)
     total = len(todo)
@@ -120,6 +155,16 @@ def run_predictions(client, df: pd.DataFrame, done_ids: set) -> None:
 # ---------------------------------------------------------------------------
 
 def build_report(merged: pd.DataFrame) -> str:
+    """Format a human-readable eval report string from the merged predictions DataFrame.
+
+    Args:
+        merged: DataFrame with ground-truth and prediction columns for both
+            ``category`` and ``operational_domain``.
+
+    Returns:
+        Multi-line string containing accuracy, per-label metrics, and
+        paths to saved artefacts.
+    """
     cat_acc = (merged["category"] == merged["pred_category"]).mean()
     dom_acc = (merged["operational_domain"] == merged["pred_operational_domain"]).mean()
     cat_metrics = compute_metrics(merged, "category")
@@ -158,6 +203,15 @@ def build_report(merged: pd.DataFrame) -> str:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    """Run the full eval pipeline: predict, score, and save all artefacts.
+
+    Loads the dataset from DATA_PATH, resumes any existing predictions from
+    PREDS_PATH, runs remaining API calls, then writes metrics, confusion
+    matrices, and a misclassification log to the ``evals/`` directory.
+
+    Raises:
+        EnvironmentError: If ``ANTHROPIC_API_KEY`` is not set (via make_client).
+    """
     os.makedirs("evals", exist_ok=True)
 
     df = pd.read_csv(DATA_PATH)

@@ -69,9 +69,17 @@ CLASSIFY_TOOL = {
 
 
 def classify(client: anthropic.Anthropic, text: str) -> dict:
-    """
-    Classify a single article snippet.
-    Returns {"category": str, "operational_domain": str}.
+    """Classify a single defense-news article snippet.
+
+    Makes one LLM call with forced tool use so the response is always
+    structured JSON — never free text.
+
+    Args:
+        client: Authenticated Anthropic client.
+        text: Raw article snippet to classify.
+
+    Returns:
+        Dict with keys ``category`` and ``operational_domain``, both str.
     """
     response = client.messages.create(
         model=MODEL,
@@ -86,6 +94,14 @@ def classify(client: anthropic.Anthropic, text: str) -> dict:
 
 
 def make_client() -> anthropic.Anthropic:
+    """Build an Anthropic client from the environment.
+
+    Returns:
+        Configured ``anthropic.Anthropic`` instance.
+
+    Raises:
+        EnvironmentError: If ``ANTHROPIC_API_KEY`` is not set.
+    """
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise EnvironmentError(
@@ -96,6 +112,7 @@ def make_client() -> anthropic.Anthropic:
 
 
 def main() -> None:
+    """CLI entry point: read article text from args or stdin and print JSON result."""
     client = make_client()
 
     # Accept text as CLI args or via stdin (pipe-friendly).

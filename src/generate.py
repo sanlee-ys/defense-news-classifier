@@ -53,9 +53,18 @@ GENERATE_TOOL = {
 
 
 def generate_combo(client: anthropic.Anthropic, category: str, domain: str) -> list[dict]:
-    """
-    Ask Claude to produce ARTICLES_PER_COMBO snippets for one (category, domain) pair.
-    tool_choice forces Claude to call generate_articles — no free-text fallback.
+    """Ask Claude to produce ARTICLES_PER_COMBO snippets for one (category, domain) pair.
+
+    Uses tool_choice to force Claude to call generate_articles — no free-text fallback.
+
+    Args:
+        client: Authenticated Anthropic client.
+        category: One of the CATEGORIES labels (e.g. "procurement").
+        domain: One of the DOMAINS labels (e.g. "air").
+
+    Returns:
+        List of article dicts, each with keys ``text``, ``category``,
+        and ``operational_domain``.
     """
     prompt = (
         f"Generate exactly {ARTICLES_PER_COMBO} distinct, realistic defense-news article snippets. "
@@ -80,6 +89,15 @@ def generate_combo(client: anthropic.Anthropic, category: str, domain: str) -> l
 
 
 def main() -> None:
+    """Generate the synthetic dataset and write it to OUTPUT_PATH.
+
+    Iterates over every (category × domain) combination, calls generate_combo
+    for each, collects the results, and saves a CSV with columns
+    ``id``, ``text``, ``category``, ``operational_domain``.
+
+    Raises:
+        EnvironmentError: If ``ANTHROPIC_API_KEY`` is not set.
+    """
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise EnvironmentError(
