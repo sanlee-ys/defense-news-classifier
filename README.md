@@ -44,6 +44,17 @@ Category is harder at 79.0%, and the failure is concentrated in one place: **`in
 
 The misclassification log and the interactive notebook (`notebooks/eval_analysis.ipynb`) are the best places to study these cases.
 
+### What I tried that didn't work
+
+The obvious fix for the `industry`/`procurement` confusion is to spell the distinction out in the
+prompt. I tried exactly that — adding *"a firm winning a specific contract is procurement; a firm
+reporting earnings or merging is industry"* — and re-ran the full eval. It **regressed**: category
+accuracy fell 79.0% → 76.7% and `industry` recall dropped 0.217 → 0.100. The sharper wording gave
+the model an even cleaner rule for dumping borderline company stories into `procurement`. I reverted
+to the baseline prompt and kept the 79.0% numbers reported above. The lesson is the point of having
+an eval at all: a prompt change that reads better to a human moved the decision boundary the wrong
+way, and only the measurement caught it. (See `CHANGELOG.md` for the full before/after.)
+
 ---
 
 ## Design
