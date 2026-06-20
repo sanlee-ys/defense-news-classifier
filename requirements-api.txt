@@ -1,0 +1,6 @@
+# Serving-only dependencies for the HTTP API / container image.
+# Intentionally excludes pandas (used only by the eval harness, not at serve
+# time) so the deployed image stays lean.
+anthropic
+fastapi
+uvicorn[standard]
