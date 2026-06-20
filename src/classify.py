@@ -24,18 +24,11 @@ SYSTEM_PROMPT = """You are a defense-news analyst. Given a defense-related artic
 classify it into exactly one category and one operational domain.
 
 Categories:
-- procurement: a government/military customer acquiring something — contracts, \
-acquisitions, budgets, program awards. The story centers on the deal or the buyer.
+- procurement: contracts, acquisitions, budgets, program awards
 - operations: active conflict, deployments, military operations
 - policy: legislation, treaties, strategy, doctrine
 - technology: R&D, new systems, autonomous/drone/AI developments
-- industry: a defense company's own business — earnings, mergers, stock moves, \
-layoffs, facility changes. The story centers on the company itself, not a specific deal.
-
-Key distinction — procurement vs industry: procurement is about a purchase or award \
-(the customer's side); industry is about a company's financial or corporate news. \
-A firm *winning a specific contract* is procurement; a firm *reporting earnings or merging* \
-is industry.
+- industry: defense-company business, earnings, mergers
 
 Operational domains:
 - air: aircraft, missiles, UAVs, aerospace operations
