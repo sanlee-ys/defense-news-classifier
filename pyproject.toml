@@ -28,6 +28,8 @@ dev = [
 # Optional analysis extras — installed with `uv sync --group notebook`.
 notebook = [
     "jupyter",
+    "matplotlib",
+    "seaborn",
 ]
 
 [tool.mypy]
