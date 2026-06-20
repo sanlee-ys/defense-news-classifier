@@ -6,6 +6,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 # Cancel an in-progress run if the same ref is pushed again.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
