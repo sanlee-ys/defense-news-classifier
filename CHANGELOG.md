@@ -21,12 +21,14 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 - **Enum validation guard** in `classify()` (`InvalidLabelError` + `_validate`) — the result is checked against the allowed `CATEGORIES`/`DOMAINS` and the call is re-sampled once on an out-of-enum response before raising. A tool-use `enum` is a guided prior, not a hard server-side constraint: one prediction in a 300-article run came back as an invalid category (`category="cyber"`), and this guards against it. New unit tests (plus a sequence-returning test client) cover validation, the re-sample, and the raise.
 
 ### Fixed
-- Corrected an inaccurate claim in `README.md` and `docs/CASE_STUDY.md` that out-of-enum output is "rejected at the API layer." Tool use enforces the response *shape* and strongly biases toward valid labels, but enum membership is validated in our code — not guaranteed by the API. (Surfaced by the error audit; see above.)
+- Corrected an inaccurate claim across `README.md`, `docs/CASE_STUDY.md`, `docs/how-it-works.md`, and PRD requirement F9 that out-of-enum output is "rejected/enforced at the API layer." Tool use enforces the response *shape* and strongly biases toward valid labels, but enum membership is validated in our code, not guaranteed by the API. (Surfaced by the error audit; see above.)
 
 ### Changed
 - `pyproject.toml` version bumped `0.1.0` → `1.0.0` to match the released tag
 - README results table now reports macro-F1 alongside accuracy
-- `evals/metrics.txt` regenerated to include the macro-average rows (recomputed from existing predictions — no re-classification)
+- `evals/metrics.txt` regenerated to include the macro-average rows (recomputed from existing predictions, no re-classification)
+- Added a plain-language definition of precision, recall, and F1/macro-F1 to `docs/how-it-works.md` (with a short gloss in the README results section), so the headline metric isn't unexplained jargon
+- Readability pass over `README.md`, `docs/CASE_STUDY.md`, and `docs/how-it-works.md`: trimmed heavy em-dash use in favor of colons, commas, and periods
 
 ---
 

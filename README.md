@@ -18,13 +18,15 @@ Built entirely on synthetic, publicly safe data. The measured eval numbers are t
 | Category | **79.0%** | **0.765** |
 | Operational domain | **97.3%** | **0.973** |
 
-Accuracy is the headline; **macro-F1** (every label weighted equally) is the more honest
-single number for an imbalanced problem. For category the two diverge — macro-F1 falls
-*below* accuracy because the collapsed `industry` class (F1 0.356) is hidden by raw
-accuracy but counts fully in the macro average. For operational domain the classes are
-balanced, so the two agree.
+Accuracy is the headline. **Macro-F1** is the more honest single number for an imbalanced
+problem: F1 fuses a label's precision and recall into one score, and *macro* averages those
+per-label F1s with every label weighted equally, no matter how common the label is. For
+category the two diverge: macro-F1 falls *below* accuracy because the collapsed `industry`
+class (F1 0.356) is hidden by raw accuracy but counts fully in the macro average. For
+operational domain the classes are balanced, so the two agree. (Plain-language definition of
+precision, recall, and F1 in [`docs/how-it-works.md`](docs/how-it-works.md).)
 
-### Category — per-label precision / recall / F1
+### Category: per-label precision / recall / F1
 
 | Label | Precision | Recall | F1 |
 |---|---|---|---|
@@ -34,7 +36,7 @@ balanced, so the two agree.
 | technology | 0.769 | 0.833 | 0.800 |
 | industry | 1.000 | 0.217 | 0.356 |
 
-### Operational domain — per-label precision / recall / F1
+### Operational domain: per-label precision / recall / F1
 
 | Label | Precision | Recall | F1 |
 |---|---|---|---|
@@ -49,22 +51,22 @@ Confusion matrices and a full misclassification log are in [`evals/`](evals/).
 
 ### What the numbers say
 
-Operational domain is essentially solved at 97.3% — the model reliably distinguishes air, land, sea, cyber, space, and multi from brief text snippets.
+Operational domain is essentially solved at 97.3%: the model reliably distinguishes air, land, sea, cyber, space, and multi from brief text snippets.
 
-Category is harder at 79.0%, and the failure is concentrated in one place: **`industry` recall is 0.22**, meaning the model correctly identifies only 1 in 5 industry articles. The other 4 get predicted as `procurement`. This makes sense — both labels involve defense companies and money. The distinction is subtle: procurement is about a purchase (the buyer's perspective); industry is about a company's own business news (earnings, mergers). Short snippets often don't give enough signal to tell them apart, and the model defaults to the more common framing.
+Category is harder at 79.0%, and the failure is concentrated in one place: **`industry` recall is 0.22**, meaning the model correctly identifies only 1 in 5 industry articles. The other 4 get predicted as `procurement`. This makes sense, since both labels involve defense companies and money. The distinction is subtle: procurement is about a purchase (the buyer's perspective); industry is about a company's own business news (earnings, mergers). Short snippets often don't give enough signal to tell them apart, and the model defaults to the more common framing.
 
-The misclassification log and the interactive notebook (`notebooks/eval_analysis.ipynb`) are the best places to study these cases.
+A full per-case audit of every miss is in [`evals/error_audit.md`](evals/error_audit.md); the interactive notebook (`notebooks/eval_analysis.ipynb`) is the best place to study them visually.
 
 ### What I tried that didn't work
 
 The obvious fix for the `industry`/`procurement` confusion is to spell the distinction out in the
-prompt. I tried exactly that — adding *"a firm winning a specific contract is procurement; a firm
-reporting earnings or merging is industry"* — and re-ran the full eval. It **regressed**: category
+prompt. I tried exactly that, adding *"a firm winning a specific contract is procurement; a firm
+reporting earnings or merging is industry,"* and re-ran the full eval. It **regressed**: category
 accuracy fell 79.0% → 76.7% and `industry` recall dropped 0.217 → 0.100. The sharper wording gave
 the model an even cleaner rule for dumping borderline company stories into `procurement`. I reverted
 to the baseline prompt and kept the 79.0% numbers reported above. The lesson is the point of having
 an eval at all: a prompt change that reads better to a human moved the decision boundary the wrong
-way, and only the measurement caught it. And the drop is real, not noise — a 5-run stability check
+way, and only the measurement caught it. And the drop is real, not noise: a 5-run stability check
 ([`evals/stability.txt`](evals/stability.txt)) puts category accuracy's run-to-run std at 0.24
 points, so a 2.3-point regression clears the noise floor by roughly 10x. (See `CHANGELOG.md` for
 the full before/after.)
@@ -75,32 +77,32 @@ the full before/after.)
 
 > For a plain-language walkthrough of the three-stage pipeline and why the
 > classifier/evaluator separation matters, see [`docs/how-it-works.md`](docs/how-it-works.md).
-> For the narrative writeup — decisions, the reverted experiment, and what I'd do
-> differently — see [`docs/CASE_STUDY.md`](docs/CASE_STUDY.md).
+> For the narrative writeup (decisions, the reverted experiment, and what I'd do
+> differently), see [`docs/CASE_STUDY.md`](docs/CASE_STUDY.md).
 
 ### Problem
 
 Given a plain-text defense-news snippet, assign two labels:
 
-- **`category`** — `procurement` · `operations` · `policy` · `technology` · `industry`
-- **`operational_domain`** — `air` · `land` · `sea` · `cyber` · `space` · `multi`
+- **`category`**: `procurement` · `operations` · `policy` · `technology` · `industry`
+- **`operational_domain`**: `air` · `land` · `sea` · `cyber` · `space` · `multi`
 
 ### Approach
 
 A single LLM call per article using the **Anthropic API** (`claude-sonnet-4-6`) with
 [tool use](https://docs.anthropic.com/en/docs/tool-use) to force structured JSON output.
-No fine-tuning, no retrieval, no embeddings — just a well-specified prompt and a JSON schema
-that locks the output to the valid label set.
+No fine-tuning, no retrieval, no embeddings: just a well-specified prompt and a JSON schema
+that biases the output toward the valid label set.
 
 Tool use (rather than asking the model to return raw JSON in the message body) is the key
 reliability mechanism for the response *shape*: you always get the two fields back as
 structured data, never free text to parse. The `enum` in the schema strongly biases the model
-toward valid labels, but it is **not** a hard server-side constraint — a tool-use schema is a
+toward valid labels, but it is **not** a hard server-side constraint: a tool-use schema is a
 guided prior, not constrained decoding. So `classify()` validates the returned labels against
 the allowed sets and re-samples once on the rare out-of-enum response before raising. This
 isn't hypothetical: in one 300-article run exactly one prediction came back out-of-enum
-(`category="cyber"`, which isn't a category), which is what prompted adding the guard — see
-[`evals/error_audit.md`](evals/error_audit.md).
+(`category="cyber"`, which isn't a category), which is what prompted adding the guard (see
+[`evals/error_audit.md`](evals/error_audit.md)).
 
 ### Dataset
 
@@ -108,7 +110,7 @@ isn't hypothetical: in one 300-article run exactly one prediction came back out-
 uniformly distributed across all 30 category × domain combinations (10 articles each).
 The generator uses the same tool-use approach to force correctly labeled output.
 
-All data is synthetic — no proprietary text, no scraping, no real news sources.
+All data is synthetic: no proprietary text, no scraping, no real news sources.
 
 ### Eval
 
@@ -129,14 +131,16 @@ data/
   synthetic_articles.csv    # 300 labeled snippets (generated by generate.py)
 src/
   generate.py               # Synthetic dataset generator (30 API calls)
-  classify.py               # Classifier — single article → {category, domain}
-  eval.py                   # Eval harness — runs classifier on full dataset
+  classify.py               # Classifier: one article -> {category, domain}
+  eval.py                   # Eval harness: runs classifier on full dataset
 evals/
   predictions.csv           # Raw predictions (also used as resume checkpoint)
   metrics.txt               # Accuracy + per-label precision/recall/F1
   confusion_category.csv    # Category confusion matrix
   confusion_domain.csv      # Domain confusion matrix
   misclassifications.csv    # Every article where a prediction was wrong
+  error_audit.md            # Per-case audit of every miss (classifier error vs label ambiguity)
+  stability.txt             # Multi-run noise floor (std/min/max per metric)
 notebooks/
   eval_analysis.ipynb       # Interactive analysis: heatmaps, F1 charts, misclassification browser
 pyproject.toml              # Project metadata + dependencies (uv)
@@ -152,16 +156,16 @@ CLAUDE.md
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
 `uv sync` installs the exact versions pinned in `uv.lock` into a local `.venv`,
-and `uv run` executes a command inside it — no manual virtualenv activation needed.
+and `uv run` executes a command inside it, with no manual virtualenv activation needed.
 
 ### API key & secrets
 
-The classifier reads `ANTHROPIC_API_KEY` from the environment — it is **never** hardcoded
+The classifier reads `ANTHROPIC_API_KEY` from the environment; it is **never** hardcoded
 or read from a tracked file. The convention here is the standard `.env` pattern:
 
-- **`.env.example`** is committed — a secret-free template documenting what the project
+- **`.env.example`** is committed: a secret-free template documenting what the project
   needs.
-- **`.env`** is gitignored — you create it locally and paste your real key in. It is never
+- **`.env`** is gitignored: you create it locally and paste your real key in. It is never
   committed or synced.
 - **`uv run --env-file .env ...`** injects the key for that one run. (Set `UV_ENV_FILE=.env`
   once in your shell profile to drop the flag.) A one-off `export ANTHROPIC_API_KEY=...`
@@ -171,10 +175,10 @@ or read from a tracked file. The convention here is the standard `.env` pattern:
 cp .env.example .env       # then edit .env and paste your key (get one at console.anthropic.com)
 ```
 
-> **Caveat — `.env` is machine-local by design.** Because it is gitignored, it lives only
+> **Caveat: `.env` is machine-local by design.** Because it is gitignored, it lives only
 > on the machine where you created it. A fresh clone or a new laptop has no `.env`, so you
 > recreate it (copy the template, paste the key). That is the deliberate trade-off of
-> keeping secrets out of git — not a bug. Never commit `.env`; if it ever shows up in
+> keeping secrets out of git, not a bug. Never commit `.env`; if it ever shows up in
 > `git status` as staged, stop and unstage it.
 
 ```bash
@@ -191,7 +195,7 @@ uv run python src/classify.py "The Pentagon awarded a \$4.2B contract for 24 F-3
 # 3. Run the full eval (~300 API calls, ~5 min)
 uv run python src/eval.py
 
-# 4. (Optional) Measure run-to-run stability — run the eval N times
+# 4. (Optional) Measure run-to-run stability by running the eval N times
 uv run python src/stability.py --runs 5     # ~300 calls per run
 
 # 5. Explore results interactively
@@ -211,8 +215,8 @@ The eval script saves predictions as it goes and supports resuming: if interrupt
 
 Unit tests live in [`tests/`](tests/) and cover the logic that doesn't need the network:
 the eval metrics (precision/recall/F1, confusion matrices, report text) and the wiring
-around the LLM calls (request shape, structured-output parsing, retry/backoff). The API
-itself is mocked, so the suite runs offline and needs no API key.
+around the LLM calls (request shape, structured-output parsing, the enum-validation guard,
+retry/backoff). The API itself is mocked, so the suite runs offline and needs no API key.
 
 ```bash
 uv sync           # installs the dev group (pytest, pytest-cov) by default
@@ -226,8 +230,8 @@ uv run pytest
 - **Circular eval:** the same model generates and classifies the data. Numbers measure
   in-distribution consistency, not generalization to real-world news.
 - **No ambiguity handling:** articles that span two categories (e.g., a procurement story
-  about a drone contract — both `procurement` and `technology`) get a single forced label.
-  The misclassification log is the best place to study these cases.
+  about a drone contract, both `procurement` and `technology`) get a single forced label.
+  The error audit is the best place to study these cases.
 - **Synthetic text:** generated snippets are more uniform in style and vocabulary than real
   news. A classifier trained on this data would likely overfit to that style.
 - **`multi` domain is underspecified:** it acts as a catch-all for joint operations, which
@@ -238,7 +242,7 @@ uv run pytest
 ## Stack
 
 - Python 3.11+
-- [`uv`](https://docs.astral.sh/uv/) — dependency management and reproducible environments
-- [`anthropic`](https://github.com/anthropics/anthropic-sdk-python) — LLM calls
-- [`pandas`](https://pandas.pydata.org/) — eval tables and CSV I/O
+- [`uv`](https://docs.astral.sh/uv/) for dependency management and reproducible environments
+- [`anthropic`](https://github.com/anthropics/anthropic-sdk-python) for the LLM calls
+- [`pandas`](https://pandas.pydata.org/) for eval tables and CSV I/O
 - Model: `claude-sonnet-4-6`
