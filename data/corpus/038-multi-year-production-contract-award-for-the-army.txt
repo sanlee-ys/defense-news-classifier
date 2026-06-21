@@ -1,0 +1,15 @@
+Multi-year Production Contract Award for the Army’s New Aviation Ground Power Unit 1.1
+
+The U.S. Army will enter production of the Aviation Ground Power Unit (AGPU) 1.1, an improved ground power source for its current and next generation rotary wing fleets and international partners.  
+
+On March 14, 2025, PEO Aviation’s PM AMSA alongside Army Contracting Command – Redstone Arsenal awarded the AGPU 1.1 multi-year production contract to Sun Test Systems, Inc., Huntsville, AL, establishing the base award and first delivery order of 20 AGPU 1.1 systems and repair part support packages. The $230M, 5-year production contract satisfies U.S. Army and foreign military sales AGPU requirements into 2030 and enables the Army to field the initial operational capability on schedule in 2026.   
+ 
+The AGPU 1.1 increases user safety, provides new and expanded capabilities to address critical support capability gaps in the CH-47 Chinook and AH-64 Apache fleets, streamlines maintainer workload, and results in significant fuel cost avoidance. In addition to expanding ground power support for the Army’s fielded rotary wing fleet, the AGPU 1.1 is adaptable to support the Army’s Future Long Range Assault Aircraft. 
+
+ This contract award culminates a successful three-year prototype and test effort that validated the AGPU 1.1 system meets Army operational requirements to replace the 40-year-old AGPU 1.0. During the test phase, Army maintainers from the Fort Campbell 101st and Fort Bragg 82nd Combat Aviation Brigades and the Fort Novosel Aviation Center of Excellence rigorously evaluated the AGPU 1.1 in a Special User Evaluation. This critical Solider touch point provided early feedback on the system and the reliability, availability, and maintainability data required to mature the design for production.  
+
+A significantly quieter system, the AGPU 1.1 requires only single hearing protection, an important safety improvement over the APGU 1.0 requirement of double hearing protection. Additionally, the AGPU 1.1 provides an entirely new hydraulic fluid purification system evaluating hydraulic fluid for air, water and particulate matter while purifying the fluid at the maintenance site – a first for Army rotary wing maintenance.  
+
+Army maintainers also receive increased electrical, hydraulic, and pneumatic outputs the legacy AGPU 1.0 cannot provide. The AGPU 1.1 diesel engine replaces the legacy AGPU 1.0 turbine engine to power more individual and concurrent tasks for longer periods, enabling Soldiers to complete maintenance tasks without pausing mid-task to refuel the AGPU. In most conditions, the AGPU 1.1 will operate over twice as long as the legacy system.  
+
+Interface improvements streamline maintainer workload and save critical time servicing Army helicopters. The AGPU 1.1 digital interface replacing the APGU 1.0 analog technology requires fewer inputs to perform the same tasks. While saving time, the AGPU 1.1 also uses less fuel. The Army estimates that once fully fielded, the fuel cost avoidance over the service life of the AGPU 1.1 will exceed $1B.

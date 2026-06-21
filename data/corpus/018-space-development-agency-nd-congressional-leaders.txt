@@ -1,0 +1,20 @@
+Space Development Agency, ND congressional leaders celebrate the basing of first ground operations and integration center at Grand Forks AFB
+
+GRAND FORKS AIR FORCE BASE, N.D. – Grand Forks Air Force Base today celebrated its selection as the future home of Space Development Agency’s first Ground Operations and Integration Center that will operate and control multiple-layer satellite operations for Tranche 1 (T1) of the National Defense Space Architecture (NDSA). The NDSA provides high-speed tactical data transport and supports DOD’s “pivot” to a multi-orbit, resilient missile warning, missile tracking, and missile defense architecture. 
+
+The celebration comes just weeks after SDA’s May announcement of an award to General Dynamics Mission Systems worth approximately $325 million to develop, equip, and man two state-of-the-art operation centers that will operate SDA ground entry points required to uplink and downlink data, and lead ground-to-space integration efforts. 
+
+Speaking about selection of Grand Forks Air Force Base for the new mission and to emphasize the base’s increasing contribution to national security were Sen. John Hoeven (D-ND), Sen. Kevin Cramer (D-ND), Rep. Kelly Armstrong (R-ND), and SDA Director Derek Tournear.
+
+“The SDA’s Space Networking Center, which will be developed by General Dynamics, Iridium, Raytheon and other partners, will place North Dakota at the center of U.S. space operations,” said Sen. John Hoeven. “Further, the low-Earth orbit satellite mission and the Sky Range hypersonic missile testing program are two more strong examples of the partnerships we’ve established to secure Grand Forks’ role in the future of our nation’s defense. These new operations greatly complement GF AFB’s leadership in the Air Force’s ISR efforts, as well as the dynamic, world-class UAS industry we’ve built in the Red River Valley.”
+
+“It seems like just yesterday I brought SDA Director Tournear to Grand Forks to show off our Airmen and University. Now here we are, less than two years later, cutting the ribbon on SDA’s first operations center,” said Sen. Kevin Cramer. “As the home of SDA’s first operations center, Grand Forks Air Force Base plays a critical role in bolstering our national security through its important satellite mission. This is also a tremendous opportunity for the entire community in terms of opening up new jobs for the area and working with the city’s academic and technology community. North Dakota’s space assets and capabilities are second to none and our excellence will be a boon to improve our nation’s space-based defense.” 
+
+“The selection of Grand Forks Air Force Base to host SDA’s first operations center is confirmation of the critical role it plays in our country’s defense,” said Rep. Kelly Armstrong. “North Dakota has been a leader in emerging technologies such as unmanned aerial systems, and this facility will help our state remain a critical player in national security.”
+
+“Our ground segment provides the glue needed to manage the integration of our network for a complete operational enterprise,” said Dr. Derek Tournear. “The operations center will integrate space and ground segments from multiple vendors in multiple configurations and allows mission operations and mesh networking control. Thus, the Operations and Integration contract is one of the most critical elements of Tranche 1, and represents the highest potential for impact on the overall successful performance of the NDSA.” 
+
+The T1 ground segment includes two operations centers, located at SDA-provided facilities in Grand Forks Air Force Base (Northern Tier) and Redstone Arsenal, Huntsville, Ala. (Southern Tier), will enable SDA’s Tranche 1 Transport Layer (T1TL) operations. The two operations centers will provide mission assurance, mutual backup capability, and distribution of mission.
+SDA’s sites were chosen intentionally to be not only separate from other space operations activities but to align directly with the warfighter or end user. 
+
+SDA will implement a proven commercial model for mesh network management and operations in the O&I Centers with minimal personnel, wh
