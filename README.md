@@ -144,9 +144,16 @@ This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
 `uv sync` installs the exact versions pinned in `uv.lock` into a local `.venv`,
 and `uv run` executes a command inside it — no manual virtualenv activation needed.
 
+The classifier needs an Anthropic API key. Copy `.env.example` to `.env`, paste your
+key in, and pass `--env-file .env` to `uv run` — `uv` injects it for that run and `.env`
+stays gitignored. (A one-off `export ANTHROPIC_API_KEY=...` works too, but it vanishes
+when the shell closes.)
+
 ```bash
 uv sync --group dev                    # install project deps + dev/test tools
-export ANTHROPIC_API_KEY=sk-ant-...    # Windows: $env:ANTHROPIC_API_KEY = "sk-ant-..."
+cp .env.example .env                   # then edit .env and paste your key
+
+# Prefix the run commands below with: uv run --env-file .env ...
 
 # 1. Generate the dataset (~30 API calls, ~1 min)
 uv run python src/generate.py

@@ -5,6 +5,8 @@ __pycache__/
 *.pyo
 .env
 .env.*
+# the secret-free template is meant to be committed
+!.env.example
 *.egg-info/
 dist/
 build/
