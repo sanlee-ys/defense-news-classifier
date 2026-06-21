@@ -1,0 +1,16 @@
+==============================================================
+v2 STEP 3 -- RETRIEVAL-GROUNDED vs BASELINE
+==============================================================
+
+Snippets : 54    retrieve k=3
+Baseline = src/classify.py (no retrieval); Grounded = + top-k corpus context.
+
+                      baseline  grounded     delta
+Category accuracy        88.9%     90.7%     +1.9%
+Category macro-F1        0.906     0.914    +0.008
+Domain accuracy          88.9%     88.9%     +0.0%
+Domain macro-F1          0.894     0.907    +0.013
+
+Category: grounding changed 3 calls -> 2 wrong->right, 1 right->wrong, 0 lateral
+Domain: grounding changed 6 calls -> 3 wrong->right, 3 right->wrong, 0 lateral
+==============================================================
