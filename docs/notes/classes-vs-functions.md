@@ -1,9 +1,13 @@
 # Classes vs Functions — When to Reach for Each
 
-> Personal OOP refresher, grounded in *this* repo's code. Companion to the Java
-> notes in the [`notes-api`](https://github.com/sanlee-ys/notes-api) repo, which shows the
-> *other* half: where classes are the right call. Read them together — the lesson is the
-> contrast, not either side alone.
+> **📎 Paired note — keep in sync.** Twin lives in the **notes-api** repo:
+> [`docs/notes/java-oop-and-ctors.md`](https://github.com/sanlee-ys/notes-api/blob/main/docs/notes/java-oop-and-ctors.md).
+> These two teach one lesson from two sides (Python ↔ Java) — **edit one, update the other**
+> so they don't drift.
+>
+> Personal OOP refresher, grounded in *this* repo's code. The Java twin shows the *other*
+> half — where classes are the right call. Read them together; the lesson is the contrast,
+> not either side alone.
 
 ## The one idea
 
