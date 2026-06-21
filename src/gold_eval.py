@@ -170,7 +170,7 @@ def main() -> None:
     else:
         done_ids = set()
 
-    if done_ids < set(gold["id"]):
+    if set(gold["id"]) - done_ids:
         client = make_client()
         run_predictions(client, gold, done_ids)
     else:
