@@ -1,0 +1,27 @@
+CAOC Combat Ops Space Cell: Defending CENTCOM critical SATCOM links
+
+UNDISCLOSED LOCATION - More than 22,000 miles away, spinning silently through the vacuum of space, is one of the most critical components to air, space and cyberspace superiority today; a satellite.
+
+The mission to defend and protect the operability of that satellite rests a little closer to home, at the U.S. Air Forces Central Command Combined Air and Space Operations Center within the Combat Operations Division's Space Cell.
+
+"We have five priority missions we support," said Capt. Brandon Davenport, the Space Cell chief. "Theater missile warning, personnel recovery support, satellite communications, GPS constellation health and modeling as well as battle space characterization."
+
+One of the biggest threats to satellite communications and GPS missions is its vulnerability to electromagnetic interference, or EMI, which causes the signal to be "jammed."
+
+Jamming, at its most basic level, is denying a satellite the ability to communicate by overwhelming it with energy where it would expect to see the friendly signal. This is basically like someone using a bullhorn to drown out someone else's conversation. This type of occurrence can be intentional, in which case it is considered hostile, or accidental. The most common causes of accidental EMI are easily found and remedied. Hostile jamming, however, can require a more creative solution.
+
+"To assure minimal operational impact, our communicators systematically work through actions to quickly restore the services affected." said Lt. Col. Jason Knight, the Director of Space Force's assigned space weapons officer. "If the EMI is determined to be intentional, we engage up the chain and through other governmental agencies to apply non-lethal or lethal national instruments of power in order to quickly restore services and resolve the problem."
+
+EMI resolution would not be possible without cross-Combatant Command and cross-agency collaboration between space and cyber professionals, or one of the most technical aspects of the space cell's mission, geolocation of a hostile jamming signal.
+
+"Our focus is to track down a jamming signal with high-confidence and say 'it's this guy,'" Knight said. "By combining our cyber and space expertise at the operational and tactical levels we are better able to attribute and identify sources of interference, and eliminate intentional denial of SATCOM by our adversaries." 
+
+Because the satellite transmission spreads out as it travels toward Earth at the speed of light, each satellite covers an area approximately one-third of the planet's surface from its perch far into outer space. This allows for overlap between several satellites and grants U.S. forces the flexibility to shift to another satellite if necessary to complete the mission.
+
+The linchpin in this whole process is Operation Silent Sentry, run by the 379th Expeditionary Operations Squadron. The Silent Sentry team's mission is to monitor hundreds of satellite transmissions every week using the Rapid Attack Identification Detection Reporting System and help detect and locate signals that do not belong on U.S. satellites, such as a jammer.
+
+"The Silent Sentry antennas and our satellites represent two known locations and the jammer a third, unknown location," Davenport said. "Because we start knowing two out of three points, and have both frequency and time values available to us, we can use algebra to figure out a line running north south as well as a line running east and west of possible locations. Where those lines cross, we'll find the offending transmitter. "
+
+Though the technology does not yet exist to prevent jamming, the available actions that the U.S. military and its allies may take can be swift and decisive.
+
+"Most emitters that put our systems at risk can be identified by our teams," Davenport said. "During combat, an adversary could technically jam our satellite signals, but we can recover fairly quickly, attribute the source of interference and respond accordingly."
