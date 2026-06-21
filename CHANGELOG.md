@@ -9,6 +9,10 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-06-21
+
+Tightened the measurement around the v1.0.0 classifier: macro-F1, a multi-run stability harness, a full error audit, and an enum-validation guard (which caught and corrected an inaccurate docs claim along the way).
+
 ### Added
 - `LICENSE` — MIT license
 - README status badges (CI, release, license, Python version)
@@ -81,7 +85,8 @@ First complete version of the defense news classifier. All v1 success criteria m
 
 ---
 
-[Unreleased]: https://github.com/sanlee-ys/defense-news-classifier/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/sanlee-ys/defense-news-classifier/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/sanlee-ys/defense-news-classifier/releases/tag/v0.1.0
 </content>
