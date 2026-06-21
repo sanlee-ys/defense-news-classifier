@@ -96,6 +96,11 @@ The numbers come with real caveats, and I document them rather than hide them
 To stop the negative-result claim from resting on a single run, I also built a stability
 harness that runs the full eval N times and reports the run-to-run standard deviation — so a
 "this is better than that" claim can be checked against the noise floor before I believe it.
+Over five passes, category accuracy's run-to-run std is **0.24 points** (`evals/stability.txt`),
+so the ~2x-std threshold for a meaningful difference is about half a point. The reverted
+experiment's 2.3-point drop is roughly **10x** that noise floor — confirming it was a real
+regression, not sampling noise. (The same check showed the single-run 79.0% I report is the
+*low* end of the five runs, not a cherry-picked high.)
 
 ## Engineering practices
 

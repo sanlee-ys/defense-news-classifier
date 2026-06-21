@@ -64,7 +64,10 @@ accuracy fell 79.0% → 76.7% and `industry` recall dropped 0.217 → 0.100. The
 the model an even cleaner rule for dumping borderline company stories into `procurement`. I reverted
 to the baseline prompt and kept the 79.0% numbers reported above. The lesson is the point of having
 an eval at all: a prompt change that reads better to a human moved the decision boundary the wrong
-way, and only the measurement caught it. (See `CHANGELOG.md` for the full before/after.)
+way, and only the measurement caught it. And the drop is real, not noise — a 5-run stability check
+([`evals/stability.txt`](evals/stability.txt)) puts category accuracy's run-to-run std at 0.24
+points, so a 2.3-point regression clears the noise floor by roughly 10x. (See `CHANGELOG.md` for
+the full before/after.)
 
 ---
 
