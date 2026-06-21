@@ -1,0 +1,13 @@
+This file is a FORMAT TEMPLATE, not part of the corpus.
+
+Because the manifest (manifest.csv) is the source of truth and this file has no row
+there, the indexer will never load it. Leave it or delete it; either is fine.
+
+Per-document format (copy this shape for each real doc):
+
+  - Plain UTF-8 text, one article per file.
+  - Filename: NNN-short-slug.txt   (e.g. 014-darpa-autonomous-resupply.txt)
+  - Paste the article BODY only. Trim site navigation, menus, share buttons,
+    "related stories", and footers. A short headline as the first line is fine.
+  - Keep it short: roughly 1 to 5 paragraphs, the way a real release reads.
+  - Public-domain (U.S. government) text only. See README.md for the rules.
