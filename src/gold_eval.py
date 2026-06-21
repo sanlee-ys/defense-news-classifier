@@ -42,10 +42,10 @@ SLEEP_BETWEEN_CALLS = 0.3
 def load_gold(path: str = GOLD_PATH) -> pd.DataFrame:
     """Load the gold set and fail loudly if it is not fully, validly labeled."""
     df = pd.read_csv(path)
-    df["category"] = df["category"].astype(str).str.strip()
-    df["domain"] = df["domain"].astype(str).str.strip()
+    for col in ("category", "domain"):
+        df[col] = df[col].fillna("").astype(str).str.strip().str.lower()
 
-    blank = df[df["category"].isin(["", "nan"]) | df["domain"].isin(["", "nan"])]
+    blank = df[(df["category"] == "") | (df["domain"] == "")]
     if len(blank):
         raise ValueError(
             f"{len(blank)} of {len(df)} gold rows are unlabeled. Finish labeling "
