@@ -61,6 +61,54 @@ def test_classify_sends_expected_request(tool_client):
     ]
 
 
+# --- enum validation guard -----------------------------------------------
+#
+# The tool-use enum biases the model toward valid labels but does not
+# hard-enforce them (one real run returned category="cyber", which is not a
+# category at all). classify() validates the result and re-samples once.
+
+
+def test_validate_accepts_in_range_labels():
+    payload = {"category": "industry", "operational_domain": "sea"}
+    assert classify._validate(payload) == payload
+
+
+def test_validate_rejects_out_of_enum_category():
+    # "cyber" is a valid domain but not a valid category — the exact id-95 bug.
+    with pytest.raises(classify.InvalidLabelError):
+        classify._validate({"category": "cyber", "operational_domain": "cyber"})
+
+
+def test_validate_rejects_out_of_enum_domain():
+    with pytest.raises(classify.InvalidLabelError):
+        classify._validate({"category": "operations", "operational_domain": "naval"})
+
+
+def test_classify_resamples_once_then_returns_valid(tool_client_seq):
+    # First response is out-of-enum; the re-sample lands in range and is returned.
+    client = tool_client_seq(
+        [
+            {"category": "cyber", "operational_domain": "cyber"},  # invalid
+            {"category": "operations", "operational_domain": "cyber"},  # valid
+        ]
+    )
+    result = classify.classify(client, "Cyber intrusion disrupted.")
+    assert result == {"category": "operations", "operational_domain": "cyber"}
+    assert client.messages.calls == 2  # it did re-sample exactly once
+
+
+def test_classify_raises_after_two_invalid(tool_client_seq):
+    client = tool_client_seq(
+        [
+            {"category": "cyber", "operational_domain": "cyber"},
+            {"category": "cyber", "operational_domain": "cyber"},
+        ]
+    )
+    with pytest.raises(classify.InvalidLabelError):
+        classify.classify(client, "Cyber intrusion disrupted.")
+    assert client.messages.calls == 2  # one retry, then give up
+
+
 # --- make_client() -------------------------------------------------------
 
 

@@ -63,13 +63,44 @@ CLASSIFY_TOOL: ToolParam = {
 }
 
 
+class InvalidLabelError(ValueError):
+    """Raised when the model returns a label outside the allowed enum.
+
+    A tool-use ``enum`` strongly biases the model toward valid labels but is
+    not a hard server-side constraint, so on rare occasions the model can
+    return an out-of-enum value. We validate the result ourselves and surface
+    it rather than letting a bad label flow silently into the metrics.
+    """
+
+
+def _validate(result: dict) -> dict:
+    """Return ``result`` if both labels are in range, else raise.
+
+    Raises:
+        InvalidLabelError: If ``category`` or ``operational_domain`` is outside
+            its allowed set.
+    """
+    category = result.get("category")
+    domain = result.get("operational_domain")
+    if category not in CATEGORIES:
+        raise InvalidLabelError(f"category {category!r} is not one of {CATEGORIES}")
+    if domain not in DOMAINS:
+        raise InvalidLabelError(
+            f"operational_domain {domain!r} is not one of {DOMAINS}"
+        )
+    return result
+
+
 def classify(
     client: anthropic.Anthropic, text: str, temperature: float | None = None
 ) -> dict:
     """Classify a single defense-news article snippet.
 
     Makes one LLM call with forced tool use so the response is always
-    structured JSON — never free text.
+    structured JSON — never free text. The tool-use ``enum`` biases the model
+    toward valid labels but does not hard-enforce them, so the result is
+    validated against the allowed sets; on the rare out-of-enum response the
+    call is re-sampled once before raising.
 
     Args:
         client: Authenticated Anthropic client.
@@ -80,20 +111,31 @@ def classify(
 
     Returns:
         Dict with keys ``category`` and ``operational_domain``, both str.
+
+    Raises:
+        InvalidLabelError: If two successive responses both fall outside the
+            allowed label sets.
     """
     # Pass the SDK's `omit` sentinel when no temperature is requested, so the
     # API uses its own default rather than us forcing a value.
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=256,
-        system=SYSTEM_PROMPT,
-        tools=[CLASSIFY_TOOL],
-        tool_choice={"type": "tool", "name": "classify_article"},
-        messages=[{"role": "user", "content": text}],
-        temperature=anthropic.omit if temperature is None else temperature,
-    )
-    tool_block = next(b for b in response.content if isinstance(b, ToolUseBlock))
-    return cast(dict, tool_block.input)
+    last_exc: InvalidLabelError | None = None
+    for _ in range(2):  # one normal call, plus one re-sample on an invalid label
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=256,
+            system=SYSTEM_PROMPT,
+            tools=[CLASSIFY_TOOL],
+            tool_choice={"type": "tool", "name": "classify_article"},
+            messages=[{"role": "user", "content": text}],
+            temperature=anthropic.omit if temperature is None else temperature,
+        )
+        tool_block = next(b for b in response.content if isinstance(b, ToolUseBlock))
+        try:
+            return _validate(cast(dict, tool_block.input))
+        except InvalidLabelError as exc:
+            last_exc = exc  # try once more; the next sample usually lands in range
+    assert last_exc is not None  # loop ran at least once
+    raise last_exc
 
 
 def make_client() -> anthropic.Anthropic:
