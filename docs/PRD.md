@@ -96,7 +96,7 @@ Each article receives exactly one label per field. Multi-label output is not sup
 | F6 | Accept a plain-text article as input |
 | F7 | Return `{category, operational_domain}` as structured JSON |
 | F8 | Use a single LLM API call per article |
-| F9 | Enforce valid label values at the API layer via schema validation |
+| F9 | Constrain labels to the valid set via a tool-use enum schema, and validate the returned labels in code (the enum guides the model but is not a hard server-side constraint) |
 | F10 | Be runnable as a standalone script for quick sanity checks |
 
 ### 6.3 Eval Harness
