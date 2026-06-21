@@ -43,9 +43,13 @@ significant ones as ADRs (`decisions/`). The ones that mattered most:
 - **Separate the data, the classifier, and the eval into three stages.** The classifier
   only ever sees article text, never the label, so it cannot "cheat." That separation is
   what lets the eval put an honest *number* on quality instead of just asserting it works.
-- **Force structured output with tool-use, not free-text JSON.** The API validates the
-  response against an enum schema before returning it, so an out-of-range label is rejected
-  at the API layer — reliability of *form* is enforced, not patched up afterward in Python.
+- **Force structured output with tool-use, not free-text JSON.** Tool-use guarantees the
+  response *shape* — always two structured fields, never free text to parse. The enum schema
+  strongly biases the model toward valid labels but doesn't hard-enforce them (a tool schema
+  is a guided prior, not constrained decoding), so I validate the labels in code and re-sample
+  once on the rare out-of-enum case. My own eval caught this — 1 of 300 predictions came back
+  with an invalid category — which is exactly why the guard exists. Reliability of *form* is
+  enforced where it actually can be: in our code, not assumed from the API.
 - **Hand-compute the metrics (no scikit-learn).** Precision/recall from TP/FP/FN is short
   and standard; doing it by hand kept the dependency list tiny and meant I understood every
   number, rather than borrowing them from a black box. The metric code is unit-tested.

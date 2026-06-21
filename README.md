@@ -93,9 +93,14 @@ No fine-tuning, no retrieval, no embeddings — just a well-specified prompt and
 that locks the output to the valid label set.
 
 Tool use (rather than asking the model to return raw JSON in the message body) is the key
-reliability mechanism: the API validates the response against the schema before returning it,
-so malformed or out-of-enum outputs are rejected at the API layer, not after the fact in
-application code.
+reliability mechanism for the response *shape*: you always get the two fields back as
+structured data, never free text to parse. The `enum` in the schema strongly biases the model
+toward valid labels, but it is **not** a hard server-side constraint — a tool-use schema is a
+guided prior, not constrained decoding. So `classify()` validates the returned labels against
+the allowed sets and re-samples once on the rare out-of-enum response before raising. This
+isn't hypothetical: in one 300-article run exactly one prediction came back out-of-enum
+(`category="cyber"`, which isn't a category), which is what prompted adding the guard — see
+[`evals/error_audit.md`](evals/error_audit.md).
 
 ### Dataset
 

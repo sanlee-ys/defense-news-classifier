@@ -63,3 +63,40 @@ def tool_client():
         return FakeClient(blocks)
 
     return _make
+
+
+class FakeSequenceMessages:
+    """client.messages stand-in that returns a different payload per create() call.
+
+    Lets a test exercise re-sampling: the first call can return an out-of-enum
+    payload and the second a valid one. The final payload repeats if create()
+    is called more times than there are payloads.
+    """
+
+    def __init__(self, payloads):
+        self._payloads = list(payloads)
+        self.calls = 0
+        self.last_kwargs = None
+
+    def create(self, **kwargs):
+        self.last_kwargs = kwargs
+        i = min(self.calls, len(self._payloads) - 1)
+        self.calls += 1
+        return types.SimpleNamespace(content=[make_tool_block(self._payloads[i])])
+
+
+class FakeSequenceClient:
+    """FakeClient whose successive create() calls return successive payloads."""
+
+    def __init__(self, payloads):
+        self.messages = FakeSequenceMessages(payloads)
+
+
+@pytest.fixture
+def tool_client_seq():
+    """Factory: build a client that returns each payload in turn on create()."""
+
+    def _make(payloads):
+        return FakeSequenceClient(payloads)
+
+    return _make
