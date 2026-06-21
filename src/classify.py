@@ -92,7 +92,10 @@ def _validate(result: dict) -> dict:
 
 
 def classify(
-    client: anthropic.Anthropic, text: str, temperature: float | None = None
+    client: anthropic.Anthropic,
+    text: str,
+    temperature: float | None = None,
+    model: str = MODEL,
 ) -> dict:
     """Classify a single defense-news article snippet.
 
@@ -108,6 +111,9 @@ def classify(
         temperature: Optional sampling temperature. Left at the API default
             when ``None``; set to ``0`` for the most repeatable output, or pass
             a fixed value when measuring run-to-run variance.
+        model: Which Claude model classifies. Defaults to the workhorse
+            (claude-sonnet-4-6); pass a higher tier (e.g. the Opus judge) to run
+            the same task on a stronger model.
 
     Returns:
         Dict with keys ``category`` and ``operational_domain``, both str.
@@ -121,7 +127,7 @@ def classify(
     last_exc: InvalidLabelError | None = None
     for _ in range(2):  # one normal call, plus one re-sample on an invalid label
         response = client.messages.create(
-            model=MODEL,
+            model=model,
             max_tokens=256,
             system=SYSTEM_PROMPT,
             tools=[CLASSIFY_TOOL],
