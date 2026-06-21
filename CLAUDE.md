@@ -98,3 +98,11 @@ Each web session runs in its own fresh container and can't see another session's
 - Add a `region` field (e.g., indo-pacific, europe, middle-east, americas, africa, global).
 - Add RAG over a small corpus of real public reports.
 - Add a thin Streamlit UI to demo it.
+- **Tiered model routing.** Keep `claude-sonnet-4-6` as the workhorse classifier (it's
+  sufficient — domain is already 97.3% and the category ceiling is label ambiguity, not
+  model horsepower). Escalate *only* the low-confidence / `industry`-vs-`procurement`
+  boundary cases to a higher tier (e.g. Opus), so the premium model runs on ~15% of
+  articles rather than 100%. Separately, reserve the top tier as an **LLM judge** for
+  grading real (non-synthetic) v2 data, where auto-grading against a model-made answer key
+  no longer works. Principle: model tier is a per-task cost/quality knob decided by the
+  eval, not a default — measure first, escalate only where it pays.
