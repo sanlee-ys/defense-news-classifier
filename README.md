@@ -72,6 +72,8 @@ way, and only the measurement caught it. (See `CHANGELOG.md` for the full before
 
 > For a plain-language walkthrough of the three-stage pipeline and why the
 > classifier/evaluator separation matters, see [`docs/how-it-works.md`](docs/how-it-works.md).
+> For the narrative writeup — decisions, the reverted experiment, and what I'd do
+> differently — see [`docs/CASE_STUDY.md`](docs/CASE_STUDY.md).
 
 ### Problem
 
