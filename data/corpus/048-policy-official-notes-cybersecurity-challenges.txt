@@ -1,0 +1,18 @@
+Policy Official Notes Cybersecurity Challenges
+
+Putting cybersecurity in place poses significant challenges for the Defense Department, the government as a whole and for critical infrastructure, the principal deputy assistant secretary of defense for policy said today.
+James N. Miller, said cybersecurity “is not a glass half full/glass half empty story.”
+“There is a glass,” he said. “It has some water in it. The water is dirty, and we have an insatiable thirst in this area.”
+The issue has the attention of all defense leaders, and progress is being made, Miller said. Confirmation of Army Lt. Gen. Keith Alexander to receive his fourth star and serve as the first chief of U.S. Cyber Command is a positive step, he added. The command will stand up shortly under U.S. Strategic Command.
+Meanwhile, Miller said, the U.S. government is working on a cybersecurity strategy that’s expected to be out soon. That strategy, he said, must be flexible to address the diverse and growing threats of the future.
+The challenges are immense, Miller said. “We don’t really understand the nature of the threat that we face,” he noted. But one thing that is clear, he said, is that the Defense Department relies heavily on information technology, and enemies, criminal gangs and hackers are stealing terabytes of information from The Defense Department and the rest of the government.
+The Defense Department alone has about 15,000 networks, with millions of users in 88 countries.
+Another threat comes from outright attacks, Miller said, including denial-of-service attacks, viruses and worms.
+“Over the past decade, we have seen the frequency and sophistication of intrusions into our networks increased,” he said. “Our networks are scanned thousands of times an hour.”
+More than 100 foreign intelligence services are trying to get into Defense Department systems, Miller added, and some foreign militaries are developing offensive cyber capabilities. Knowing who is delivering them is extremely difficult to pin down, he said, and foes will confront the United States using these cheap, asymmetric tools.
+“The linkages between intelligence, offense and defense are particularly important in cyber operations,” Miller said. “The ability to repel attackers is closely tied to the ability to identify them.”
+Cyber Command will have three core missions: defense of the military networks, supporting on-going military operations and planning for future operations, and supporting civilian efforts, as directed. Alexander will remain as director of the National Security Agency as he takes on leadership of Cyber Command.
+Much basic work remains to be done in the cybersecurity effort, Miller said, including determining when a cyber event becomes an attack covered by the law of armed conflict. “At what point does it rise to such a level that it becomes an act of aggression?” he asked. “Those are legal questions and policy questions we are trying to address.”
+Miller said there is a world of difference between cyber espionage and acts meant to degrade U.S. networks or to input false data into those networks.
+“There is no way we are going to fully defend against cyber espionage,” Miller said. “And we understand that not everything that happens in cyberspace is an act of war. As we think of the role of cyberspace in supporting military operations, and the role of cyber attacks as … the front-end of a kinetic military attack, then we would think about the potential for responses that are not limited to the cyber domain.”
+Story by Jim Garamone, American Forces Press Service
