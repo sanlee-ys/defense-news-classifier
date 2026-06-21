@@ -1,13 +1,14 @@
 # Classes vs Functions — When to Reach for Each
 
-> **📎 Paired note — keep in sync.** Twin lives in the **notes-api** repo:
-> [`docs/notes/java-oop-and-ctors.md`](https://github.com/sanlee-ys/notes-api/blob/main/docs/notes/java-oop-and-ctors.md).
-> These two teach one lesson from two sides (Python ↔ Java) — **edit one, update the other**
-> so they don't drift.
+> **📖 The concept lives in [`learning-notes`](https://github.com/sanlee-ys/learning-notes) (canonical).**
+> Plain-language hub: [13 — Classes vs functions](https://github.com/sanlee-ys/learning-notes/blob/main/13-classes-vs-functions.md)
+> and [14 — Constructors & DI](https://github.com/sanlee-ys/learning-notes/blob/main/14-constructors-and-dependency-injection.md),
+> linked on the [interactive concept map](https://sanlee-ys.github.io/learning-notes/concept-map.html).
+> Edit the concept *there*; this note just keeps the **Python-specific** depth (the
+> `generate.py` walkthrough).
 >
-> Personal OOP refresher, grounded in *this* repo's code. The Java twin shows the *other*
-> half — where classes are the right call. Read them together; the lesson is the contrast,
-> not either side alone.
+> Personal OOP refresher, grounded in *this* repo's code — the Python side, where plain
+> functions are the right call. For the Java side of the same idea, see the hub above.
 
 ## The one idea
 
