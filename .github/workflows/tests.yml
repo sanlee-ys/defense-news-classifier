@@ -30,5 +30,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Format check (black)
+        run: uv run black --check .
+
+      - name: Type check (mypy)
+        run: uv run mypy src
+
       - name: Run tests
-        run: uv run pytest
+        run: uv run pytest --cov=src --cov-report=term-missing
