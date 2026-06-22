@@ -85,6 +85,7 @@ Each web session runs in its own fresh container and can't see another session's
 - **Serialize changes to shared files; parallelize only genuinely independent work.**
   - Must serialize (collision hotspots): `pyproject.toml`, `uv.lock`, `README.md`, `.github/workflows/*`, anything restructuring layout.
   - Safe to parallelize: separate `src/` modules, isolated docs, separate test files.
+  - **Parallelize by independent *file*, not by *task*.** Cut a session per file that nothing else touches — never one session per task when the tasks collide on the same file. **Generated or aggregated files (build outputs, indexes, registries, generated HTML/SVG) especially can't be merged**, so when several pieces of work feed one of them, keep that *wiring* in one hand: author the independent content in parallel, then have a single integrator do the registration + rebuild once, after the content lands.
 - **Name branches by intent, not a session slug** (`fix-industry-labels`, not `claude/recent-changes-xyz`) so duplicates are obvious at a glance.
 - **If many sessions run at once, designate one "integrator"** that owns merging to `main` and keeping it green; others stay feature-scoped and rebase on its merges.
 
