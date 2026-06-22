@@ -1,11 +1,11 @@
 # Gold test set (human-labeled)
 
-`gold.csv` is the v2 eval's honest anchor: 45 real DVIDS news snippets, **disjoint from the
+`gold.csv` is the v2 eval's honest anchor: 54 real DVIDS news snippets, **disjoint from the
 retrieval corpus** (no leakage). Your hand labels are the ground truth that both the
 classifier and the LLM judge get measured against. This is the human truth that replaces
 v1's circular, model-made answer key.
 
-## Your task: label all 45 rows
+## Your task: label all 54 rows
 
 Open `gold.csv` (Excel is fine). For each row, read the **`text`** and fill in two columns:
 
