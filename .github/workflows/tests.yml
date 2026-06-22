@@ -39,5 +39,8 @@ jobs:
       - name: Type check (mypy)
         run: uv run mypy src
 
+      # --cov-fail-under gates the build on coverage. Set a few points below the
+      # current total so it holds the line without breaking now, and can be
+      # ratcheted upward as coverage improves.
       - name: Run tests
-        run: uv run pytest --cov=src --cov-report=term-missing
+        run: uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=66
