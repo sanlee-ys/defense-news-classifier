@@ -94,15 +94,45 @@ Each web session runs in its own fresh container and can't see another session's
 - Run the eval and see accuracy, per-label precision/recall, confusion matrices, and a list of the misclassified cases.
 - The README leads with those numbers and explains the design and the limitations honestly.
 
-## Note for later (v2 ideas, not now)
-- Add a `region` field (e.g., indo-pacific, europe, middle-east, americas, africa, global).
-- Add RAG over a small corpus of real public reports.
-- Add a thin Streamlit UI to demo it.
-- **Tiered model routing.** Keep `claude-sonnet-4-6` as the workhorse classifier (it's
-  sufficient — domain is already 97.3% and the category ceiling is label ambiguity, not
-  model horsepower). Escalate *only* the low-confidence / `industry`-vs-`procurement`
-  boundary cases to a higher tier (e.g. Opus), so the premium model runs on ~15% of
-  articles rather than 100%. Separately, reserve the top tier as an **LLM judge** for
-  grading real (non-synthetic) v2 data, where auto-grading against a model-made answer key
-  no longer works. Principle: model tier is a per-task cost/quality knob decided by the
-  eval, not a default — measure first, escalate only where it pays.
+## Versioning roadmap
+
+v1 (synthetic, self-graded) and v2 (real text + human gold + BM25 retrieval) have shipped;
+**`v2.0.0` is the current release.** Releases follow **semver** (`MAJOR.MINOR.PATCH`) and
+[Keep a Changelog](https://keepachangelog.com/) — every milestone gets a git tag + a CHANGELOG
+entry. The line to internalize:
+
+- **PATCH** (`x.y.Z`) — a *fix*. No new capability, no change to the `{category,
+  operational_domain}` output contract. Same behavior, just more correct.
+- **MINOR** (`x.Y.0`) — a new, **backward-compatible** capability. The contract still holds;
+  you added something, you didn't change what callers already rely on. **Bumping MINOR resets
+  PATCH to 0.**
+- **MAJOR** (`X.0.0`) — a **breaking** change: the output contract, label schema, or core
+  methodology changes so prior results/integrations no longer apply. **Bumping MAJOR resets
+  MINOR *and* PATCH to 0.**
+
+A worked progression from today's `v2.0.0` (the concrete plan, not just the theory):
+
+| Version | Bump | What it would ship | Why that bump |
+|---|---|---|---|
+| **v2.0.1** | patch | Backfill the v2 eval modules' missing tests (`gold_eval_rag.py` is at 0% coverage, `gold_eval.py` 55%, `retrieve.py` 76%) and fix any edge cases they expose | Pure correctness/hardening — no feature, contract untouched |
+| **v2.1.0** | minor | **Scale the eval with the validated judge** — grade 300+ real snippets with the Opus judge (validated at 88.9% / 94.4%) and report confidence intervals, so n=54's noise floor shrinks | New capability, same output contract → MINOR; PATCH resets to 0 |
+| **v2.1.1** | patch | Fix whatever the scaled run exposes — e.g. a resume/batching bug in the judge harness or a larger-data CI timeout | A fix *on top of* v2.1.0 → third digit increments |
+| **v2.2.0** | minor | **Tiered model routing** — escalate only low-confidence `industry`-vs-`procurement` cases to Opus, measure the cost/quality trade | Additive, callers unaffected → MINOR again; PATCH back to 0 |
+| **v3.0.0** | major | **Add a `region` field** — output becomes `{category, operational_domain, region}` (`indo-pacific`, `europe`, …), needs a fresh gold-labeling pass | Breaks the output contract → MAJOR; MINOR + PATCH reset to 0 |
+
+Read straight down the third digit: it climbs *within* a line (`2.0.1`, `2.1.1`) and **resets to
+0 every time a digit to its left moves** (`2.1.0`, `2.2.0`, `3.0.0`). That reset rule is the
+whole game — a version number is a promise about what changed, not a counter.
+
+**Guiding principle (carried over from v1):** model tier and feature scope are per-task
+cost/quality knobs **decided by the eval, not by default** — measure first, escalate only where
+it pays. That's why "scale the eval" (v2.1.0) comes *before* "route to a premium model"
+(v2.2.0): you earn the right to spend by measuring first.
+
+**Parking lot (unversioned until picked):**
+- A thin **Streamlit demo UI** — turns the eval harness into a usable product; arguably its own
+  major surface (changes what the project *is*), so it'd likely force a major bump if added.
+- **Semantic / embedding retrieval** — only if a larger eval overturns v2's measured verdict
+  that "BM25 grounding doesn't justify embeddings." Borderline minor-vs-major depending on
+  whether it reshapes the grounding story.
+- RAG over real public text — **done in `v2.0.0`.**
