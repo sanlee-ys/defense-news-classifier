@@ -9,6 +9,13 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
+### Added
+- **Kafka consumer that closes the event loop** (`src/consumer.py`) — reads `NoteCreated` events off notes-api's `note-events` topic, classifies each note with the existing core `classify()` (in-process, not over HTTP), and writes the two predicted labels back onto the note as **namespaced** tags (`category:<c>`, `domain:<d>`) via an idempotent `PUT /notes/{id}/tags`. The writeback **merges** — it preserves a user's own tags and replaces only stale classifier tags — and the Kafka offset is committed only after both classify and writeback succeed, so at-least-once redelivery converges instead of accumulating (the program's risk **R1**). Poison messages (unclassifiable notes, or a 4xx like a deleted note) are logged and skipped so they can't wedge the partition. The cross-repo contract for this seam is frozen in `architecture/SYS-005` (the asynchronous sibling of the `/classify` contract in `SYS-004`). New dependencies: `kafka-python` (pure-Python broker client) and `httpx` promoted to a runtime dep (the writeback client). Consumer config (`KAFKA_BOOTSTRAP_SERVERS`, `NOTE_EVENTS_TOPIC`, `KAFKA_GROUP_ID`, `NOTES_API_BASE_URL`) documented in `.env.example`.
+- Unit tests for the consumer (`tests/test_consumer.py`) — tag-merge idempotency, the namespaced-tag encoding, poison/transient handling, and the HTTP writeback shell (via `httpx.MockTransport`) — all offline, no broker/LLM/network.
+- **Integration test** (`tests/test_consumer_integration.py`) — a real `note-events` round trip through a Kafka broker started in Docker via **Testcontainers**: publishes a `NoteCreated` the way notes-api does (plain JSON, string key, no type headers) and drives the consumer's real consume → deserialize → process path, proving the SYS-005 wire contract survives an actual broker (which a mock can't). Marked `integration` and deselected by default (the unit suite stays offline/fast); run with `uv run pytest --run-integration -m integration`. New dev dependency `testcontainers[kafka]`. Documented in `docs/integration-testing.md` (a Python-first refresher on unit-vs-integration, Testcontainers, and the gotchas).
+
+This is additive: the `{category, operational_domain}` output contract is unchanged, so it lands as a **minor** when released.
+
 ## [2.0.0] — 2026-06-21
 
 Moved the eval off synthetic, self-graded data and onto **real public-domain text**, with retrieval grounding and a non-circular, human-labeled answer key. v1 measured in-distribution *consistency* (the model classifying snippets it wrote itself); v2 measures real-world *accuracy* against labels a human assigned. The arc between them is the headline.

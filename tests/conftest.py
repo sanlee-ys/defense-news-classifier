@@ -17,6 +17,31 @@ sys.path.insert(0, os.path.abspath(SRC))
 
 
 # ---------------------------------------------------------------------------
+# Integration tests (marked `integration`) need Docker and are slow, so they are
+# DESELECTED by default — the everyday suite stays offline and fast. Opt in with
+# `pytest --run-integration`. See docs/integration-testing.md.
+# ---------------------------------------------------------------------------
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--run-integration",
+        action="store_true",
+        default=False,
+        help="run integration tests (require Docker; deselected by default)",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--run-integration"):
+        return
+    skip = pytest.mark.skip(reason="needs Docker; pass --run-integration to run")
+    for item in items:
+        if "integration" in item.keywords:
+            item.add_marker(skip)
+
+
+# ---------------------------------------------------------------------------
 # Fakes for the Anthropic SDK response shape.
 #
 # The real client returns an object whose `.content` is a list of blocks,

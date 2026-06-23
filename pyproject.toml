@@ -8,6 +8,11 @@ dependencies = [
     "anthropic",
     "pandas",
     "rank-bm25>=0.2.2",
+    # Event-loop consumer (src/consumer.py): reads NoteCreated events and writes
+    # tags back to notes-api over HTTP. kafka-python is pure-Python (keeps the image
+    # lean); httpx is the writeback client (also pulled in transitively by anthropic).
+    "kafka-python>=2.0",
+    "httpx",
 ]
 
 [dependency-groups]
@@ -20,11 +25,14 @@ dev = [
     "pytest",
     "pytest-cov",
     "uv",
-    "httpx",
-    # Needed to import and test src/api.py (the FastAPI service). httpx, pulled
-    # in transitively, provides the TestClient transport. These are serving
-    # deps (see requirements-api.txt) but the test suite needs them too.
+    # Needed to import and test src/api.py (the FastAPI service). httpx (now a
+    # runtime dep for the consumer) provides the TestClient transport. fastapi is a
+    # serving dep (see requirements-api.txt) but the test suite needs it too.
     "fastapi",
+    # Spins up a real Kafka broker in Docker for the consumer integration test
+    # (tests/test_consumer_integration.py). Opt-in via `pytest --run-integration`;
+    # needs Docker, so it's excluded from the default offline suite.
+    "testcontainers[kafka]>=4.0",
 ]
 # Optional analysis extras — installed with `uv sync --group notebook`.
 notebook = [
