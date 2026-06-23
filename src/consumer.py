@@ -275,8 +275,9 @@ def run(
     notes_api_base_url: str,
     request_timeout: float = 30.0,
     max_backoff: float = 30.0,
+    max_messages: int | None = None,
 ) -> None:  # pragma: no cover - thin broker/HTTP shell, exercised in integration only
-    """Consume ``topic`` forever, tagging each note and committing on success.
+    """Consume ``topic``, tagging each note and committing on success.
 
     Wires the real collaborators (Kafka consumer, Anthropic client, httpx client).
     Classification and writeback are retried *independently* via :func:`with_retry`
@@ -284,6 +285,10 @@ def run(
     instead of hot-looping. The offset is committed only after the event is fully
     handled (tagged or skipped); an unhandled crash leaves it uncommitted, so the
     message is redelivered on restart (at-least-once).
+
+    Runs forever by default. ``max_messages`` bounds it to that many messages and
+    then returns — used by the end-to-end integration test to drive the loop once,
+    and usable as a "drain N and exit" mode.
     """
     from kafka import KafkaConsumer
 
@@ -307,25 +312,32 @@ def run(
         notes_api_base_url,
     )
 
-    with httpx.Client(base_url=notes_api_base_url, timeout=request_timeout) as http:
-        writeback_fn = make_writeback_fn(http)
-        for message in consumer:
-            event = message.value
-            note_id = event.get("id")
-            # Classify once (retried on transient failure), then write back (retried
-            # independently, so an outage never re-pays for classification).
-            tags = with_retry(
-                lambda: plan_tags(event, classify_fn=classify_fn),
-                what=f"classify note {note_id}",
-                max_backoff=max_backoff,
-            )
-            if tags is not None:
-                with_retry(
-                    lambda: writeback_fn(note_id, tags),
-                    what=f"writeback note {note_id}",
+    processed = 0
+    try:
+        with httpx.Client(base_url=notes_api_base_url, timeout=request_timeout) as http:
+            writeback_fn = make_writeback_fn(http)
+            for message in consumer:
+                event = message.value
+                note_id = event.get("id")
+                # Classify once (retried on transient failure), then write back
+                # (retried independently, so an outage never re-pays for classify).
+                tags = with_retry(
+                    lambda: plan_tags(event, classify_fn=classify_fn),
+                    what=f"classify note {note_id}",
                     max_backoff=max_backoff,
                 )
-            consumer.commit()
+                if tags is not None:
+                    with_retry(
+                        lambda: writeback_fn(note_id, tags),
+                        what=f"writeback note {note_id}",
+                        max_backoff=max_backoff,
+                    )
+                consumer.commit()
+                processed += 1
+                if max_messages is not None and processed >= max_messages:
+                    break
+    finally:
+        consumer.close()
 
 
 def main() -> None:  # pragma: no cover - process entry point

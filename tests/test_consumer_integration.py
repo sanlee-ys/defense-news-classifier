@@ -19,7 +19,9 @@ Requires Docker. See ``docs/integration-testing.md``.
 """
 
 import json
+import threading
 import uuid
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
@@ -118,3 +120,108 @@ def test_note_event_round_trip(kafka_bootstrap):
         "id": 42,
         "tags": ["mine", "category:procurement", "domain:sea"],
     }
+
+
+def test_run_loop_commits_only_after_writeback(kafka_bootstrap, monkeypatch):
+    """Drive the real run() loop once: broker → classify → HTTP writeback → commit.
+
+    Where test_note_event_round_trip checks the consume/deserialize seam, this
+    exercises run() itself against a real broker AND a real (stub) notes-api HTTP
+    server, and proves the at-least-once contract: the offset is committed only
+    after a successful writeback, so the message is not redelivered. The LLM is
+    stubbed; everything else — broker, consumer config, httpx writeback, manual
+    commit — is real.
+    """
+    from kafka import KafkaConsumer, KafkaProducer
+
+    topic = f"note-events-{uuid.uuid4().hex[:8]}"
+    group = f"run-it-{uuid.uuid4().hex[:8]}"
+
+    # --- stub notes-api: capture the writeback PUT, return 200 ---
+    received: list[dict] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_PUT(self):
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode()
+            received.append({"path": self.path, "body": json.loads(body)})
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"id": 7, "tags": []}')
+
+        def log_message(self, *_args):  # silence the default stderr logging
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    # --- publish one NoteCreated ---
+    producer = KafkaProducer(
+        bootstrap_servers=kafka_bootstrap.split(","),
+        key_serializer=lambda k: k.encode("utf-8"),
+        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+    )
+    producer.send(
+        topic,
+        key="7",
+        value={
+            "id": 7,
+            "title": "Drone strike doctrine",
+            "content": "A new policy memo on UAV rules of engagement.",
+            "tags": [],
+            "createdAt": "2026-06-23T12:00:00Z",
+        },
+    )
+    producer.flush()
+    producer.close()
+
+    # Stub the LLM (run() builds a real client but it's never called); a dummy key
+    # keeps make_client() from raising.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(
+        consumer,
+        "classify",
+        lambda client, text: {"category": "policy", "operational_domain": "air"},
+    )
+
+    # Drive run() for exactly one message, in a thread so a stall can't hang the test.
+    runner = threading.Thread(
+        target=consumer.run,
+        kwargs=dict(
+            bootstrap_servers=kafka_bootstrap,
+            topic=topic,
+            group_id=group,
+            notes_api_base_url=f"http://127.0.0.1:{port}",
+            max_messages=1,
+            max_backoff=1.0,
+        ),
+        daemon=True,
+    )
+    runner.start()
+    runner.join(timeout=60)
+    server.shutdown()
+
+    assert not runner.is_alive(), "run() did not finish after one message"
+    # The real HTTP writeback hit notes-api with the merged, namespaced tags.
+    assert len(received) == 1
+    assert received[0]["path"] == "/notes/7/tags"
+    assert received[0]["body"] == {"tags": ["category:policy", "domain:air"]}
+
+    # Commit-after-writeback: a fresh consumer in the SAME group sees nothing,
+    # because run() committed the offset past the message (no redelivery).
+    checker = KafkaConsumer(
+        topic,
+        bootstrap_servers=kafka_bootstrap.split(","),
+        group_id=group,
+        enable_auto_commit=False,
+        auto_offset_reset="earliest",
+        consumer_timeout_ms=5_000,
+        value_deserializer=lambda b: json.loads(b.decode("utf-8")),
+    )
+    try:
+        leftovers = list(checker)
+    finally:
+        checker.close()
+    assert leftovers == [], "offset was not committed; the message would be redelivered"
