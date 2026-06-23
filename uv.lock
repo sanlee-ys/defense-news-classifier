@@ -713,6 +713,8 @@ version = "2.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "anthropic" },
+    { name = "httpx" },
+    { name = "kafka-python" },
     { name = "pandas" },
     { name = "rank-bm25" },
 ]
@@ -721,7 +723,6 @@ dependencies = [
 dev = [
     { name = "black" },
     { name = "fastapi" },
-    { name = "httpx" },
     { name = "mypy" },
     { name = "pandas-stubs" },
     { name = "pre-commit" },
@@ -739,6 +740,8 @@ notebook = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic" },
+    { name = "httpx" },
+    { name = "kafka-python", specifier = ">=2.0" },
     { name = "pandas" },
     { name = "rank-bm25", specifier = ">=0.2.2" },
 ]
@@ -747,7 +750,6 @@ requires-dist = [
 dev = [
     { name = "black" },
     { name = "fastapi" },
-    { name = "httpx" },
     { name = "mypy" },
     { name = "pandas-stubs" },
     { name = "pre-commit" },
@@ -1433,6 +1435,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/26/2d/ef58fed122b268c69c0aa099da20bc67657cdfb2e222688d5731bd5b971d/jupyterlab_widgets-3.0.16.tar.gz", hash = "sha256:423da05071d55cf27a9e602216d35a3a65a3e41cdf9c5d3b643b814ce38c19e0", size = 897423, upload-time = "2025-11-01T21:11:29.724Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ab/b5/36c712098e6191d1b4e349304ef73a8d06aed77e56ceaac8c0a306c7bda1/jupyterlab_widgets-3.0.16-py3-none-any.whl", hash = "sha256:45fa36d9c6422cf2559198e4db481aa243c7a32d9926b500781c830c80f7ecf8", size = 914926, upload-time = "2025-11-01T21:11:28.008Z" },
+]
+
+[[package]]
+name = "kafka-python"
+version = "3.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/7a/63fb615e6cf7c4c981d2096d2c92c744a62e207796140b0774aef9a40c6d/kafka_python-3.0.4.tar.gz", hash = "sha256:46bc616baf00943f6173050cb33273ccf7b5b69d2d41a71423fca31802c9f245", size = 506315, upload-time = "2026-06-23T15:43:32.182Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fe/7e/05e5e884daa38072902a5ddb1d8a3381c28776c955ed3ea61b8ee5a0f141/kafka_python-3.0.4-py3-none-any.whl", hash = "sha256:beca7bf510ff0ec9c00dce42e3ebbbb3f55994e747f250e8d002eb8407dda7e3", size = 610729, upload-time = "2026-06-23T15:43:30.355Z" },
 ]
 
 [[package]]
