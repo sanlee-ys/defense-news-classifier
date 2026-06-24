@@ -25,10 +25,10 @@ so it's functions. The `notes-api` `Note`/`NoteService` *do* — so they're clas
 
 ## Why the generator is functions, not a class
 
-[`src/generate.py`](src/generate.py) is **constants + two functions**, no class:
+[`src/generate.py`](../../src/generate.py) is **constants + two functions**, no class:
 
-- `generate_combo(client, category, domain) -> list[dict]` ([generate.py:58](src/generate.py:58))
-- `main()` ([generate.py:96](src/generate.py:96))
+- `generate_combo(client, category, domain) -> list[dict]` ([generate.py:58](https://github.com/sanlee-ys/defense-news-classifier/blob/main/src/generate.py#L58))
+- `main()` ([generate.py:96](https://github.com/sanlee-ys/defense-news-classifier/blob/main/src/generate.py#L96))
 
 That's correct, not lazy. `generate_combo` is a **pure-ish transform**: hand it a
 `(category, domain)` pair, it hands back a list of articles and forgets you existed. There's
@@ -37,7 +37,7 @@ that could be violated. Wrapping this in a class would just be a function wearin
 
 ## The smell: a dict pretending to be an object
 
-Look at the row we build for each article ([generate.py:129](src/generate.py:129)):
+Look at the row we build for each article ([generate.py:129](https://github.com/sanlee-ys/defense-news-classifier/blob/main/src/generate.py#L129)):
 
 ```python
 rows.append({
@@ -97,8 +97,8 @@ but the day we add a second model or a config knob, that's the signal.
 | Question | Answer | Seen in |
 |---|---|---|
 | Function or class? | Class only with **state + invariants + bound behavior**; else function | — |
-| Why generator = functions | Stateless transform; nothing to hold or protect | [generate.py:58](src/generate.py:58) |
+| Why generator = functions | Stateless transform; nothing to hold or protect | [generate.py:58](https://github.com/sanlee-ys/defense-news-classifier/blob/main/src/generate.py#L58) |
 | What's a constructor *for* | Refuse to build an invalid/half-formed object | Java `Note(title, content)` |
 | Python's constructor | `__init__` — runs on `ClassName(...)`, sets up the instance | example above |
-| When a dict should be a class | Fixed-shape data passed around → `@dataclass` (≈ Java record) | [generate.py:129](src/generate.py:129) |
+| When a dict should be a class | Fixed-shape data passed around → `@dataclass` (≈ Java record) | [generate.py:129](https://github.com/sanlee-ys/defense-news-classifier/blob/main/src/generate.py#L129) |
 | When `generate.py` earns a class | Once `client`/`model`/config become shared state | example above |
