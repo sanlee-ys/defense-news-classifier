@@ -10,6 +10,7 @@ Run locally:
     uvicorn api:app --app-dir src --reload
 """
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -17,6 +18,8 @@ from pydantic import BaseModel, Field
 
 # Flat import works when uvicorn is started with `--app-dir src` (local + Docker).
 from classify import CATEGORIES, DOMAINS, classify, make_client
+
+logger = logging.getLogger(__name__)
 
 
 # The Anthropic client is created once at startup and reused across requests.
@@ -82,7 +85,11 @@ def classify_article(req: ClassifyRequest) -> ClassifyResponse:
     except Exception as exc:
         # The upstream LLM call failed (network, rate limit, API error). Surface
         # a 502 rather than a 500: the fault is an upstream dependency, not us.
+        # Log the real cause server-side for debugging, but return a generic
+        # detail to the caller — the raw exception text can carry internal detail
+        # (model name, request fragments) that shouldn't leak over the wire.
+        logger.exception("Classification failed for a request")
         raise HTTPException(
-            status_code=502, detail=f"Classification failed: {exc}"
+            status_code=502, detail="Classification failed due to an upstream error."
         ) from exc
     return ClassifyResponse(**result)

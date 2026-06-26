@@ -75,4 +75,8 @@ def test_classify_maps_upstream_failure_to_502(client, monkeypatch):
     monkeypatch.setattr(api, "classify", boom)
     resp = client.post("/classify", json={"text": "Some defense news."})
     assert resp.status_code == 502
-    assert "Classification failed" in resp.json()["detail"]
+    detail = resp.json()["detail"]
+    assert "Classification failed" in detail
+    # The raw upstream exception text must not leak to the caller (only logged
+    # server-side); the response stays generic.
+    assert "rate limited" not in detail
