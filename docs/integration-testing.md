@@ -4,6 +4,13 @@ A practical guide to the integration test in this repo — what it is, why it ex
 how to run it, and the gotchas. Written for a Python developer coming back to
 integration testing after a while.
 
+> **Status note (2026-06-27):** the Kafka consumer this guide tests is now an
+> **inactive historical reference** — notes-api was ported to Python/FastAPI and no
+> longer publishes `NoteCreated` events; the classify-and-writeback loop moved to a
+> FastAPI `BackgroundTask` in notes-api (see `system/SYS-005`). The test is kept
+> green as a Testcontainers reference and a record of the event-driven design; it no
+> longer guards a live wire contract. Read the rest in the past tense.
+
 ## Unit vs. integration — the one-line distinction
 
 - **Unit test** — exercises *your code* in isolation; every external thing (the LLM,
