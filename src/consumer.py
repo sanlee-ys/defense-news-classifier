@@ -1,12 +1,24 @@
 """
 Kafka consumer: tag notes by classifying NoteCreated events.
 
-This closes the event loop in the program's knowledge-base pipeline. ``notes-api``
-publishes a ``NoteCreated`` event to the ``note-events`` topic whenever a note is
-created (see notes-api ``ADR-001``); this consumer reads each event, classifies the
-note's text with the same core ``classify()`` the HTTP service uses, and writes the
-predicted labels back onto the note as tags via notes-api's HTTP API. The contract
-for this seam is frozen in ``system/SYS-005``.
+.. note::
+   **INACTIVE — kept as a historical reference, not part of the live data flow.**
+   notes-api was ported from Java/Spring Boot to Python/FastAPI and **no longer
+   publishes ``NoteCreated`` events to Kafka**. The classify-and-writeback loop is now
+   owned by notes-api itself, via a FastAPI ``BackgroundTask`` that calls this service's
+   ``/classify`` HTTP endpoint and writes the labels back to its own store (see notes-api
+   ``ADR-001`` and ``system/SYS-005`` — both rewritten for the BackgroundTasks design).
+   Nothing publishes the ``note-events`` topic anymore, so this consumer is a no-op
+   against the live system. It is preserved as a reference implementation of idempotent,
+   at-least-once event-driven consumption; the prefixed-tag writeback logic it pioneered
+   now lives in notes-api ``src/notes_api/tasks.py`` (``merge_tags`` / ``classifier_tags``).
+
+Historical design (when notes-api was a Spring Boot Kafka producer): notes-api published
+a ``NoteCreated`` event to the ``note-events`` topic whenever a note was created; this
+consumer read each event, classified the note's text with the same core ``classify()``
+the HTTP service uses, and wrote the predicted labels back onto the note as tags via
+notes-api's HTTP API. The seam contract was frozen in ``system/SYS-005`` (now superseded
+by the BackgroundTasks version of that same ADR).
 
 Design notes
 ------------
