@@ -253,6 +253,10 @@ src/
   classify_rag.py           # v2: retrieval-grounded classify + citations
   gold_eval.py              # v2: workhorse vs human labels + Opus-judge validation
   gold_eval_rag.py          # v2: grounded vs baseline lift, with flip analysis
+  api.py                    # FastAPI service wrapping classify() at POST /classify;
+                             #   the live HTTP surface notes-api and kb-agent call
+  consumer.py               # inactive reference implementation of an event-driven
+                             #   (Kafka) alternative to the HTTP path; not the live path
 scripts/
   fetch_corpus.py           # v2: pull the DVIDS corpus + write its manifest
   build_gold.py             # v2: pull fresh gold candidates (disjoint from corpus)
@@ -411,3 +415,19 @@ uv run pytest
 - Models: `claude-sonnet-4-6` (workhorse classifier), `claude-opus-4-8` (v2 eval judge)
 - Data sources: [DVIDS](https://www.dvidshub.net/) public-domain DoD news wire,
   [SEC EDGAR](https://www.sec.gov/edgar) filings (v2 corpus)
+- `fastapi` + `uvicorn` for the live `src/api.py` service (`POST /classify`), `httpx`
+  for its tests — this is the serving surface notes-api and kb-agent call over HTTP;
+  not used by the eval scripts above
+
+## Running the service
+
+The eval scripts above call `classify()` directly. To serve classification over HTTP
+(the path notes-api's enrichment task and kb-agent's `classify_snippet` tool use):
+
+```bash
+uv run --with fastapi --with "uvicorn[standard]" --env-file .env \
+  uvicorn api:app --app-dir src --host 127.0.0.1 --port 8000
+```
+
+`GET /health` for a liveness check, `POST /classify` with `{"text": "..."}` for a
+prediction. See `decisions/SYS-004` (in the `architecture` repo) for the contract.
