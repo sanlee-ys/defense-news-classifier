@@ -18,3 +18,5 @@ Thumbs.db
 # Raw per-run prediction dumps from src/stability.py — intermediate, not the
 # deliverable. The summary (evals/stability.txt) is what gets committed.
 evals/runs/
+
+graphify-out/
