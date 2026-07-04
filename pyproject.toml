@@ -25,10 +25,12 @@ dev = [
     "pytest",
     "pytest-cov",
     "uv",
-    # Needed to import and test src/api.py (the FastAPI service). httpx (now a
-    # runtime dep for the consumer) provides the TestClient transport. fastapi is a
+    # Needed to import and test src/api.py (the FastAPI service). fastapi is a
     # serving dep (see requirements-api.txt) but the test suite needs it too.
     "fastapi",
+    # starlette's TestClient prefers httpx2 (falls back to plain httpx with a
+    # StarletteDeprecationWarning if absent); test-only, runtime still uses httpx.
+    "httpx2",
     # Spins up a real Kafka broker in Docker for the consumer integration test
     # (tests/test_consumer_integration.py). Opt-in via `pytest --run-integration`;
     # needs Docker, so it's excluded from the default offline suite.
