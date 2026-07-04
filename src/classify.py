@@ -96,6 +96,7 @@ def classify(
     text: str,
     temperature: float | None = None,
     model: str = MODEL,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> dict:
     """Classify a single defense-news article snippet.
 
@@ -114,6 +115,10 @@ def classify(
         model: Which Claude model classifies. Defaults to the workhorse
             (claude-sonnet-4-6); pass a higher tier (e.g. the Opus judge) to run
             the same task on a stronger model.
+        system_prompt: The instruction block (label definitions + rules) sent as
+            the system prompt. Defaults to the module ``SYSTEM_PROMPT`` so callers
+            and existing behavior are unchanged; the prompt-optimization loop
+            passes a revised prompt here to score a variant against the eval.
 
     Returns:
         Dict with keys ``category`` and ``operational_domain``, both str.
@@ -129,7 +134,7 @@ def classify(
         response = client.messages.create(
             model=model,
             max_tokens=256,
-            system=SYSTEM_PROMPT,
+            system=system_prompt,
             tools=[CLASSIFY_TOOL],
             tool_choice={"type": "tool", "name": "classify_article"},
             messages=[{"role": "user", "content": text}],
