@@ -1,0 +1,41 @@
+name: CodeQL
+
+# Static analysis (SAST) for security vulnerabilities. Free on public repos.
+# Runs on pushes/PRs to main and weekly, so the code is re-scanned against
+# updated CodeQL queries even when nothing changes.
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    # Weekly, Monday 05:23 UTC. Off-the-hour on purpose (GitHub throttles
+    # jobs scheduled at exact :00).
+    - cron: "23 5 * * 1"
+
+jobs:
+  analyze:
+    name: Analyze (Python)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # upload results to the Security tab
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          # Python is interpreted — no build step needed.
+          build-mode: none
+          # Broader security ruleset than the default. If it ever gets noisy,
+          # drop this line to fall back to the default query pack.
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"

@@ -1,0 +1,49 @@
+# Dependabot: automated dependency-update PRs.
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates
+#
+# NOTE: this file only enables *version updates* (scheduled PRs). The security
+# side — Dependabot alerts + automatic security-fix PRs against the CVE/GHSA
+# database — is a repo Settings > Code security toggle (free), not config here.
+version: 2
+updates:
+  # Python deps — uv-managed (pyproject.toml + uv.lock), the source CI
+  # actually installs from (`uv sync --frozen`).
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    groups:
+      python-minor-patch:
+        update-types: ["minor", "patch"]
+    # requirements.txt / requirements-api.txt are a manually-maintained pip
+    # fallback (see CLAUDE.md) consumed by the Dockerfile, not by CI. NOT
+    # adding a separate "pip" ecosystem block for them: Dependabot would then
+    # edit uv.lock and requirements*.txt independently for the same package,
+    # pushing the pair further out of sync rather than closer. Dependabot
+    # *alerts* (repo-settings toggle) still cover requirements*.txt for
+    # vulnerability visibility even without a proactive update block here.
+
+  # The serving image's base — a stale python:3.11-slim can carry known CVEs
+  # that patching the app's own deps never touches.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "docker"
+
+  # Keep GitHub Actions patched — a pinned-but-stale action is a real
+  # supply-chain surface.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      github-actions:
+        update-types: ["minor", "patch"]
