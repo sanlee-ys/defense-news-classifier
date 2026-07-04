@@ -156,3 +156,22 @@ reference given to the user must actually resolve:
    `main` URLs once the work has merged.
 
 If a link 404s, the failure mode was here — fix the process, not just the link.
+
+## Known issue: `uv sync` file-lock races on Windows (Defender)
+
+Observed 2026-07-04: `uv run pytest` / `uv sync` failing repeatedly with
+`error: failed to remove directory ...dist-info\... Access is denied. (os error 5)`,
+hitting a *different* package each retry (`fastapi`, then `ruff`, then `uv` itself). No
+python/pytest/uvicorn process was holding the venv — this is a genuine race condition, not a
+stuck process. `uv` deletes and recreates a package's `dist-info` folder when upgrading it;
+Windows Defender's real-time scanner grabs a transient lock on the newly-written files mid-swap,
+so the delete loses the race. Retrying blind makes it worse: a partial delete leaves the
+`dist-info` folder missing its `RECORD` file, so later runs skip cleanup on that package too
+("may result in an incomplete environment"), and the errors compound onto new packages each
+retry.
+
+**Fix:** stop retrying piecemeal — `uv venv --clear && uv sync` rebuilds the venv clean in one
+shot. **Prevention:** add a Windows Defender exclusion for the repo path
+(`Add-MpPreference -ExclusionPath "C:\path\to\repo"`, needs an elevated shell) so `uv` isn't
+racing the scanner on every sync. This is per-sync flakiness, not systemic venv corruption —
+sibling repos' venvs (checked the same day) were unaffected.
