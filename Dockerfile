@@ -1,7 +1,7 @@
 # Lean serving image for the classifier API.
 # Single-stage is fine here: the deps are pure-Python wheels, so there's nothing
 # to compile and a multi-stage build would add complexity without shrinking much.
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # Don't write .pyc files; flush stdout/stderr immediately so logs show up in
 # Cloud Run without buffering.
