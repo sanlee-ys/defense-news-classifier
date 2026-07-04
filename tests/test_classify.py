@@ -7,6 +7,7 @@ send the right request and correctly pull the structured result back out.
 
 import io
 import sys
+from typing import cast
 
 import pytest
 
@@ -16,14 +17,16 @@ import classify
 
 
 def test_tool_schema_enums_match_label_constants():
-    props = classify.CLASSIFY_TOOL["input_schema"]["properties"]
-    assert props["category"]["enum"] == classify.CATEGORIES
-    assert props["operational_domain"]["enum"] == classify.DOMAINS
+    # input_schema's properties/required are NotRequired in the SDK's TypedDict,
+    # so pyright can't narrow chained indexing without this cast.
+    schema = cast(dict, classify.CLASSIFY_TOOL["input_schema"])
+    assert schema["properties"]["category"]["enum"] == classify.CATEGORIES
+    assert schema["properties"]["operational_domain"]["enum"] == classify.DOMAINS
 
 
 def test_tool_requires_both_fields():
-    required = classify.CLASSIFY_TOOL["input_schema"]["required"]
-    assert set(required) == {"category", "operational_domain"}
+    schema = cast(dict, classify.CLASSIFY_TOOL["input_schema"])
+    assert set(schema["required"]) == {"category", "operational_domain"}
 
 
 # --- classify() ----------------------------------------------------------
@@ -59,6 +62,21 @@ def test_classify_sends_expected_request(tool_client):
     assert kwargs["messages"] == [
         {"role": "user", "content": "New defense strategy published."}
     ]
+
+
+def test_classify_sends_custom_system_prompt(tool_client):
+    # The prompt-optimization loop overrides the system prompt to score a
+    # variant against the eval. Prove that override actually reaches the API call.
+    client = tool_client({"category": "policy", "operational_domain": "multi"})
+    custom_prompt = "REVISED: classify using these new rules."
+    classify.classify(
+        client, "New defense strategy published.", system_prompt=custom_prompt
+    )
+
+    kwargs = client.messages.last_kwargs
+    assert kwargs["system"] == custom_prompt
+    # Guard: prove the override *displaced* the default, not merely matched it.
+    assert kwargs["system"] != classify.SYSTEM_PROMPT
 
 
 # --- enum validation guard -----------------------------------------------
