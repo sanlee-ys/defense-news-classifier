@@ -5,7 +5,7 @@
 **Author:** San Lee
 **Last updated:** 2026-06-27
 **Roadmap fit:** new **MINOR** (backward-compatible; the `{category, operational_domain}` output contract is untouched). Proposed to sequence **after v2.1.0** — see §11.
-**Related:** ADR 005 (decision record, to be written) · [master PRD](../PRD.md)
+**Related:** ADR 005 (decision record, to be written) · [master PRD](../PRD.md) · [autonomy-ladder roadmap](autonomy-ladder.md) (this loop is **Level 3** of that spine)
 **Portfolio framing:** this is the repo-side implementation of the "loop engineering demo." The repo calls it a *prompt-optimization loop* (what it does); the portfolio `/lab` page calls it *loop engineering* (the skill it demonstrates).
 
 ---
