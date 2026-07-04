@@ -87,7 +87,14 @@ The ladder is the organizing story for the outward surfaces. Each level, as it l
 
 - **This repo** — the level's code, spec, ADR, and eval artifacts (ground truth).
 - **architecture repo** — the cross-repo "how we build the autonomy ladder" pattern (SYS layer).
-- **portfolio `/lab`** — the outward showcase, with a Decision → Why → Tradeoff writeup per level.
+- **portfolio project page** (`/projects/defense-news-classifier.html`) — the outward showcase.
+  Each level's recorded demo + a Decision → Why → Tradeoff writeup lands here, so the classifier's
+  whole ladder is told on one page. This page already covers L1 (the single call) and L2 (the BM25
+  grounding result); L3 and L4 extend the same page as they ship.
+- **portfolio `/lab`** — front-end craft only, **not** the demo's home. `/lab` stays a pure
+  front-end sandbox (decided 2026-07-04). The replay player's front-end *techniques* (e.g. SVG
+  accuracy curves, a step-through UI) may earn a `/lab` learning-log entry as a technique, but the
+  demo itself is showcased on the project page above.
 - **learning-notes** — concept-first notes (loop engineering, Goodhart in eval-driven
   optimization, multi-agent handoff), not a project changelog.
 - Aggregated surfaces (portal, portfolio nav, learning-notes index/map) are wired by a **single

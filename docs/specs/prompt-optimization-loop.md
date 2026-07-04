@@ -6,7 +6,7 @@
 **Last updated:** 2026-06-27
 **Roadmap fit:** new **MINOR** (backward-compatible; the `{category, operational_domain}` output contract is untouched). Proposed to sequence **after v2.1.0** — see §11.
 **Related:** ADR 005 (decision record, to be written) · [master PRD](../PRD.md) · [autonomy-ladder roadmap](autonomy-ladder.md) (this loop is **Level 3** of that spine)
-**Portfolio framing:** this is the repo-side implementation of the "loop engineering demo." The repo calls it a *prompt-optimization loop* (what it does); the portfolio `/lab` page calls it *loop engineering* (the skill it demonstrates).
+**Portfolio framing:** this is the repo-side implementation of the "loop engineering demo," which is **Level 3** of the [autonomy ladder](autonomy-ladder.md). The repo calls it a *prompt-optimization loop* (what it does); the portfolio calls it *loop engineering* (the skill it demonstrates). The outward showcase is the **classifier's project page** (`/projects/defense-news-classifier.html`), not `/lab` — `/lab` stays a pure front-end sandbox (decided 2026-07-04).
 
 ---
 
@@ -28,7 +28,7 @@ Two aims, in priority order:
 | G1 | An agent optimizes the classifier prompt against the existing eval with **zero human input mid-run** — the agent decides when to stop. |
 | G2 | The loop's design is **legible in under 5 minutes**: a reader can name the feedback signal, the done-condition, and the overfitting guard. |
 | G3 | The **overfitting / Goodhart story** is told honestly — a held-out set the loop never sees, both numbers reported every iteration. |
-| G4 | One artifact spans **backend (the loop) + frontend (a recorded-replay `/lab` page)**. |
+| G4 | One artifact spans **backend (the loop) + frontend (a recorded-replay view on the project page)**. |
 | G5 | *(Upside)* Report a measurable accuracy delta across iterations, in whichever direction it lands. |
 
 ---
@@ -125,7 +125,7 @@ The fired condition is recorded.
 | F3 | **Two-set scoring.** Score A and B each iteration; C scored for reporting; B/C never enter the agent's context. | *Given* any iteration, *then* A and B scores are logged and the held-out sets never appear in the agent prompt. |
 | F4 | **Explicit done-signal.** Threshold OR plateau-on-B (N=3) OR budget; record which fired. | *Given* a finished run, *then* the log names the exact stop condition. |
 | F5 | **Run log.** Each iteration persisted as structured data (see §8); the run reconstructs from the log alone. | *Given* a completed run, *then* the replay renders entirely from the log. |
-| F6 | **Recorded-replay `/lab` page.** Step-through render of the log: prompt diffs, A/B/C curves, done-signal. | *Given* a published run, *when* a visitor opens the page, *then* it replays with no live compute. |
+| F6 | **Recorded-replay view on the project page.** Step-through render of the log: prompt diffs, A/B/C curves, done-signal. | *Given* a published run, *when* a visitor opens the page, *then* it replays with no live compute. |
 | F7 | **Honest writeup** on the page: design (signal/done/guard) + Goodhart explanation + result with the ceiling caveat. | *Given* a fresh reader, *then* they can restate the three design elements. |
 | F8 | **Fail-safe bounds.** Hard iteration cap + token budget; partial progress persisted. | *Given* a runaway run, *then* it halts at the cap with the log intact. |
 
@@ -187,7 +187,7 @@ Adapted from the usual leading/lagging frame — this is a portfolio artifact, n
 
 **Floor — Definition of Done (fully in our control):**
 - [ ] Loop runs end-to-end, zero mid-run input, stops on a recorded done-signal.
-- [ ] `/lab` page makes feedback signal + done-condition + overfitting guard legible (a fresh reader restates all three).
+- [ ] The project-page replay makes feedback signal + done-condition + overfitting guard legible (a fresh reader restates all three).
 - [ ] Held-out C score logged beside A and B every iteration.
 
 **Upside — reported result + stretch (never a gate):**
@@ -216,11 +216,11 @@ Adapted from the usual leading/lagging frame — this is a portfolio artifact, n
 
 ## 12. Showcase & Cascade
 
-- **Showcase:** recorded replay on the portfolio `/lab` page, **step-through-on-click** for v1 (auto-play is P1). Backend (loop) + frontend (player) in one artifact.
+- **Showcase:** recorded replay on the **classifier's project page** (`/projects/defense-news-classifier.html`), **step-through-on-click** for v1 (auto-play is P1). Backend (loop) + frontend (player) in one artifact. `/lab` is **not** the home — it stays a pure front-end sandbox (decided 2026-07-04); the player's front-end technique may earn a `/lab` learning-log entry, but the demo lives on the project page.
 - **Cascade (one body of work, transformed per surface):**
   - **This repo** — the loop code, this spec, ADR 005, the run log (ground truth).
   - **architecture repo** — the cross-repo "how we build loop demos" pattern + portal link (SYS layer).
-  - **portfolio `/lab`** — the recorded artifact + a Decision→Why→Tradeoff writeup (outward showcase).
+  - **portfolio project page** — the recorded artifact + a Decision→Why→Tradeoff writeup (outward showcase).
   - **learning-notes** — concept notes (*loop engineering*, *Goodhart in eval-driven optimization*, *held-out sets*), concept-first, not a project changelog.
   - Aggregated surfaces (portal, portfolio nav, learning-notes index/map) are wired by a **single integrator**, once, after content lands.
 
@@ -234,4 +234,4 @@ Most design questions are resolved (see §5–§9). Remaining:
 - **[Eng]** Run-log persistence format: JSONL per run under `evals/`? Confirm location + naming alongside the existing `evals/` artifacts.
 - **[Scope]** Primary metric = `category` macro-F1 (§5.5). Confirm, vs a combined category+domain score.
 - **[Data]** Exact A/B split ratio (proposed ~210/90) and whether the split is seeded/recorded for reproducibility (`split_hashes`).
-- **[Design]** `/lab` replay: confirm step-through-on-click for v1, auto-play deferred to P1.
+- **[Design]** Project-page replay: confirm step-through-on-click for v1, auto-play deferred to P1.
