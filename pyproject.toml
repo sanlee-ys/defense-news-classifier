@@ -11,7 +11,7 @@ dependencies = [
     # Event-loop consumer (src/consumer.py): reads NoteCreated events and writes
     # tags back to notes-api over HTTP. kafka-python is pure-Python (keeps the image
     # lean); httpx is the writeback client (also pulled in transitively by anthropic).
-    "kafka-python>=2.0",
+    "kafka-python>=3.0.7",
     "httpx",
 ]
 
