@@ -757,7 +757,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
-    { name = "testcontainers", extras = ["kafka"], specifier = ">=4.0" },
+    { name = "testcontainers", extras = ["kafka"], specifier = ">=4.14.2" },
     { name = "uv" },
 ]
 notebook = [
