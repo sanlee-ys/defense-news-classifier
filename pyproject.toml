@@ -32,7 +32,7 @@ dev = [
     # Spins up a real Kafka broker in Docker for the consumer integration test
     # (tests/test_consumer_integration.py). Opt-in via `pytest --run-integration`;
     # needs Docker, so it's excluded from the default offline suite.
-    "testcontainers[kafka]>=4.0",
+    "testcontainers[kafka]>=4.14.2",
 ]
 # Optional analysis extras — installed with `uv sync --group notebook`.
 notebook = [
