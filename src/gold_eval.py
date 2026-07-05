@@ -1,11 +1,11 @@
-"""v2 eval: score the classifier on the human-labeled gold set, and validate the judge.
+"""v2 eval: score the classifier on the human-labeled gold set and validate the judge.
 
 Each gold snippet is run through the same classify call on two models:
 
-- the **workhorse** (claude-sonnet-4-6) -> the BASELINE, scored against the human
+- The **workhorse** (claude-sonnet-4-6) -> the BASELINE, scored against the human
   labels. This is the classifier's accuracy on *real* news graded against *human*
   truth -- the honest number v1's circular eval (model grading model) couldn't give.
-- the **judge** (claude-opus-4-8) -> scored against the human labels for AGREEMENT.
+- The **judge** (claude-opus-4-8) -> scored against the human labels for AGREEMENT.
   High judge-vs-human agreement means the judge tracks human judgment, so it can serve
   as a trustworthy, scalable answer key where hand-labeling doesn't reach (Step 3+).
 
