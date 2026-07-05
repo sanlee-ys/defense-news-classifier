@@ -105,7 +105,7 @@ def test_note_event_round_trip(kafka_bootstrap):
         written = {}
         status = consumer.process_event(
             received.value,
-            classify_fn=lambda text: {
+            classify_fn=lambda _text: {
                 "category": "procurement",
                 "operational_domain": "sea",
             },
@@ -183,7 +183,7 @@ def test_run_loop_commits_only_after_writeback(kafka_bootstrap, monkeypatch):
     monkeypatch.setattr(
         consumer,
         "classify",
-        lambda client, text: {"category": "policy", "operational_domain": "air"},
+        lambda _client, _text: {"category": "policy", "operational_domain": "air"},
     )
 
     # Drive run() for exactly one message, in a thread so a stall can't hang the test.

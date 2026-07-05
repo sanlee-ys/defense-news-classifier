@@ -166,7 +166,7 @@ def patch_anthropic_errors(monkeypatch):
 def test_retry_returns_on_first_success(monkeypatch):
     calls = []
 
-    def fake_classify(client, text):
+    def fake_classify(_client, text):
         calls.append(text)
         return {"category": "policy", "operational_domain": "multi"}
 
@@ -179,7 +179,7 @@ def test_retry_returns_on_first_success(monkeypatch):
 def test_retry_recovers_after_transient_errors(monkeypatch):
     attempts = {"n": 0}
 
-    def flaky_classify(client, text):
+    def flaky_classify(_client, _text):
         attempts["n"] += 1
         if attempts["n"] < 3:
             raise _FakeServerError("boom")
@@ -192,7 +192,7 @@ def test_retry_recovers_after_transient_errors(monkeypatch):
 
 
 def test_retry_reraises_after_exhausting_attempts(monkeypatch):
-    def always_fails(client, text):
+    def always_fails(_client, _text):
         raise _FakeRateLimit("nope")
 
     monkeypatch.setattr(evalmod, "classify", always_fails)
