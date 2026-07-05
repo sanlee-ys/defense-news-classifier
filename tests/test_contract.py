@@ -59,7 +59,7 @@ def test_classify_response_body_matches_contract(client, monkeypatch):
     monkeypatch.setattr(
         api,
         "classify",
-        lambda *a, **k: {"category": "technology", "operational_domain": "cyber"},
+        lambda *_a, **_k: {"category": "technology", "operational_domain": "cyber"},
     )
     resp = client.post("/classify", json={"text": "A new autonomous drone program."})
 
@@ -74,7 +74,7 @@ def test_classify_rejects_blank_text(client, monkeypatch):
     # Whitespace-only text must be rejected with 422 before reaching the LLM,
     # so the contract endpoint never spends a call on empty input.
     monkeypatch.setattr(
-        api, "classify", lambda *a, **k: pytest.fail("blank text reached the LLM")
+        api, "classify", lambda *_a, **_k: pytest.fail("blank text reached the LLM")
     )
     resp = client.post("/classify", json={"text": "   "})
     assert resp.status_code == 422

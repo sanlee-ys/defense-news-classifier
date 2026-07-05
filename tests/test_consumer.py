@@ -102,8 +102,8 @@ def test_process_event_tags_note():
 def test_process_event_skips_event_without_id():
     status = consumer.process_event(
         _event(id=None),
-        classify_fn=lambda t: pytest.fail("should not classify an id-less event"),
-        writeback_fn=lambda i, t: pytest.fail("should not write back"),
+        classify_fn=lambda _t: pytest.fail("should not classify an id-less event"),
+        writeback_fn=lambda _i, _t: pytest.fail("should not write back"),
     )
     assert status == "skipped"
 
@@ -111,8 +111,8 @@ def test_process_event_skips_event_without_id():
 def test_process_event_skips_blank_note():
     status = consumer.process_event(
         _event(title="", content="   "),
-        classify_fn=lambda t: pytest.fail("blank note reached the classifier"),
-        writeback_fn=lambda i, t: pytest.fail("should not write back"),
+        classify_fn=lambda _t: pytest.fail("blank note reached the classifier"),
+        writeback_fn=lambda _i, _t: pytest.fail("should not write back"),
     )
     assert status == "skipped"
 
@@ -124,7 +124,7 @@ def test_process_event_skips_unclassifiable_note():
     status = consumer.process_event(
         _event(),
         classify_fn=classify_fn,
-        writeback_fn=lambda i, t: pytest.fail("poison note must not be written back"),
+        writeback_fn=lambda _i, _t: pytest.fail("poison note must not be written back"),
     )
     assert status == "skipped"
 
@@ -135,7 +135,7 @@ def test_process_event_skips_permanently_rejected_writeback():
 
     status = consumer.process_event(
         _event(),
-        classify_fn=lambda t: {"category": "operations", "operational_domain": "land"},
+        classify_fn=lambda _t: {"category": "operations", "operational_domain": "land"},
         writeback_fn=writeback_fn,
     )
     assert status == "skipped"
@@ -150,7 +150,7 @@ def test_process_event_propagates_transient_failure():
     with pytest.raises(httpx.ConnectError):
         consumer.process_event(
             _event(),
-            classify_fn=lambda t: {
+            classify_fn=lambda _t: {
                 "category": "operations",
                 "operational_domain": "land",
             },
@@ -194,20 +194,20 @@ def test_writeback_puts_tags_and_succeeds():
 
 
 def test_writeback_4xx_raises_permanent():
-    with _writeback_client(lambda r: httpx.Response(404, text="not found")) as http:
+    with _writeback_client(lambda _r: httpx.Response(404, text="not found")) as http:
         with pytest.raises(consumer.NotePermanentlyRejected):
             consumer.make_writeback_fn(http)(99, ["category:policy"])
 
 
 def test_writeback_5xx_raises_transient():
-    with _writeback_client(lambda r: httpx.Response(503, text="unavailable")) as http:
+    with _writeback_client(lambda _r: httpx.Response(503, text="unavailable")) as http:
         with pytest.raises(httpx.HTTPStatusError):
             consumer.make_writeback_fn(http)(1, ["category:policy"])
 
 
 def test_writeback_429_is_transient_not_permanent():
     # A rate-limit (429) must be retried, not skipped — it is not in the permanent set.
-    with _writeback_client(lambda r: httpx.Response(429, text="slow down")) as http:
+    with _writeback_client(lambda _r: httpx.Response(429, text="slow down")) as http:
         with pytest.raises(httpx.HTTPStatusError):
             consumer.make_writeback_fn(http)(1, ["category:policy"])
 
@@ -235,7 +235,7 @@ def test_merge_tags_respects_note_tag_cap():
 def test_plan_tags_returns_tags_for_a_valid_note():
     tags = consumer.plan_tags(
         _event(tags=["mine"]),
-        classify_fn=lambda t: {"category": "procurement", "operational_domain": "air"},
+        classify_fn=lambda _t: {"category": "procurement", "operational_domain": "air"},
     )
     assert tags == ["mine", "category:procurement", "domain:air"]
 
@@ -243,7 +243,7 @@ def test_plan_tags_returns_tags_for_a_valid_note():
 def test_plan_tags_skips_without_id():
     assert (
         consumer.plan_tags(
-            _event(id=None), classify_fn=lambda t: pytest.fail("should not classify")
+            _event(id=None), classify_fn=lambda _t: pytest.fail("should not classify")
         )
         is None
     )
@@ -253,7 +253,7 @@ def test_plan_tags_skips_blank_note():
     assert (
         consumer.plan_tags(
             _event(title="", content="  "),
-            classify_fn=lambda t: pytest.fail("should not classify"),
+            classify_fn=lambda _t: pytest.fail("should not classify"),
         )
         is None
     )
@@ -316,4 +316,4 @@ def test_with_retry_skips_on_permanent_rejection():
     def perm():
         raise consumer.NotePermanentlyRejected("404 deleted")
 
-    assert consumer.with_retry(perm, what="thing", sleep=lambda s: None) is None
+    assert consumer.with_retry(perm, what="thing", sleep=lambda _s: None) is None
