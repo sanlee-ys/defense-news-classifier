@@ -38,7 +38,9 @@ operational_domain}` output contract.
   `README.md`'s project-structure listing, `.env.example`'s now-orphaned
   `KAFKA_BOOTSTRAP_SERVERS`/`NOTE_EVENTS_TOPIC`/`KAFKA_GROUP_ID`/`NOTES_API_BASE_URL`
   block, and `docs/integration-testing.md` (which existed solely to document the
-  now-deleted integration test) are updated/removed to match. The classifier's live
+  now-deleted integration test) are updated/removed to match. The CI `integration-test`
+  job (the Testcontainers Kafka lane in `.github/workflows/tests.yml`) is dropped along
+  with it, since it had no integration test left to run. The classifier's live
   surface remains the unchanged `/classify` HTTP provider.
 
 ## [2.0.0] — 2026-06-21

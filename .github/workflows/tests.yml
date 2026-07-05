@@ -1,9 +1,9 @@
 name: tests
 
-# Two lanes on every push and PR:
+# One lane on every push and PR:
 #   - test: the offline unit suite (mocks the Anthropic API; no key or Docker needed).
-#   - integration-test: the Testcontainers Kafka round trip (needs Docker), in its own
-#     job so pulling a broker image never blocks the fast unit feedback.
+# (A separate integration-test lane ran the Testcontainers Kafka round trip; it was
+# removed in v2.0.1 along with the dead Kafka consumer it exercised — see CHANGELOG.)
 on:
   push:
   pull_request:
@@ -46,25 +46,3 @@ jobs:
       # ratcheted upward as coverage improves.
       - name: Run tests
         run: uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=66
-
-  # Runs the real note-events round trip against a Kafka broker started in Docker
-  # (Testcontainers). Separate job: it pulls a broker image and is slow, so it must
-  # not gate the fast unit feedback above. ubuntu-latest ships Docker, so the
-  # Testcontainers broker just works. Mirrors notes-api running its IT in `./mvnw verify`.
-  integration-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
-      # Opt-in flag + marker: runs only the integration test (the unit suite is the
-      # `test` job's responsibility). --run-integration is the gate defined in conftest.py.
-      - name: Run integration tests (Testcontainers Kafka)
-        run: uv run pytest --run-integration -m integration
