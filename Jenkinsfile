@@ -5,10 +5,8 @@
 // gate for this repo; this file is the same pipeline written for a Jenkins controller
 // (e.g. an enterprise one). No controller runs it here, so it carries no status check.
 //
-// Agent requirements: a node with uv-capable Python 3.11+ and — for the integration
-// stage — a reachable Docker daemon, since Testcontainers starts a real Kafka broker.
-// In a real setup you'd pin a labeled node (`agent { label 'docker' }`) or run on a
-// uv image with the Docker socket mounted; `agent any` keeps this portable to read.
+// Agent requirements: a node with uv-capable Python 3.11+. `agent any` keeps this
+// portable to read; a real setup would pin a labeled node or a uv-baked image.
 
 pipeline {
     agent any
@@ -66,8 +64,8 @@ pipeline {
 
         stage('Unit tests') {
             steps {
-                // Offline suite; integration tests are deselected by default. Coverage
-                // gate matches the Actions gate (--cov-fail-under=66).
+                // Offline unit suite. Coverage gate matches the Actions gate
+                // (--cov-fail-under=66).
                 sh '''
                     uv run pytest \
                         --cov=src --cov-report=xml --cov-report=term-missing \
@@ -79,20 +77,6 @@ pipeline {
                 always { junit 'reports/junit-unit.xml' }
             }
         }
-
-        stage('Integration tests (Testcontainers)') {
-            // Needs Docker on the agent — Testcontainers spins up a real Kafka broker
-            // for the note-events round trip. Opt-in via --run-integration.
-            steps {
-                sh '''
-                    uv run pytest --run-integration -m integration \
-                        --junitxml=reports/junit-integration.xml
-                '''
-            }
-            post {
-                always { junit 'reports/junit-integration.xml' }
-            }
-        }
     }
 
     post {
@@ -102,7 +86,7 @@ pipeline {
             //   recordCoverage(tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']])
         }
         success {
-            echo 'Green: lint + format + types + unit (coverage gate) + integration.'
+            echo 'Green: lint + format + types + unit (coverage gate).'
         }
         failure {
             echo 'Pipeline failed — open the failing stage for the log.'
