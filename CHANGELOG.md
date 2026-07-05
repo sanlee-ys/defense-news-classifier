@@ -9,36 +9,37 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
-> **Architecture update (2026-06-27):** notes-api was ported from Java/Spring Boot to
-> Python/FastAPI and **dropped Kafka** in favor of FastAPI `BackgroundTasks` (notes-api
-> `ADR-001`, `architecture/SYS-005`, both rewritten). notes-api now owns the
-> classify-and-writeback loop: its background task calls this service's `/classify`
-> endpoint and writes labels back itself. **The Kafka consumer below is therefore no
-> longer the live integration** — it is retained as an inactive, runnable *reference
-> implementation* of idempotent event-driven consumption (kept green in CI), not as a
-> shipping feature. The classifier's role in the live system is the unchanged `/classify`
-> HTTP provider (`SYS-004`). See the `### Changed` note below.
-
-### Changed
-- **Kafka consumer (`src/consumer.py`) reclassified from active integration to historical
-  reference.** Triggered by the notes-api Python port dropping Kafka (above). The code,
-  unit tests, and Testcontainers integration test are kept and stay green, but nothing
-  publishes the `note-events` topic anymore, so the consumer is a no-op against the live
-  system. A prominent inactive banner was added to the module docstring and
-  `docs/integration-testing.md`. The prefixed-tag writeback logic it pioneered now lives
-  in notes-api `src/notes_api/tasks.py`.
-
 ### Added
-- **Kafka consumer that closes the event loop** (`src/consumer.py`) — reads `NoteCreated` events off notes-api's `note-events` topic, classifies each note with the existing core `classify()` (in-process, not over HTTP), and writes the two predicted labels back onto the note as **namespaced** tags (`category:<c>`, `domain:<d>`) via an idempotent `PUT /notes/{id}/tags`. The writeback **merges** — it preserves a user's own tags and replaces only stale classifier tags — and the Kafka offset is committed only after both classify and writeback succeed, so at-least-once redelivery converges instead of accumulating (the program's risk **R1**). Poison messages (unclassifiable notes, or a 4xx like a deleted note) are logged and skipped so they can't wedge the partition. The cross-repo contract for this seam is frozen in `architecture/SYS-005` (the asynchronous sibling of the `/classify` contract in `SYS-004`). New dependencies: `kafka-python` (pure-Python broker client) and `httpx` promoted to a runtime dep (the writeback client). Consumer config (`KAFKA_BOOTSTRAP_SERVERS`, `NOTE_EVENTS_TOPIC`, `KAFKA_GROUP_ID`, `NOTES_API_BASE_URL`) documented in `.env.example`.
-- Unit tests for the consumer (`tests/test_consumer.py`) — tag-merge idempotency, the namespaced-tag encoding, poison/transient handling, and the HTTP writeback shell (via `httpx.MockTransport`) — all offline, no broker/LLM/network.
-- **Integration test** (`tests/test_consumer_integration.py`) — a real `note-events` round trip through a Kafka broker started in Docker via **Testcontainers**: publishes a `NoteCreated` the way notes-api does (plain JSON, string key, no type headers) and drives the consumer's real consume → deserialize → process path, proving the SYS-005 wire contract survives an actual broker (which a mock can't). Marked `integration` and deselected by default (the unit suite stays offline/fast); run with `uv run pytest --run-integration -m integration`. New dev dependency `testcontainers[kafka]`. Documented in `docs/integration-testing.md` (a Python-first refresher on unit-vs-integration, Testcontainers, and the gotchas).
-- **End-to-end integration test** (`test_run_loop_commits_only_after_writeback`) — drives the real `run()` loop against a live broker *and* a stub notes-api HTTP server, asserting the full path (consume → classify → real HTTP writeback → commit) and the at-least-once guarantee: a fresh consumer in the same group sees no redelivery, proving the offset is committed **only after** a successful writeback. `run()` gained a `max_messages` bound (process N then return) so the loop is drivable in a test without threading hacks — also usable as a "drain N and exit" mode. This is the deeper layer SYS-005 flagged as remaining.
 - **`Jenkinsfile`** — the CI pipeline expressed as a declarative Jenkins pipeline (checkout → `uv sync` → parallel ruff/black/mypy → unit tests with the coverage gate → a Testcontainers integration stage on a Docker agent), mirroring `.github/workflows/tests.yml`. GitHub Actions stays the live gate; this is pipeline-as-code for a Jenkins controller (none runs it here, so it has no status check).
 
-The `{category, operational_domain}` output contract is unchanged throughout. The consumer
-work landed before the notes-api Python port; with Kafka now dropped system-wide, it is
-retained as a reference implementation rather than a shipping integration (see the status
-note above). The classifier's live surface remains the `/classify` HTTP provider.
+The `{category, operational_domain}` output contract is unchanged throughout. The
+classifier's live surface remains the `/classify` HTTP provider.
+
+## [2.0.1] - 2026-07-05
+
+Dead-code hardening release: removes the Kafka consumer path outright instead of
+continuing to carry it as inactive weight. No change to the `{category,
+operational_domain}` output contract.
+
+### Removed
+- **Kafka consumer (`src/consumer.py`) and its test suite.** The consumer was added as
+  an event-driven alternative to the `/classify` HTTP path — reading `NoteCreated`
+  events off a `note-events` topic, classifying them in-process, and writing labels back
+  onto the note as namespaced tags. It was later reclassified from active integration to
+  inactive reference implementation once notes-api's Python/FastAPI port dropped Kafka
+  in favor of a `BackgroundTasks` writeback loop: nothing has published `note-events`
+  since, so the consumer had become a no-op against the live system. Keeping a dead
+  consumer and its Testcontainers-backed integration test (`tests/test_consumer.py`,
+  `tests/test_consumer_integration.py`) green in CI cost ongoing maintenance for zero
+  live coverage, so both are deleted here; the reference implementation itself remains
+  available in git history and the project's ADRs for anyone who wants to see the
+  event-driven design. The now-unused `kafka-python` and `testcontainers[kafka]`
+  dependencies are dropped from `pyproject.toml` and `requirements.txt` accordingly.
+  `README.md`'s project-structure listing, `.env.example`'s now-orphaned
+  `KAFKA_BOOTSTRAP_SERVERS`/`NOTE_EVENTS_TOPIC`/`KAFKA_GROUP_ID`/`NOTES_API_BASE_URL`
+  block, and `docs/integration-testing.md` (which existed solely to document the
+  now-deleted integration test) are updated/removed to match. The classifier's live
+  surface remains the unchanged `/classify` HTTP provider.
 
 ## [2.0.0] — 2026-06-21
 
@@ -136,7 +137,8 @@ First complete version of the defense news classifier. All v1 success criteria m
 
 ---
 
-[Unreleased]: https://github.com/sanlee-ys/defense-news-classifier/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/sanlee-ys/defense-news-classifier/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/sanlee-ys/defense-news-classifier/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v0.1.0...v1.0.0

@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Defense News Classifier",
     description="Classify a defense-news snippet into a category and operational domain.",
-    version="2.0.0",
+    version="2.0.1",
     lifespan=lifespan,
 )
 

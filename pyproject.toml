@@ -1,6 +1,6 @@
 [project]
 name = "defense-news-classifier"
-version = "2.0.0"
+version = "2.0.1"
 description = "Classifies public defense-related news snippets into a category and an operational domain using an LLM with structured output."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -8,10 +8,8 @@ dependencies = [
     "anthropic",
     "pandas",
     "rank-bm25>=0.2.2",
-    # Event-loop consumer (src/consumer.py): reads NoteCreated events and writes
-    # tags back to notes-api over HTTP. kafka-python is pure-Python (keeps the image
-    # lean); httpx is the writeback client (also pulled in transitively by anthropic).
-    "kafka-python>=3.0.7",
+    # httpx is pulled in transitively by anthropic anyway; kept as a direct dep
+    # because it also backs FastAPI's TestClient (see the dev group below).
     "httpx",
 ]
 
@@ -25,16 +23,12 @@ dev = [
     "pytest",
     "pytest-cov",
     "uv",
-    # Needed to import and test src/api.py (the FastAPI service). httpx (now a
-    # runtime dep for the consumer) provides the TestClient transport. fastapi and
-    # pydantic are serving deps (see requirements-api.txt) but the test suite needs
-    # them too. pydantic is a direct import in api.py, not just a fastapi transitive.
+    # Needed to import and test src/api.py (the FastAPI service). httpx provides
+    # the TestClient transport. fastapi and pydantic are serving deps (see
+    # requirements-api.txt) but the test suite needs them too. pydantic is a
+    # direct import in api.py, not just a fastapi transitive.
     "fastapi",
     "pydantic",
-    # Spins up a real Kafka broker in Docker for the consumer integration test
-    # (tests/test_consumer_integration.py). Opt-in via `pytest --run-integration`;
-    # needs Docker, so it's excluded from the default offline suite.
-    "testcontainers[kafka]>=4.14.2",
 ]
 # Optional analysis extras — installed with `uv sync --group notebook`.
 notebook = [

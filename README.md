@@ -255,8 +255,6 @@ src/
   gold_eval_rag.py          # v2: grounded vs baseline lift, with flip analysis
   api.py                    # FastAPI service wrapping classify() at POST /classify;
                              #   the live HTTP surface notes-api and kb-agent call
-  consumer.py               # inactive reference implementation of an event-driven
-                             #   (Kafka) alternative to the HTTP path; not the live path
 scripts/
   fetch_corpus.py           # v2: pull the DVIDS corpus + write its manifest
   build_gold.py             # v2: pull fresh gold candidates (disjoint from corpus)
