@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.abspath(SRC))
 # ---------------------------------------------------------------------------
 # Integration tests (marked `integration`) need Docker and are slow, so they are
 # DESELECTED by default — the everyday suite stays offline and fast. Opt in with
-# `pytest --run-integration`. See docs/integration-testing.md.
+# `pytest --run-integration`.
 # ---------------------------------------------------------------------------
 
 

@@ -1,5 +1,4 @@
 anthropic
 pandas
 rank-bm25
-kafka-python
 httpx
