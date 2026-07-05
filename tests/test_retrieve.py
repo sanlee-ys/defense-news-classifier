@@ -108,6 +108,18 @@ def test_load_corpus_populates_metadata(corpus_dir):
     assert "drone" in alpha.text
 
 
+def test_load_corpus_skips_a_manifest_file_that_does_not_exist(tmp_path):
+    # Only the auto manifest is written; manifest_manual.csv is entirely absent
+    # (not just empty), which is the branch a corpus_dir with both files can't hit.
+    _write_manifest(
+        tmp_path / "manifest.csv",
+        [_row("001-alpha", "Alpha drone contract", "procurement", "air")],
+    )
+    (tmp_path / "001-alpha.txt").write_text("drone contract", encoding="utf-8")
+    docs = load_corpus(tmp_path)
+    assert [doc.id for doc in docs] == ["001-alpha"]
+
+
 # --- Retriever -----------------------------------------------------------
 
 
@@ -129,3 +141,38 @@ def test_retriever_respects_k(corpus_dir):
 def test_retriever_empty_corpus_raises():
     with pytest.raises(ValueError):
         Retriever([])
+
+
+# --- _snippet --------------------------------------------------------------
+
+
+def test_snippet_flattens_internal_whitespace():
+    assert retrieve._snippet("line one\n  line   two") == "line one line two"
+
+
+def test_snippet_leaves_short_text_untruncated():
+    text = "short enough"
+    assert retrieve._snippet(text, width=160) == text
+
+
+def test_snippet_truncates_and_marks_long_text():
+    text = "x" * 200
+    snippet = retrieve._snippet(text, width=160)
+    assert snippet == "x" * 160 + "..."
+
+
+# --- main (CLI) --------------------------------------------------------------
+
+
+def test_main_prints_top_hit_for_query(monkeypatch, capsys, corpus_dir):
+    monkeypatch.setattr(retrieve, "load_corpus", lambda: load_corpus(corpus_dir))
+    monkeypatch.setattr("sys.argv", ["retrieve.py", "drone contract", "--k", "1"])
+
+    exit_code = retrieve.main()
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "corpus: 3 docs" in out
+    assert "001-alpha" in out
+    assert "procurement/air" in out
+    assert "http://example/001-alpha" in out
