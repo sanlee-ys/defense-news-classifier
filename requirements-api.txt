@@ -3,4 +3,5 @@
 # time) so the deployed image stays lean.
 anthropic
 fastapi
+pydantic
 uvicorn[standard]
