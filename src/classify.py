@@ -74,12 +74,7 @@ class InvalidLabelError(ValueError):
 
 
 def _validate(result: dict) -> dict:
-    """Return ``result`` if both labels are in range, else raise.
-
-    Raises:
-        InvalidLabelError: If ``category`` or ``operational_domain`` is outside
-            its allowed set.
-    """
+    """Return ``result`` unchanged if both labels are valid; raise InvalidLabelError otherwise."""
     category = result.get("category")
     domain = result.get("operational_domain")
     if category not in CATEGORIES:
@@ -168,7 +163,11 @@ def make_client() -> anthropic.Anthropic:
 
 
 def main() -> None:
-    """CLI entry point: read article text from args or stdin and print JSON result."""
+    """CLI entry point: read article text from args or stdin and print JSON result.
+
+    Raises:
+        EnvironmentError: If ``ANTHROPIC_API_KEY`` is not set (via make_client).
+    """
     client = make_client()
 
     # Accept text as CLI args or via stdin (pipe-friendly).

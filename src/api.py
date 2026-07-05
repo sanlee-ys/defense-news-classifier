@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 # API key is missing, rather than failing on the first request.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Build the shared Anthropic client once at startup and expose it via ``app.state``."""
     app.state.client = make_client()
     yield
 
@@ -41,6 +42,8 @@ app = FastAPI(
 
 
 class ClassifyRequest(BaseModel):
+    """Request body for ``POST /classify``."""
+
     # Bound the input: empty text is meaningless, and a hard cap protects us from
     # someone pasting a whole document (and the token bill that comes with it).
     text: str = Field(
@@ -52,6 +55,8 @@ class ClassifyRequest(BaseModel):
 
 
 class ClassifyResponse(BaseModel):
+    """Response body for ``POST /classify``."""
+
     category: str = Field(..., description=f"One of: {', '.join(CATEGORIES)}")
     operational_domain: str = Field(..., description=f"One of: {', '.join(DOMAINS)}")
 
