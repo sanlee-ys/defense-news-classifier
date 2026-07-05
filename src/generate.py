@@ -1,5 +1,4 @@
-"""
-Synthetic dataset generator.
+"""Synthetic dataset generator.
 
 Makes one API call per (category × domain) combination — 30 calls total.
 Uses tool_choice to force structured JSON output, which is more reliable

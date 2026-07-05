@@ -1,5 +1,4 @@
-"""
-HTTP service wrapping the defense-news classifier.
+"""HTTP service wrapping the defense-news classifier.
 
 Exposes the existing `classify()` function (one LLM call -> structured output)
 as a small FastAPI app so the model can be called over HTTP instead of only as

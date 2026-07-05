@@ -1,5 +1,4 @@
-"""
-Tests for src/eval.py.
+"""Tests for src/eval.py.
 
 Covers the pure metric functions (precision/recall/F1, confusion matrix,
 report text) on hand-built frames where the right answer is obvious, plus
@@ -109,7 +108,7 @@ def test_confusion_matrix_diagonal_equals_correct_count():
 
 
 def _full_frame(rows):
-    """rows = (cat, pred_cat, dom, pred_dom)."""
+    """Rows = (cat, pred_cat, dom, pred_dom)."""
     return pd.DataFrame(
         [
             {

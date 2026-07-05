@@ -1,5 +1,4 @@
-"""
-Tests for src/retrieve.py.
+"""Tests for src/retrieve.py.
 
 No network or API: a tiny corpus is written to a temp dir, so these check the
 real loading / dedup / ranking logic offline.

@@ -1,5 +1,4 @@
-"""
-Classifier: maps article text -> {category, operational_domain}
+"""Classifier: maps article text -> {category, operational_domain}.
 
 Single LLM call with forced tool use for structured output.
 Usable as a module (import classify) or as a CLI tool.

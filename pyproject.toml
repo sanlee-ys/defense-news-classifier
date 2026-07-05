@@ -53,10 +53,20 @@ select = [
     "F",   # pyflakes (unused imports, undefined names)
     "I",   # isort (import ordering)
     "UP",  # pyupgrade (modernise syntax)
+    "D",   # pydocstyle (docstring presence + Google-style formatting)
 ]
 ignore = [
     "E501",  # line too long — Black handles line length; strings/comments can't be auto-wrapped
 ]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Test names are the documentation; docstrings are optional in tests.
+"tests/**" = ["D1"]
+# Analysis notebooks are exploratory; don't require docstrings on their cells.
+"notebooks/**" = ["D1"]
 
 [tool.black]
 line-length = 88

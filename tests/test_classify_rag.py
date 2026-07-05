@@ -1,5 +1,4 @@
-"""
-Tests for src/classify_rag.py (retrieval-grounded classification).
+"""Tests for src/classify_rag.py (retrieval-grounded classification).
 
 Offline: the LLM call is mocked via the tool_client fixture, and a tiny in-memory
 Retriever stands in for the corpus.

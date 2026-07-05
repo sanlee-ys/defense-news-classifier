@@ -1,5 +1,4 @@
-"""
-Eval harness for the defense-news classifier.
+"""Eval harness for the defense-news classifier.
 
 Runs the classifier on every article in data/synthetic_articles.csv,
 then reports accuracy, per-label precision/recall/F1, confusion matrices,

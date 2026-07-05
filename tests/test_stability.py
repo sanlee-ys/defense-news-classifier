@@ -1,5 +1,4 @@
-"""
-Tests for src/stability.py.
+"""Tests for src/stability.py.
 
 Covers the pure aggregation/reporting functions on hand-built data. The
 API-calling runner (run_one_pass / main) is not exercised here — it's a thin
@@ -13,7 +12,7 @@ import stability
 
 
 def _merged(rows):
-    """rows = (cat, pred_cat, dom, pred_dom)."""
+    """Rows = (cat, pred_cat, dom, pred_dom)."""
     return pd.DataFrame(
         [
             {
