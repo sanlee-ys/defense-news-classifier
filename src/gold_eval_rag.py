@@ -37,7 +37,21 @@ SLEEP_BETWEEN_CALLS = 0.3
 def classify_retry(
     client: anthropic.Anthropic, text: str, retriever: Retriever, max_retries: int = 3
 ) -> dict:
-    """classify_grounded() with backoff on transient API errors."""
+    """classify_grounded() with backoff on transient API errors.
+
+    Args:
+        client: Authenticated Anthropic client.
+        text: Article snippet to classify.
+        retriever: Retriever used to fetch grounding context.
+        max_retries: Maximum number of attempts before re-raising.
+
+    Returns:
+        Dict with keys ``category``, ``operational_domain``, and ``citations``.
+
+    Raises:
+        anthropic.InternalServerError: If all retries are exhausted on a 500.
+        anthropic.RateLimitError: If all retries are exhausted on a 429.
+    """
     for attempt in range(max_retries):
         try:
             return classify_grounded(client, text, retriever, k=RETRIEVE_K)
@@ -54,7 +68,15 @@ def run_grounded(
     retriever: Retriever,
     done_ids: set,
 ) -> None:
-    """Grounded-classify every not-yet-done snippet, appending as we go."""
+    """Grounded-classify every not-yet-done snippet, appending as we go.
+
+    Args:
+        client: Authenticated Anthropic client.
+        df: Gold DataFrame with at least columns ``id`` and ``text``.
+        retriever: Retriever used to fetch grounding context.
+        done_ids: Set of article IDs that already have grounded predictions
+            and can be skipped.
+    """
     todo = df[~df["id"].isin(done_ids)].reset_index(drop=True)
     write_header = not os.path.exists(RAG_PREDS_PATH)
     for i, (_, row) in enumerate(todo.iterrows()):
@@ -74,15 +96,18 @@ def run_grounded(
 
 
 def _acc(truth: pd.Series, pred: pd.Series) -> float:
+    """Fraction of positions where ``truth`` and ``pred`` are equal."""
     return float((truth == pred).mean())
 
 
 def _macro_f1(merged: pd.DataFrame, field: str, pred_col: str) -> float:
+    """Macro-F1 for ``field`` using ``pred_col`` as the prediction column."""
     tmp = pd.DataFrame({field: merged[field], f"pred_{field}": merged[pred_col]})
     return float(macro_average(compute_metrics(tmp, field))["f1"])
 
 
 def _flip_line(merged: pd.DataFrame, field: str, label: str) -> str:
+    """Summarize how grounding changed calls for one field: wrong->right vs. right->wrong vs. lateral."""
     base_right = merged[f"pred_{field}"] == merged[field]
     rag_right = merged[f"rag_{field}"] == merged[field]
     changed = merged[f"pred_{field}"] != merged[f"rag_{field}"]
@@ -96,7 +121,15 @@ def _flip_line(merged: pd.DataFrame, field: str, label: str) -> str:
 
 
 def build_report(merged: pd.DataFrame) -> str:
-    """Compare baseline (pred_*) vs grounded (rag_*) against the human labels."""
+    """Compare baseline (pred_*) vs grounded (rag_*) against the human labels.
+
+    Args:
+        merged: Gold DataFrame merged with both baseline (``pred_*``) and
+            grounded (``rag_*``) predictions.
+
+    Returns:
+        Multi-line report string with accuracy/macro-F1 deltas and flip counts.
+    """
     rows = [
         (
             "Category accuracy",
@@ -151,7 +184,11 @@ def build_report(merged: pd.DataFrame) -> str:
 
 
 def main() -> None:
-    """Run grounded classification on the gold set, then score the lift vs baseline."""
+    """Run grounded classification on the gold set, then score the lift vs baseline.
+
+    Raises:
+        EnvironmentError: If ``ANTHROPIC_API_KEY`` is not set (via make_client).
+    """
     os.makedirs("evals", exist_ok=True)
     gold = load_gold()
     retriever = Retriever(load_corpus())

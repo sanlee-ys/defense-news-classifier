@@ -94,8 +94,14 @@ class NotePermanentlyRejected(Exception):
 def note_text(event: dict) -> str:
     """Build the text to classify from a NoteCreated event.
 
-    Combines the note's title and content (title first, for a bit more signal) and
-    caps the length. Returns an empty string when there is nothing to classify.
+    Combines the note's title and content (title first, for a bit more signal)
+    and caps the length.
+
+    Args:
+        event: A NoteCreated event dict with optional ``title``/``content`` keys.
+
+    Returns:
+        The combined, length-capped text, or ``""`` if there is nothing to classify.
     """
     title = (event.get("title") or "").strip()
     content = (event.get("content") or "").strip()
@@ -104,12 +110,20 @@ def note_text(event: dict) -> str:
 
 
 def is_classifier_tag(tag: str) -> bool:
-    """True if ``tag`` is one this consumer owns (so it can be safely replaced)."""
+    """True if ``tag`` is one this consumer owns (so it can be safely replaced).
+
+    Args:
+        tag: A single tag string.
+    """
     return tag.startswith(CATEGORY_TAG_PREFIX) or tag.startswith(DOMAIN_TAG_PREFIX)
 
 
 def classifier_tags(result: dict) -> list[str]:
-    """The two namespaced tags for a classification result, sorted for determinism."""
+    """The two namespaced tags for a classification result, sorted for determinism.
+
+    Args:
+        result: A ``{category, operational_domain}`` classification result.
+    """
     return sorted(
         {
             f"{CATEGORY_TAG_PREFIX}{result['category']}",
@@ -146,8 +160,13 @@ def merge_tags(existing: Iterable[str], result: dict) -> list[str]:
 def plan_tags(event: dict, *, classify_fn) -> list[str] | None:
     """Decide the tags to write for one event, or ``None`` to skip it.
 
-    The classification side effect (``classify_fn(text) -> dict``) happens here and
-    here only, so a caller can retry the *writeback* without re-paying for the LLM.
+    The classification side effect happens here and here only, so a caller can
+    retry the *writeback* without re-paying for the LLM.
+
+    Args:
+        event: A NoteCreated event dict.
+        classify_fn: Callable ``classify_fn(text) -> dict`` that performs the
+            classification side effect.
 
     Returns:
         The tag list to write back, or ``None`` to skip the event (no id, no text,
@@ -186,8 +205,14 @@ def process_event(event: dict, *, classify_fn, writeback_fn) -> str:
 
     The un-retried decision path, used directly in tests: :func:`run` drives its own
     retry/backoff around :func:`plan_tags` and the writeback so it can retry each
-    independently. ``classify_fn(text) -> dict`` and ``writeback_fn(note_id, tags)``
-    carry the side effects.
+    independently.
+
+    Args:
+        event: A NoteCreated event dict.
+        classify_fn: Callable ``classify_fn(text) -> dict`` carrying the
+            classification side effect.
+        writeback_fn: Callable ``writeback_fn(note_id, tags)`` carrying the
+            writeback side effect.
 
     Returns:
         ``"tagged"`` on success, or ``"skipped"`` for an event :func:`plan_tags`
@@ -214,7 +239,14 @@ def process_event(event: dict, *, classify_fn, writeback_fn) -> str:
 
 
 def make_classify_fn(client):
-    """Bind the core classifier to a single Anthropic client."""
+    """Bind the core classifier to a single Anthropic client.
+
+    Args:
+        client: Authenticated Anthropic client.
+
+    Returns:
+        A ``classify_fn(text) -> dict`` callable suitable for :func:`plan_tags`.
+    """
 
     def _classify(text: str) -> dict:
         return classify(client, text)
@@ -231,6 +263,12 @@ def make_writeback_fn(http: httpx.Client):
     rate-limit/timeout, a 409 conflict, any 5xx — raises an ``HTTPStatusError``, and
     a network fault raises an ``httpx.RequestError``; both propagate so the message
     is retried rather than silently dropped.
+
+    Args:
+        http: An ``httpx.Client`` bound to the notes-api base URL.
+
+    Returns:
+        A ``writeback_fn(note_id, tags)`` callable suitable for :func:`process_event`.
     """
 
     def _writeback(note_id, tags: list[str]) -> None:
@@ -258,13 +296,21 @@ def with_retry(
     Used by :func:`run` to retry classification and writeback *independently* so a
     writeback retry never re-runs (re-pays for) classification.
 
-    - On success, returns ``fn()``'s value.
-    - On :class:`NotePermanentlyRejected`, logs and returns ``None`` (skip — safe to
-      commit).
-    - On any other exception (transient: LLM/network error, notes-api 5xx/429),
-      logs and retries after an exponential backoff capped at ``max_backoff``. This
-      blocks the partition until the dependency recovers — the at-least-once trade —
-      rather than dropping the note.
+    Args:
+        fn: Zero-arg callable to call (and retry) until it succeeds or skips.
+        what: Short label for this call, used in log messages.
+        base_backoff: Initial backoff in seconds before the first retry.
+        max_backoff: Upper bound on the backoff, in seconds.
+        sleep: Sleep function to call between retries (injected for testing).
+
+    Returns:
+        ``fn()``'s value on success, or ``None`` if ``fn()`` raises
+        :class:`NotePermanentlyRejected` (a permanent skip).
+
+    On any other exception (transient: LLM/network error, notes-api 5xx/429), logs
+    and retries after an exponential backoff capped at ``max_backoff``. This blocks
+    the partition until the dependency recovers — the at-least-once trade — rather
+    than dropping the note.
     """
     backoff = base_backoff
     while True:
@@ -301,6 +347,19 @@ def run(
     Runs forever by default. ``max_messages`` bounds it to that many messages and
     then returns — used by the end-to-end integration test to drive the loop once,
     and usable as a "drain N and exit" mode.
+
+    Args:
+        bootstrap_servers: Comma-separated ``host:port`` list for the Kafka cluster.
+        topic: Kafka topic to consume (``note-events``).
+        group_id: Kafka consumer group id.
+        notes_api_base_url: Base URL of the notes-api service to write tags back to.
+        request_timeout: HTTP timeout, in seconds, for each writeback call.
+        max_backoff: Upper bound on the retry backoff, in seconds.
+        max_messages: If set, stop after processing this many messages instead of
+            running forever.
+
+    Raises:
+        EnvironmentError: If ``ANTHROPIC_API_KEY`` is not set (via make_client).
     """
     from kafka import KafkaConsumer
 
@@ -353,7 +412,11 @@ def run(
 
 
 def main() -> None:  # pragma: no cover - process entry point
-    """Read config from the environment and run the consumer."""
+    """Read config from the environment and run the consumer.
+
+    Raises:
+        EnvironmentError: If ``ANTHROPIC_API_KEY`` is not set (via make_client).
+    """
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )

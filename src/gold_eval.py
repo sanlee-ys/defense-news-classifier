@@ -40,7 +40,19 @@ SLEEP_BETWEEN_CALLS = 0.3
 
 
 def load_gold(path: str = GOLD_PATH) -> pd.DataFrame:
-    """Load the gold set and fail loudly if it is not fully, validly labeled."""
+    """Load the gold set and fail loudly if it is not fully, validly labeled.
+
+    Args:
+        path: Path to the gold CSV. Defaults to ``GOLD_PATH``.
+
+    Returns:
+        DataFrame with normalized (stripped, lowercased) ``category`` and
+        ``domain`` columns.
+
+    Raises:
+        ValueError: If any row is missing a ``category``/``domain`` label, or
+            a label falls outside the allowed ``CATEGORIES``/``DOMAINS`` sets.
+    """
     df = pd.read_csv(path)
     for col in ("category", "domain"):
         df[col] = df[col].fillna("").astype(str).str.strip().str.lower()
@@ -63,7 +75,21 @@ def load_gold(path: str = GOLD_PATH) -> pd.DataFrame:
 def classify_retry(
     client: anthropic.Anthropic, text: str, model: str, max_retries: int = 3
 ) -> dict:
-    """classify() with exponential backoff on transient API errors."""
+    """classify() with exponential backoff on transient API errors.
+
+    Args:
+        client: Authenticated Anthropic client.
+        text: Article snippet to classify.
+        model: Which Claude model to classify with.
+        max_retries: Maximum number of attempts before re-raising.
+
+    Returns:
+        Dict with keys ``category`` and ``operational_domain``.
+
+    Raises:
+        anthropic.InternalServerError: If all retries are exhausted on a 500.
+        anthropic.RateLimitError: If all retries are exhausted on a 429.
+    """
     for attempt in range(max_retries):
         try:
             return classify(client, text, model=model)
@@ -77,7 +103,14 @@ def classify_retry(
 def run_predictions(
     client: anthropic.Anthropic, df: pd.DataFrame, done_ids: set
 ) -> None:
-    """Classify every not-yet-done snippet with both models, appending as we go."""
+    """Classify every not-yet-done snippet with both models, appending as we go.
+
+    Args:
+        client: Authenticated Anthropic client.
+        df: Gold DataFrame with at least columns ``id`` and ``text``.
+        done_ids: Set of article IDs that already have predictions and can
+            be skipped.
+    """
     todo = df[~df["id"].isin(done_ids)].reset_index(drop=True)
     write_header = not os.path.exists(PREDS_PATH)
     for i, (_, row) in enumerate(todo.iterrows()):
@@ -99,11 +132,20 @@ def run_predictions(
 
 
 def _accuracy(a: pd.Series, b: pd.Series) -> float:
+    """Fraction of positions where ``a`` and ``b`` are equal."""
     return float((a == b).mean())
 
 
 def build_report(merged: pd.DataFrame) -> str:
-    """Format the baseline metrics and the judge-vs-human agreement check."""
+    """Format the baseline metrics and the judge-vs-human agreement check.
+
+    Args:
+        merged: Gold DataFrame merged with both the workhorse and judge
+            predictions (columns ``pred_*`` and ``judge_*``).
+
+    Returns:
+        Multi-line report string.
+    """
     # Baseline: workhorse predictions vs human gold labels.
     cat_acc = _accuracy(merged["category"], merged["pred_category"])
     dom_acc = _accuracy(merged["operational_domain"], merged["pred_operational_domain"])
@@ -159,7 +201,11 @@ def build_report(merged: pd.DataFrame) -> str:
 
 
 def main() -> None:
-    """Run both models on the gold set (resuming if possible), then score + report."""
+    """Run both models on the gold set (resuming if possible), then score + report.
+
+    Raises:
+        EnvironmentError: If ``ANTHROPIC_API_KEY`` is not set (via make_client).
+    """
     os.makedirs("evals", exist_ok=True)
     gold = load_gold()
     print(f"Loaded {len(gold)} labeled gold snippets from {GOLD_PATH}\n")

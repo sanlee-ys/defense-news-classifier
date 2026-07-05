@@ -63,7 +63,16 @@ def _tokenize(text: str) -> list[str]:
 
 
 def load_corpus(corpus_dir: Path = CORPUS_DIR) -> list[Doc]:
-    """Load every doc listed across the manifests (auto + hand-collected)."""
+    """Load every doc listed across the manifests (auto + hand-collected).
+
+    Args:
+        corpus_dir: Directory containing the corpus manifests and ``<id>.txt``
+            files. Defaults to ``data/corpus`` at the repo root.
+
+    Returns:
+        One :class:`Doc` per manifest row, deduplicated by id and skipping any
+        row whose text file is missing.
+    """
     docs: list[Doc] = []
     seen: set[str] = set()
     for manifest_name in MANIFESTS:
@@ -96,24 +105,46 @@ class Retriever:
     """A BM25 index over a list of docs, exposing top-k retrieval."""
 
     def __init__(self, docs: list[Doc]) -> None:
+        """Build a BM25 index over ``docs``.
+
+        Args:
+            docs: Corpus documents to index; must be non-empty.
+
+        Raises:
+            ValueError: If ``docs`` is empty.
+        """
         if not docs:
             raise ValueError("empty corpus: no documents loaded from data/corpus/")
         self.docs = docs
         self._bm25 = BM25Okapi([_tokenize(doc.text) for doc in docs])
 
     def retrieve(self, query: str, k: int = 3) -> list[Hit]:
-        """Return the k highest-scoring docs for the query."""
+        """Return the k highest-scoring docs for the query.
+
+        Args:
+            query: Free-text search query.
+            k: Number of top documents to return.
+
+        Returns:
+            The top ``k`` hits, ranked by descending BM25 score.
+        """
         scores = self._bm25.get_scores(_tokenize(query))
         ranked = sorted(zip(self.docs, scores), key=lambda pair: pair[1], reverse=True)
         return [Hit(doc=doc, score=float(score)) for doc, score in ranked[:k]]
 
 
 def _snippet(text: str, width: int = 160) -> str:
+    """Flatten whitespace in ``text`` and truncate it to ``width`` chars for display."""
     flat = " ".join(text.split())
     return flat[:width] + ("..." if len(flat) > width else "")
 
 
 def main() -> int:
+    """CLI entry point: run a BM25 query against the corpus and print the top-k hits.
+
+    Returns:
+        Exit code (``0`` on success).
+    """
     parser = argparse.ArgumentParser(description="BM25 retrieval over the v2 corpus.")
     parser.add_argument("query", help="the search query")
     parser.add_argument("--k", type=int, default=3, help="number of docs to return")

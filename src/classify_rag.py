@@ -48,8 +48,19 @@ def classify_grounded(
     """Classify ``text`` grounded in the top-k retrieved corpus docs; attach their citations.
 
     Reuses ``classify.classify()`` verbatim, passing a prompt that prepends the retrieved
-    reference excerpts to the target article. Returns the usual ``category`` /
-    ``operational_domain`` plus a ``citations`` list of the docs that grounded the call.
+    reference excerpts to the target article, so baseline vs. grounded differ by exactly
+    the retrieved context.
+
+    Args:
+        client: Authenticated Anthropic client.
+        text: Article snippet to classify.
+        retriever: Retriever used to fetch the top-k grounding docs.
+        k: Number of retrieved docs to include as context.
+        model: Which Claude model classifies.
+
+    Returns:
+        Dict with keys ``category``, ``operational_domain``, and ``citations``
+        (a list of ``{id, source_url, score}`` for each retrieved doc).
     """
     hits = retriever.retrieve(text, k=k)
     prompt = (
