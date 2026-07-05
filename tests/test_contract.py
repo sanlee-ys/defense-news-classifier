@@ -1,5 +1,4 @@
-"""
-Contract test: pins the /classify wire contract so any drift fails CI.
+"""Contract test: pins the /classify wire contract so any drift fails CI.
 
 This enforces the SYS-004 contract shared with kb-agent — kb-agent's
 ``classify_snippet`` tool POSTs to this service's ``/classify`` endpoint and

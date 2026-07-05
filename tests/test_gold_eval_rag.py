@@ -1,5 +1,4 @@
-"""
-Tests for src/gold_eval_rag.py (v2 Step 3: does retrieval grounding beat the baseline?).
+"""Tests for src/gold_eval_rag.py (v2 Step 3: does retrieval grounding beat the baseline?).
 
 Offline only: the flip analysis, report assembly, and the retry wrapper are exercised
 directly. The actual grounded-classification loop hits the network and is exercised

@@ -1,5 +1,4 @@
-"""
-Tests for src/generate.py.
+"""Tests for src/generate.py.
 
 The generator's only non-IO logic is generate_combo(), which forces a tool
 call and returns the `articles` list. The API call is mocked.

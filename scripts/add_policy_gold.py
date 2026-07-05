@@ -63,12 +63,14 @@ TITLE_DENY = (
 
 
 def _get(url: str, params: dict[str, Any]) -> dict[str, Any]:
+    """GET a URL with query params and parse the JSON body."""
     full = f"{url}?{urllib.parse.urlencode(params, doseq=True)}"
     with urllib.request.urlopen(full, timeout=30) as resp:  # noqa: S310 - https only
         return json.loads(resp.read().decode("utf-8"))
 
 
 def search_news(api_key: str, query: str) -> list[dict[str, Any]]:
+    """Search DVIDS news for a query, returning the raw result dicts."""
     data = _get(
         SEARCH_URL,
         {
@@ -113,11 +115,18 @@ def next_gold_index() -> int:
 
 
 def keep_title(title: str) -> bool:
+    """Return True if the title is non-empty and not obvious non-news (see TITLE_DENY)."""
     low = title.lower()
     return bool(title) and not any(bad in low for bad in TITLE_DENY)
 
 
 def main() -> int:
+    """Pull policy-candidate snippets and append them, unlabeled, to the gold set.
+
+    Returns:
+        Process exit code: 0 on success (including "nothing new found"),
+        1 if DVIDS_API_KEY is not set.
+    """
     api_key = os.environ.get("DVIDS_API_KEY")
     if not api_key:
         print("DVIDS_API_KEY is not set. Add it to .env and run with --env-file .env.")

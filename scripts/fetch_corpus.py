@@ -116,6 +116,7 @@ def _get(url: str, params: dict[str, Any]) -> dict[str, Any]:
 
 
 def search_news(api_key: str, query: str) -> list[dict[str, Any]]:
+    """Search DVIDS news for a query, returning the raw result dicts."""
     data = _get(
         SEARCH_URL,
         {
@@ -132,6 +133,7 @@ def search_news(api_key: str, query: str) -> list[dict[str, Any]]:
 
 
 def fetch_asset(api_key: str, asset_id: str) -> dict[str, Any]:
+    """Fetch one asset's full record by id, tolerating list- or dict-shaped responses."""
     data = _get(ASSET_URL, {"api_key": api_key, "id": asset_id})
     results = data.get("results", data)
     if isinstance(results, list):
@@ -140,16 +142,19 @@ def fetch_asset(api_key: str, asset_id: str) -> dict[str, Any]:
 
 
 def slugify(title: str) -> str:
+    """Turn a title into a short, filesystem-safe slug for the doc filename."""
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
     return slug[:50].strip("-") or "untitled"
 
 
 def keep_title(title: str) -> bool:
+    """Return True if the title is non-empty and not obvious non-news (see TITLE_DENY)."""
     low = title.lower()
     return bool(title) and not any(bad in low for bad in TITLE_DENY)
 
 
 def clean_body(body: str) -> str:
+    """Normalize newlines and collapse runs of blank lines in an article body."""
     body = body.replace("\r\n", "\n").replace("\r", "\n")
     body = re.sub(r"\n{3,}", "\n\n", body)
     return body.strip()
@@ -212,6 +217,11 @@ def write_manifest(rows: list[dict[str, Any]]) -> Path:
 
 
 def main() -> int:
+    """Collect candidates, fetch and filter bodies, and write the docs + manifest.
+
+    Returns:
+        Process exit code: 0 on success, 1 if DVIDS_API_KEY is not set.
+    """
     api_key = os.environ.get("DVIDS_API_KEY")
     if not api_key:
         print("DVIDS_API_KEY is not set. Add it to .env and run with --env-file .env.")

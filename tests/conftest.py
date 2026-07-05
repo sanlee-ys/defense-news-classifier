@@ -1,5 +1,4 @@
-"""
-Shared test fixtures and helpers.
+"""Shared test fixtures and helpers.
 
 Puts src/ on the import path so tests can `import classify`, `import eval`,
 `import generate` the same way the scripts import each other at runtime.

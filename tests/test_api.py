@@ -1,5 +1,4 @@
-"""
-Tests for src/api.py — the FastAPI wrapper around classify().
+"""Tests for src/api.py — the FastAPI wrapper around classify().
 
 Uses FastAPI's TestClient. The Anthropic client and the classify() call are
 both mocked, so no network or API key is needed. The TestClient context

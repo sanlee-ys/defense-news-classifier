@@ -1,5 +1,4 @@
-"""
-Stability harness: run the full eval N times and report the spread.
+"""Stability harness: run the full eval N times and report the spread.
 
 The single-run eval gives one number (e.g. category accuracy 79.0%). But the
 classifier is a sampling LLM, so that number has run-to-run variance. This

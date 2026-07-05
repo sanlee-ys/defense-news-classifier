@@ -1,5 +1,4 @@
-"""
-Tests for src/gold_eval.py (the v2 gold-set eval).
+"""Tests for src/gold_eval.py (the v2 gold-set eval).
 
 Offline only: gold-set validation and report assembly. The two-model prediction
 loop hits the network and is exercised manually, like eval.py's run_predictions.
@@ -105,8 +104,10 @@ class _FakeServerError(Exception):
 
 @pytest.fixture(autouse=True)
 def patch_anthropic_errors(monkeypatch):
-    """Swap the SDK exception classes for plain ones we can raise freely, and
-    replace time.sleep so the retry backoff doesn't actually wait."""
+    """Swap the SDK exception classes for plain ones we can raise freely.
+
+    Also replaces time.sleep so the retry backoff doesn't actually wait.
+    """
     monkeypatch.setattr(gold_eval.anthropic, "RateLimitError", _FakeRateLimit)
     monkeypatch.setattr(gold_eval.anthropic, "InternalServerError", _FakeServerError)
     monkeypatch.setattr(gold_eval.time, "sleep", lambda *_: None)

@@ -1,5 +1,4 @@
-"""
-Tests for src/classify.py.
+"""Tests for src/classify.py.
 
 The single LLM call is mocked — these check the wiring around it: that we
 send the right request and correctly pull the structured result back out.
