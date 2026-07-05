@@ -10,7 +10,7 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 ## [Unreleased]
 
 ### Added
-- **`Jenkinsfile`** — the CI pipeline expressed as a declarative Jenkins pipeline (checkout → `uv sync` → parallel ruff/black/mypy → unit tests with the coverage gate → a Testcontainers integration stage on a Docker agent), mirroring `.github/workflows/tests.yml`. GitHub Actions stays the live gate; this is pipeline-as-code for a Jenkins controller (none runs it here, so it has no status check).
+- **`Jenkinsfile`** — the CI pipeline expressed as a declarative Jenkins pipeline (checkout → `uv sync` → parallel ruff/black/mypy → unit tests with the coverage gate), mirroring `.github/workflows/tests.yml`. GitHub Actions stays the live gate; this is pipeline-as-code for a Jenkins controller (none runs it here, so it has no status check).
 
 The `{category, operational_domain}` output contract is unchanged throughout. The
 classifier's live surface remains the `/classify` HTTP provider.
