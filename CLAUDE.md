@@ -1,9 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
----
-
 # CLAUDE.md — Defense News Classifier
 
 ## Project
@@ -11,22 +5,21 @@ A clean-room NLP project that classifies **public defense-related news articles 
 
 This is a personal portfolio project with two aims: (a) demonstrate practical, hands-on AI engineering, and (b) measure classification quality rigorously. **The measured eval results are the centerpiece, not just a working demo.** The subject is the open-source analysis side of defense — categorizing public news and reports — nothing operational.
 
-## Scope (v1 — lean)
+## Scope — stay lean
 
-**In scope:**
-- A synthetic dataset generator: use an LLM to produce a few hundred realistic, labeled defense-news snippets spanning the categories and domains below.
-- A classifier: a single LLM call with **structured (JSON) output** mapping article text → `{category, operational_domain}`.
-- An eval harness: a held-out labeled test set, overall accuracy, per-label precision/recall for both fields, confusion matrices, and a log of misclassifications for failure analysis.
-- A README that leads with the eval numbers and a short writeup.
+The project is deliberately small and finishable: a synthetic **and** real-text
+dataset, a single-call classifier with **structured (JSON) output** mapping
+article text → `{category, operational_domain}`, and a rigorous eval harness
+(overall accuracy, per-label precision/recall, confusion matrices, a
+misclassification log) fronted by a README that **leads with the numbers**.
+`v2.0.0` added BM25 RAG grounding over real public text; the `region` field is
+the planned `v3.0.0` breaking change. Version specifics — what ships when and
+why — live in **Versioning roadmap** below, not here.
 
-**Explicitly out of scope for v1 — do NOT build these:**
-- A web UI
-- RAG / retrieval over a document corpus
-- Any scraping pipeline, database, auth, or multi-user features
-- Model fine-tuning
-- A third "region" field (see note below — keep v1 to two fields for a clean eval)
-
-Keep the project small and finishable. If something starts to feel like scope creep, flag it and ask before adding it.
+Still out of scope unless a version deliberately picks it up: a web UI, scraping
+pipelines, databases, auth / multi-user, and model fine-tuning. If something
+starts to feel like scope creep, flag it and ask before adding it — the
+roadmap's parking lot is where unplanned ideas wait their turn.
 
 ## Domain definitions
 **category** (what the article is primarily about):
