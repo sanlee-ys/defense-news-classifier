@@ -51,7 +51,7 @@ These are explicitly out of scope. Each has a reason, to prevent scope creep dur
 Personal portfolio project. Audience:
 
 - **The author** — building the loop and learning loop-engineering design.
-- **Technical reviewers** — skeptical senior engineers / hiring managers judging whether the author can design an autonomous system, not just prompt one.
+- **Technical reviewers** — skeptical senior engineers judging whether the author can design an autonomous system, not just prompt one.
 
 No end-users, no SLA, no deployment target.
 

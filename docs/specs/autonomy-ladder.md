@@ -60,7 +60,7 @@ the critic is what catches the classifier gaming its own metric.
   to L4. This is already the built reality as of v2.0.0, so the decision ratifies what shipped
   rather than proposing new work.
 - *Tradeoff accepted:* folding RAG in loses the standalone "I did RAG" checkbox a skimming
-  recruiter might scan for. The fix is a **writeup** fix, not an architecture one — the L2
+  technical reader might scan for. The fix is a **writeup** fix, not an architecture one — the L2
   writeup names the technique explicitly ("retrieval-augmented grounding via BM25") even though
   it is embedded.
 
