@@ -374,6 +374,66 @@ uv run pytest
 
 ---
 
+## Evals as a CI quality gate
+
+The v2 numbers above (`evals/gold_eval.txt`, `evals/gold_rag_eval.txt`) are measured once
+and committed — nothing stopped them from silently regressing on a later prompt or model
+change until now. [`.github/workflows/evals.yml`](.github/workflows/evals.yml) wires the
+gold-set evals into CI as two gates, split by API cost (full design rationale in
+[ADR-007](decisions/007-evals-as-ci-gate.md)):
+
+- **Offline gate** (every push/PR, free, no key) — grades the prediction CSVs already
+  committed in `evals/` against the floors in
+  [`evals/thresholds.toml`](evals/thresholds.toml), via `src/eval_gate.py`. It proves the
+  shipped numbers still clear the bar and that the scoring code itself still computes them
+  correctly. It never calls the API.
+- **Live capability gate** (`workflow_dispatch` + a weekly schedule only — **never** on
+  `pull_request`) — deletes the cached predictions, re-runs `gold_eval.py` and
+  `gold_eval_rag.py` against the real models, then runs the same gate against the fresh
+  numbers. This is the actual "did the model/prompt/retrieval get worse" check, and the
+  only job that touches `ANTHROPIC_API_KEY`. Restricting it to dispatch/schedule (never
+  PRs, and never `pull_request_target`) means a fork PR on this public repo has no path to
+  invoke it.
+
+### Go live
+
+The live gate needs a repository secret that does not exist yet — confirm with
+`gh secret list -R sanlee-ys/defense-news-classifier` (empty until you add it). Add it,
+then trigger a run:
+
+```bash
+gh secret set ANTHROPIC_API_KEY -R sanlee-ys/defense-news-classifier
+gh workflow run evals.yml -R sanlee-ys/defense-news-classifier
+```
+
+Until that secret is set, `live-capability-eval` fails fast with a clear message instead
+of silently skipping or half-running. Note `gh workflow run` only finds workflow files
+that exist on the ref you dispatch against (the default branch, unless you pass `--ref`),
+so this only works once `evals.yml` has been merged to `main`.
+
+### Run the gate locally
+
+No key needed — it grades whatever is already committed:
+
+```bash
+uv run python src/eval_gate.py                    # both baseline and rag
+uv run python src/eval_gate.py --check baseline    # baseline only
+uv run python src/eval_gate.py --check rag         # rag only
+```
+
+To exercise the same sequence the live job runs (needs `ANTHROPIC_API_KEY`, costs real
+money, ~162 calls total — San only, not something to run casually):
+
+```bash
+# Prefix the two eval commands below with: uv run --env-file .env ...
+rm -f evals/gold_predictions.csv evals/gold_rag_predictions.csv    # force a fresh run
+uv run python src/gold_eval.py
+uv run python src/gold_eval_rag.py
+uv run python src/eval_gate.py                                     # no key needed
+```
+
+---
+
 ## Limitations
 
 **v1 (synthetic):**
