@@ -1,9 +1,11 @@
 // Jenkinsfile — declarative CI pipeline for defense-news-classifier.
 //
 // Pipeline-as-code expressing this repo's CI as a Jenkins pipeline, mirroring the
-// GitHub Actions workflow (.github/workflows/tests.yml). GitHub Actions is the live
-// gate for this repo; this file is the same pipeline written for a Jenkins controller
-// (e.g. an enterprise one). No controller runs it here, so it carries no status check.
+// GitHub Actions workflows: .github/workflows/tests.yml in full, and the free
+// offline-gate job of .github/workflows/evals.yml (never its paid live-capability-eval
+// job -- see the Eval gate stage below). GitHub Actions is the live gate for this repo;
+// this file is the same pipeline written for a Jenkins controller (e.g. an enterprise
+// one). No controller runs it here, so it carries no status check.
 //
 // Agent requirements: a node with uv-capable Python 3.11+. `agent any` keeps this
 // portable to read; a real setup would pin a labeled node or a uv-baked image.
@@ -77,6 +79,20 @@ pipeline {
                 always { junit 'reports/junit-unit.xml' }
             }
         }
+
+        stage('Eval gate (offline)') {
+            // Parity-only: mirrors .github/workflows/evals.yml's offline-gate job (grades
+            // the prediction CSVs already committed in evals/ against
+            // evals/thresholds.toml -- no ANTHROPIC_API_KEY, no network call). No Jenkins
+            // controller runs this file, so it carries no status check here, same as the
+            // rest of this pipeline, and it deliberately mirrors ONLY the free offline
+            // gate -- never evals.yml's live-capability-eval job, which needs a secret and
+            // real model calls. GitHub Actions is the live gate for both; see
+            // decisions/007-evals-as-ci-gate.md.
+            steps {
+                sh 'uv run python src/eval_gate.py'
+            }
+        }
     }
 
     post {
@@ -86,7 +102,7 @@ pipeline {
             //   recordCoverage(tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']])
         }
         success {
-            echo 'Green: lint + format + types + unit (coverage gate).'
+            echo 'Green: lint + format + types + unit (coverage gate) + offline eval gate.'
         }
         failure {
             echo 'Pipeline failed — open the failing stage for the log.'

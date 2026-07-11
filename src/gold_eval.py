@@ -136,6 +136,42 @@ def _accuracy(a: pd.Series, b: pd.Series) -> float:
     return float((a == b).mean())
 
 
+def metrics(merged: pd.DataFrame) -> dict:
+    """Compute the workhorse-vs-human and judge-vs-human numbers.
+
+    Single source of truth for the scored numbers: build_report() formats these
+    for humans below, and src/eval_gate.py grades them against evals/thresholds.toml.
+    Per-label tables and the workhorse-vs-judge agreement check are report-only
+    detail and stay local to build_report(), since nothing gates on them.
+
+    Args:
+        merged: Gold DataFrame merged with both the workhorse and judge
+            predictions (columns ``pred_*`` and ``judge_*``).
+
+    Returns:
+        Dict with ``n`` and the accuracy / macro-F1 numbers: ``category_accuracy``,
+        ``category_macro_f1``, ``domain_accuracy``, ``domain_macro_f1``,
+        ``judge_category_agreement``, ``judge_domain_agreement``.
+    """
+    cat_macro = macro_average(compute_metrics(merged, "category"))
+    dom_macro = macro_average(compute_metrics(merged, "operational_domain"))
+    return {
+        "n": len(merged),
+        "category_accuracy": _accuracy(merged["category"], merged["pred_category"]),
+        "category_macro_f1": cat_macro["f1"],
+        "domain_accuracy": _accuracy(
+            merged["operational_domain"], merged["pred_operational_domain"]
+        ),
+        "domain_macro_f1": dom_macro["f1"],
+        "judge_category_agreement": _accuracy(
+            merged["category"], merged["judge_category"]
+        ),
+        "judge_domain_agreement": _accuracy(
+            merged["operational_domain"], merged["judge_operational_domain"]
+        ),
+    }
+
+
 def build_report(merged: pd.DataFrame) -> str:
     """Format the baseline metrics and the judge-vs-human agreement check.
 
@@ -146,17 +182,12 @@ def build_report(merged: pd.DataFrame) -> str:
     Returns:
         Multi-line report string.
     """
-    # Baseline: workhorse predictions vs human gold labels.
-    cat_acc = _accuracy(merged["category"], merged["pred_category"])
-    dom_acc = _accuracy(merged["operational_domain"], merged["pred_operational_domain"])
-    cat_macro = macro_average(compute_metrics(merged, "category"))
-    dom_macro = macro_average(compute_metrics(merged, "operational_domain"))
+    m = metrics(merged)
+
+    # Per-label tables and workhorse-vs-judge agreement are report-only detail,
+    # not part of metrics()'s gated numbers.
     cat_metrics = compute_metrics(merged, "category")
     dom_metrics = compute_metrics(merged, "operational_domain")
-
-    # Judge vs human, and workhorse vs judge.
-    j_cat = _accuracy(merged["category"], merged["judge_category"])
-    j_dom = _accuracy(merged["operational_domain"], merged["judge_operational_domain"])
     wj_cat = _accuracy(merged["pred_category"], merged["judge_category"])
     wj_dom = _accuracy(
         merged["pred_operational_domain"], merged["judge_operational_domain"]
@@ -167,7 +198,7 @@ def build_report(merged: pd.DataFrame) -> str:
         "v2 GOLD-SET EVAL -- real text, human-labeled",
         "=" * 62,
         "",
-        f"Snippets evaluated : {len(merged)}   ({GOLD_PATH})",
+        f"Snippets evaluated : {m['n']}   ({GOLD_PATH})",
         "",
         f"Workhorse : {WORKHORSE_MODEL}",
         f"Judge     : {JUDGE_MODEL}",
@@ -176,8 +207,8 @@ def build_report(merged: pd.DataFrame) -> str:
         "The classifier's accuracy on REAL news, graded against human",
         "truth -- the honest number v1's circular eval couldn't give.",
         "",
-        f"Category accuracy           : {cat_acc:.1%}   (macro-F1 {cat_macro['f1']:.3f})",
-        f"Operational domain accuracy : {dom_acc:.1%}   (macro-F1 {dom_macro['f1']:.3f})",
+        f"Category accuracy           : {m['category_accuracy']:.1%}   (macro-F1 {m['category_macro_f1']:.3f})",
+        f"Operational domain accuracy : {m['domain_accuracy']:.1%}   (macro-F1 {m['domain_macro_f1']:.3f})",
         "",
         "Category per-label:",
         cat_metrics.to_string(float_format="{:.3f}".format),
@@ -189,8 +220,8 @@ def build_report(merged: pd.DataFrame) -> str:
         "High agreement => the judge tracks human judgment, so it can",
         "serve as a scalable answer key where hand-labeling doesn't reach.",
         "",
-        f"Category agreement          : {j_cat:.1%}",
-        f"Operational domain agreement : {j_dom:.1%}",
+        f"Category agreement          : {m['judge_category_agreement']:.1%}",
+        f"Operational domain agreement : {m['judge_domain_agreement']:.1%}",
         "",
         "-- Workhorse vs judge (do the two models agree?) ----------",
         f"Category           : {wj_cat:.1%}",

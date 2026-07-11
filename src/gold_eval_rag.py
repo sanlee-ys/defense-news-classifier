@@ -106,18 +106,73 @@ def _macro_f1(merged: pd.DataFrame, field: str, pred_col: str) -> float:
     return float(macro_average(compute_metrics(tmp, field))["f1"])
 
 
-def _flip_line(merged: pd.DataFrame, field: str, label: str) -> str:
-    """Summarize how grounding changed calls for one field: wrong->right vs. right->wrong vs. lateral."""
+def _flip_counts(merged: pd.DataFrame, field: str) -> dict:
+    """Count how grounding changed calls for one field: wrong->right vs. right->wrong vs. lateral."""
     base_right = merged[f"pred_{field}"] == merged[field]
     rag_right = merged[f"rag_{field}"] == merged[field]
     changed = merged[f"pred_{field}"] != merged[f"rag_{field}"]
     w2r = int((changed & ~base_right & rag_right).sum())
     r2w = int((changed & base_right & ~rag_right).sum())
-    lateral = int(changed.sum()) - w2r - r2w
+    return {
+        "changed": int(changed.sum()),
+        "wrong_to_right": w2r,
+        "right_to_wrong": r2w,
+        "lateral": int(changed.sum()) - w2r - r2w,
+    }
+
+
+def _flip_line(merged: pd.DataFrame, field: str, label: str) -> str:
+    """Summarize how grounding changed calls for one field: wrong->right vs. right->wrong vs. lateral."""
+    c = _flip_counts(merged, field)
     return (
-        f"{label}: grounding changed {int(changed.sum())} calls "
-        f"-> {w2r} wrong->right, {r2w} right->wrong, {lateral} lateral"
+        f"{label}: grounding changed {c['changed']} calls "
+        f"-> {c['wrong_to_right']} wrong->right, {c['right_to_wrong']} right->wrong, "
+        f"{c['lateral']} lateral"
     )
+
+
+def metrics(merged: pd.DataFrame) -> dict:
+    """Compute baseline vs grounded accuracy/macro-F1, their deltas, and flip counts.
+
+    Single source of truth for the scored numbers: build_report() formats these
+    for humans below, and src/eval_gate.py grades the grounded absolute numbers
+    and the deltas against evals/thresholds.toml (grounding-must-not-regress floors).
+
+    Args:
+        merged: Gold DataFrame merged with both baseline (``pred_*``) and
+            grounded (``rag_*``) predictions.
+
+    Returns:
+        Dict with ``n``, baseline/grounded/delta for category and domain
+        accuracy + macro-F1, and ``category_flip`` / ``domain_flip`` count dicts
+        (see ``_flip_counts``).
+    """
+    cat_acc_base = _acc(merged["category"], merged["pred_category"])
+    cat_acc_rag = _acc(merged["category"], merged["rag_category"])
+    cat_f1_base = _macro_f1(merged, "category", "pred_category")
+    cat_f1_rag = _macro_f1(merged, "category", "rag_category")
+    dom_acc_base = _acc(merged["operational_domain"], merged["pred_operational_domain"])
+    dom_acc_rag = _acc(merged["operational_domain"], merged["rag_operational_domain"])
+    dom_f1_base = _macro_f1(merged, "operational_domain", "pred_operational_domain")
+    dom_f1_rag = _macro_f1(merged, "operational_domain", "rag_operational_domain")
+
+    return {
+        "n": len(merged),
+        "category_accuracy_baseline": cat_acc_base,
+        "category_accuracy_grounded": cat_acc_rag,
+        "category_accuracy_delta": cat_acc_rag - cat_acc_base,
+        "category_macro_f1_baseline": cat_f1_base,
+        "category_macro_f1_grounded": cat_f1_rag,
+        "category_macro_f1_delta": cat_f1_rag - cat_f1_base,
+        "domain_accuracy_baseline": dom_acc_base,
+        "domain_accuracy_grounded": dom_acc_rag,
+        "domain_accuracy_delta": dom_acc_rag - dom_acc_base,
+        "domain_macro_f1_baseline": dom_f1_base,
+        "domain_macro_f1_grounded": dom_f1_rag,
+        "domain_macro_f1_delta": dom_f1_rag - dom_f1_base,
+        "category_flip": _flip_counts(merged, "category"),
+        "domain_flip": _flip_counts(merged, "operational_domain"),
+    }
 
 
 def build_report(merged: pd.DataFrame) -> str:
@@ -130,29 +185,35 @@ def build_report(merged: pd.DataFrame) -> str:
     Returns:
         Multi-line report string with accuracy/macro-F1 deltas and flip counts.
     """
+    m = metrics(merged)
+
     rows = [
         (
             "Category accuracy",
-            _acc(merged["category"], merged["pred_category"]),
-            _acc(merged["category"], merged["rag_category"]),
+            m["category_accuracy_baseline"],
+            m["category_accuracy_grounded"],
+            m["category_accuracy_delta"],
             "{:.1%}",
         ),
         (
             "Category macro-F1",
-            _macro_f1(merged, "category", "pred_category"),
-            _macro_f1(merged, "category", "rag_category"),
+            m["category_macro_f1_baseline"],
+            m["category_macro_f1_grounded"],
+            m["category_macro_f1_delta"],
             "{:.3f}",
         ),
         (
             "Domain accuracy",
-            _acc(merged["operational_domain"], merged["pred_operational_domain"]),
-            _acc(merged["operational_domain"], merged["rag_operational_domain"]),
+            m["domain_accuracy_baseline"],
+            m["domain_accuracy_grounded"],
+            m["domain_accuracy_delta"],
             "{:.1%}",
         ),
         (
             "Domain macro-F1",
-            _macro_f1(merged, "operational_domain", "pred_operational_domain"),
-            _macro_f1(merged, "operational_domain", "rag_operational_domain"),
+            m["domain_macro_f1_baseline"],
+            m["domain_macro_f1_grounded"],
+            m["domain_macro_f1_delta"],
             "{:.3f}",
         ),
     ]
@@ -162,13 +223,12 @@ def build_report(merged: pd.DataFrame) -> str:
         "v2 STEP 3 -- RETRIEVAL-GROUNDED vs BASELINE",
         "=" * 62,
         "",
-        f"Snippets : {len(merged)}    retrieve k={RETRIEVE_K}",
+        f"Snippets : {m['n']}    retrieve k={RETRIEVE_K}",
         "Baseline = src/classify.py (no retrieval); Grounded = + top-k corpus context.",
         "",
         f"{'':<20}{'baseline':>10}{'grounded':>10}{'delta':>10}",
     ]
-    for name, base, rag, fmt in rows:
-        delta = rag - base
+    for name, base, rag, delta, fmt in rows:
         sign = "+" if delta >= 0 else ""
         lines.append(
             f"{name:<20}{fmt.format(base):>10}{fmt.format(rag):>10}"

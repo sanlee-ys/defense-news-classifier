@@ -1,0 +1,120 @@
+name: evals
+
+# Two gates for the v2 capability evals (src/gold_eval.py, src/gold_eval_rag.py), split by
+# API cost. Full rationale in decisions/007-evals-as-ci-gate.md.
+#
+#   offline-gate          -- push + pull_request, no key, free. Grades the prediction CSVs
+#                             already committed in evals/ against evals/thresholds.toml via
+#                             src/eval_gate.py. Proves the shipped numbers still clear the
+#                             bar and that the scoring code itself still computes them
+#                             correctly. NOT a live capability check -- it never calls the API.
+#   live-capability-eval  -- workflow_dispatch + a weekly schedule ONLY, never pull_request.
+#                             Deletes the cached prediction CSVs, re-runs both eval scripts
+#                             against the real models, then grades the fresh numbers with the
+#                             same gate. This is the "did the model/prompt/retrieval actually
+#                             get worse" check, and the only job that touches
+#                             ANTHROPIC_API_KEY. It never commits refreshed numbers back;
+#                             updating the checked-in snapshot stays a human PR.
+#
+# Deliberately does NOT use pull_request_target: that trigger runs untrusted fork code in
+# the base repo's context WITH secrets, which is exactly the fork-secret-exposure hole a
+# public repo cannot risk. Restricting the paid job to workflow_dispatch + schedule means a
+# fork PR has no event that can invoke it at all.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Monday 13:00 UTC. Weekly (not daily) bounds API spend -- see ADR-007 for the cadence
+    # call; changing this line is a conscious cost decision, not a drive-by edit.
+    - cron: "0 13 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  offline-gate:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    # Job-scoped, not workflow-scoped: this job's group must never collide with
+    # live-capability-eval's (see that job's concurrency block for why).
+    concurrency:
+      group: ${{ github.workflow }}-offline-gate-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      # --frozen fails the build if uv.lock drifts from pyproject.toml rather than
+      # silently re-resolving (same guarantee as tests.yml).
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # Grades the prediction CSVs already committed in evals/ -- no ANTHROPIC_API_KEY, no
+      # network call, fully deterministic.
+      - name: Score committed predictions against evals/thresholds.toml
+        run: uv run python src/eval_gate.py
+
+  live-capability-eval:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Its own group, distinct from offline-gate's. A shared workflow-level group
+    # (workflow+ref) would put both jobs in "evals-refs/heads/main" together, so a
+    # routine push landing while the Monday schedule is mid-run would
+    # cancel-in-progress this already-paid-for live run -- wasted API spend, and a
+    # cancelled run doesn't show up as a red failure.
+    concurrency:
+      group: ${{ github.workflow }}-live-capability-eval-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # Fails loudly and immediately if the secret is missing, instead of letting
+      # gold_eval.py's make_client() fail deep into a partially-run, non-resumable job.
+      - name: Require ANTHROPIC_API_KEY
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY secret is not set on this repo. Run"
+            echo "::error::'gh secret set ANTHROPIC_API_KEY -R sanlee-ys/defense-news-classifier'"
+            echo "::error::to go live -- see README.md's 'Evals as a CI quality gate' section."
+            exit 1
+          fi
+
+      # Force a fresh prediction pass: delete the cached CSVs so both scripts re-run every
+      # gold snippet against the live models rather than resuming/skipping (their normal,
+      # cost-saving default for local use -- see the docstrings in gold_eval.py /
+      # gold_eval_rag.py). This job never commits the refreshed numbers back; updating the
+      # checked-in snapshot stays a deliberate, reviewed human PR.
+      - name: Delete cached predictions to force a fresh live run
+        run: rm -f evals/gold_predictions.csv evals/gold_rag_predictions.csv
+
+      - name: Re-run the baseline + judge eval (~108 API calls)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: uv run python src/gold_eval.py
+
+      - name: Re-run the retrieval-grounded eval (~54 API calls)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: uv run python src/gold_eval_rag.py
+
+      # Same gate, same floors as offline-gate -- graded against the numbers just produced
+      # by the live models above, not the committed snapshot.
+      - name: Score fresh predictions against evals/thresholds.toml
+        run: uv run python src/eval_gate.py

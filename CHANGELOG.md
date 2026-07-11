@@ -11,6 +11,7 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ### Added
 - **`Jenkinsfile`** — the CI pipeline expressed as a declarative Jenkins pipeline (checkout → `uv sync` → parallel ruff/black/mypy → unit tests with the coverage gate), mirroring `.github/workflows/tests.yml`. GitHub Actions stays the live gate; this is pipeline-as-code for a Jenkins controller (none runs it here, so it has no status check).
+- **Evals-as-CI capability gate** (`.github/workflows/evals.yml`, `src/eval_gate.py`, `evals/thresholds.toml`) — wires the v2 gold-set evals (`gold_eval.py`, `gold_eval_rag.py`) into CI as two gates split by API cost: a free offline gate on every push/PR that grades the prediction CSVs already committed against threshold floors, and a paid live gate on `workflow_dispatch` + a weekly schedule only (never `pull_request`, and never `pull_request_target`) that re-runs the real models first and never commits the refreshed numbers back. `build_report()` in both eval scripts now reads from an extracted `metrics()` function — same printed output, now also machine-readable. `Jenkinsfile` gets a matching parity-only offline stage. See [ADR-007](decisions/007-evals-as-ci-gate.md).
 
 The `{category, operational_domain}` output contract is unchanged throughout. The
 classifier's live surface remains the `/classify` HTTP provider.

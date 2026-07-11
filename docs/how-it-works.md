@@ -93,6 +93,22 @@ measured how good it actually is, and can tell you exactly where it fails."*
 
 ---
 
+## A third job: the gate enforces the bar
+
+The one-sentence version at the top names two jobs: the classifier sorts, the evaluator
+grades. There's a third: **the gate enforces the bar.** `src/gold_eval.py` and
+`src/gold_eval_rag.py` measure the classifier against the human-labeled gold set and print
+a report — but a report nobody re-checks isn't actually a quality bar, it's a snapshot that
+can go stale the moment a prompt or model changes. `.github/workflows/evals.yml` closes
+that gap: `src/eval_gate.py` grades the same numbers against floors in
+`evals/thresholds.toml` and fails the build if one is breached, split into a free offline
+gate (every push/PR, grades what's already committed) and a paid live gate
+(`workflow_dispatch` + a weekly schedule only, re-runs the models first). Full rationale —
+including why the live gate is deliberately never triggered by a pull request — in
+[ADR-007](../decisions/007-evals-as-ci-gate.md).
+
+---
+
 ## What the measurement found
 
 - **Operational domain: 97.3%.** Essentially solved. Air/land/sea/cyber/space/multi
