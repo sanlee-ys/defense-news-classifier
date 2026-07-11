@@ -149,6 +149,56 @@ def test_classify_raises_immediately_on_invalid_label_no_resample(tool_client_se
     assert client.messages.calls == 1  # no re-sample attempted
 
 
+# --- refusal handling -----------------------------------------------------
+#
+# A safety-classifier refusal is a successful HTTP 200 with
+# stop_reason == "refusal" and no tool_use block -- not an SDK exception. These
+# check classify() raises a clear, distinct ClassificationRefusalError instead
+# of the bare StopIteration the tool-block extraction would otherwise throw.
+
+
+def test_classify_raises_refusal_error_on_refusal(refusal_client):
+    client = refusal_client(category="cyber", explanation="declined for safety")
+    with pytest.raises(classify.ClassificationRefusalError):
+        classify.classify(client, "Some defense-news snippet.")
+
+
+def test_classify_refusal_error_message_includes_category(refusal_client):
+    client = refusal_client(category="cyber", explanation="declined for safety")
+    with pytest.raises(classify.ClassificationRefusalError) as exc:
+        classify.classify(client, "Some defense-news snippet.")
+    # The category/explanation ride along in the message so a refusal is legible.
+    assert "cyber" in str(exc.value)
+    assert "refusal" in str(exc.value)
+
+
+def test_classify_raises_refusal_even_without_stop_details(refusal_client):
+    # stop_details can be absent/None on a refusal; the guard keys on
+    # stop_reason alone and must still raise.
+    client = refusal_client()
+    with pytest.raises(classify.ClassificationRefusalError):
+        classify.classify(client, "Some defense-news snippet.")
+
+
+def test_refusal_error_is_distinct_from_invalid_label_and_batch_item():
+    # A refusal is neither a validation failure nor a batch-transport failure --
+    # callers must be able to catch it on its own.
+    assert not issubclass(
+        classify.ClassificationRefusalError, classify.InvalidLabelError
+    )
+    assert not issubclass(classify.ClassificationRefusalError, classify.BatchItemError)
+
+
+def test_normal_response_is_not_treated_as_refusal(tool_client):
+    # Guard against a false positive: a normal (stop_reason-less) fake response
+    # must classify fine, proving the refusal branch doesn't fire on non-refusals.
+    client = tool_client({"category": "procurement", "operational_domain": "air"})
+    assert (
+        classify.classify(client, "Pentagon awards contract.")["category"]
+        == "procurement"
+    )
+
+
 # --- Message Batches API path ---------------------------------------------
 
 
@@ -228,11 +278,80 @@ def test_parse_batch_result_raises_invalid_label_error_on_bad_labels():
         classify.parse_batch_result(result)
 
 
+def test_parse_batch_result_raises_refusal_error_on_refusal_message():
+    # A "succeeded" batch item can still be a refusal (transport worked, model
+    # declined): stop_reason=='refusal' with no tool_use block. Must raise the
+    # distinct refusal error, not StopIteration from the tool-block extraction.
+    result = types_namespace(
+        custom_id="row-4",
+        result=types_namespace(
+            type="succeeded",
+            message=types_namespace(
+                content=[],
+                stop_reason="refusal",
+                stop_details=types_namespace(category="cyber", explanation="declined"),
+            ),
+        ),
+    )
+    with pytest.raises(classify.ClassificationRefusalError) as exc:
+        classify.parse_batch_result(result)
+    # The custom_id is threaded through so a bulk-run refusal points at its row.
+    assert "row-4" in str(exc.value)
+
+
 def types_namespace(**kwargs):
     """Tiny stand-in for the SDK's batch result objects (attribute access only)."""
     import types
 
     return types.SimpleNamespace(**kwargs)
+
+
+# --- cache diagnostics ----------------------------------------------------
+#
+# Visibility helpers for WHEN classify()'s prompt cache engages. count_prefix_tokens
+# hits the (mocked) count_tokens endpoint; cacheable_prefix_gap is pure arithmetic
+# over the documented per-model floors.
+
+
+def test_count_prefix_tokens_returns_input_tokens(count_tokens_client):
+    client = count_tokens_client(850)
+    assert classify.count_prefix_tokens(client) == 850
+
+
+def test_count_prefix_tokens_counts_tool_schema_and_system(count_tokens_client):
+    client = count_tokens_client(850)
+    classify.count_prefix_tokens(client)
+    kwargs = client.messages.last_kwargs
+    # The prefix that must clear the floor is tools + system; both are counted.
+    assert kwargs["tools"] == [classify.CLASSIFY_TOOL]
+    assert kwargs["system"][0]["text"] == classify.SYSTEM_PROMPT
+    assert kwargs["model"] == classify.MODEL
+
+
+def test_count_prefix_tokens_honors_model_and_prompt_overrides(count_tokens_client):
+    client = count_tokens_client(1234)
+    classify.count_prefix_tokens(
+        client, model="claude-opus-4-8", system_prompt="REVISED prompt"
+    )
+    kwargs = client.messages.last_kwargs
+    assert kwargs["model"] == "claude-opus-4-8"
+    assert kwargs["system"][0]["text"] == "REVISED prompt"
+
+
+def test_cacheable_prefix_gap_positive_when_below_floor():
+    # 850 tokens against Sonnet 4.6's 2048 floor -> 1198 tokens short (no-op).
+    gap = classify.cacheable_prefix_gap(850, model="claude-sonnet-4-6")
+    assert gap == 2048 - 850
+
+
+def test_cacheable_prefix_gap_non_positive_when_clearing_floor():
+    gap = classify.cacheable_prefix_gap(3000, model="claude-sonnet-4-6")
+    assert gap == 2048 - 3000
+    assert gap <= 0
+
+
+def test_cacheable_prefix_gap_none_for_unknown_model():
+    assert classify.cacheable_prefix_gap(850, model="some-unlisted-model") is None
 
 
 # --- make_client() -------------------------------------------------------
