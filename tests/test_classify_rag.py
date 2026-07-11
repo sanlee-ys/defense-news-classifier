@@ -4,6 +4,7 @@ Offline: the LLM call is mocked via the tool_client fixture, and a tiny in-memor
 Retriever stands in for the corpus.
 """
 
+import classify
 import classify_rag
 from retrieve import Doc, Hit, Retriever
 
@@ -98,3 +99,22 @@ def test_grounded_context_reaches_the_model_as_search_result_blocks(tool_client)
     text_blocks = [b for b in content if b["type"] == "text"]
     assert any("retrieved for reference" in b["text"] for b in text_blocks)
     assert any("Now classify THIS article:" in b["text"] for b in text_blocks)
+
+
+def test_rag_path_is_pinned_to_its_own_model_not_the_workhorse(tool_client):
+    """The RAG path defaults to RAG_MODEL (4.6), decoupled from the workhorse.
+
+    ``classify.MODEL`` is now claude-sonnet-5; the grounded path must stay on 4.6.
+    Locks in ADR-010's transitional split: BM25 grounding regresses the domain field
+    once the ungrounded Sonnet-5 baseline is already strong, so the grounded path stays
+    on 4.6. If a future workhorse bump silently re-coupled these (e.g. by reintroducing
+    ``from classify import MODEL``), this test fails instead of the RAG delta gate.
+    """
+    client = tool_client({"category": "operations", "operational_domain": "sea"})
+    retriever = Retriever(_docs())
+
+    classify_rag.classify_grounded(client, "a carrier strike group at sea", retriever)
+
+    assert classify_rag.RAG_MODEL == "claude-sonnet-4-6"
+    assert classify_rag.RAG_MODEL != classify.MODEL
+    assert client.messages.last_kwargs["model"] == "claude-sonnet-4-6"

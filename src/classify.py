@@ -7,10 +7,11 @@ Usable as a module (import classify) or as a CLI tool.
 import json
 import os
 import sys
-from typing import cast
+from typing import Literal, cast
 
 import anthropic
 from anthropic.types import (
+    OutputConfigParam,
     SearchResultBlockParam,
     TextBlockParam,
     ToolParam,
@@ -26,7 +27,22 @@ UserContent = str | list[TextBlockParam | SearchResultBlockParam]
 
 CATEGORIES = ["procurement", "operations", "policy", "technology", "industry"]
 DOMAINS = ["air", "land", "sea", "cyber", "space", "multi"]
-MODEL = "claude-sonnet-4-6"
+MODEL = "claude-sonnet-5"
+
+# Effort hint sent on every classify call via output_config. On Sonnet 5 (and the
+# Opus judge) `output_config.effort` is the replacement lever for the removed manual
+# thinking budget: it caps how much the model thinks before answering. "low" is right
+# for this task -- a single forced-tool structured classification has nothing to reason
+# through, and strict:true already guarantees a schema-valid answer.
+#
+# Measured caveat (see the migration report): because classify() FORCES tool use
+# (tool_choice={"type":"tool",...}), the model must emit the tool immediately and never
+# thinks -- so on the current call shape `effort` is provably a no-op (identical tokens
+# and labels at low / high / adaptive / disabled). It is set explicitly anyway so the
+# call stays cheap-by-default if tool_choice is ever relaxed (e.g. a reasoning variant),
+# and so the intent is on the wire rather than left to Sonnet 5's adaptive-on-by-default.
+EFFORT: Literal["low", "medium", "high", "xhigh", "max"] = "low"
+OUTPUT_CONFIG: OutputConfigParam = {"effort": EFFORT}
 
 # System prompt gives Claude the label definitions so it applies them consistently.
 # Without this, the model has to infer what "procurement" vs "industry" means from
@@ -115,13 +131,13 @@ class ClassificationRefusalError(RuntimeError):
     covers, hence a separate ``RuntimeError`` subclass callers can catch on its
     own.
 
-    Today's workhorse (``claude-sonnet-4-6``) essentially never refuses this
-    benign public-defense-news content, so this branch is a harmless no-op now.
-    It is added defensively ahead of a possible migration to Sonnet 5 -- the
-    first Sonnet-tier model with real-time cyber safeguards -- where a
-    false-positive decline on defense-domain text becomes a real (if rare)
-    possibility, and this is the guard that keeps such a decline legible instead
-    of surfacing as a confusing ``StopIteration`` deep in result parsing.
+    The workhorse is now ``claude-sonnet-5`` -- the first Sonnet-tier model with
+    real-time cyber safeguards -- so this branch is load-bearing, not just
+    defensive: a false-positive decline on defense-domain text is a real (if
+    rare) possibility here, and this guard keeps such a decline legible instead
+    of surfacing as a confusing ``StopIteration`` deep in result parsing. (The
+    Opus judge, ``claude-opus-4-8``, also carries these safeguards.) A live gold
+    eval on this content saw no refusals, so it stays rare in practice.
     """
 
 
@@ -195,10 +211,15 @@ def classify(
             first-class ``search_result`` blocks; either is forwarded to the
             API's user-message ``content`` field unchanged.
         temperature: Optional sampling temperature. Left at the API default
-            when ``None``; set to ``0`` for the most repeatable output, or pass
-            a fixed value when measuring run-to-run variance.
+            (the SDK ``omit`` sentinel) when ``None``. NOTE: Sonnet 5 and the
+            other current models reject any *non-default* sampling value with an
+            HTTP 400, so in practice this must stay ``None`` -- it is retained
+            only so a caller on an older model can still pin it. Determinism is
+            no longer sought via temperature: ``strict: true`` already guarantees
+            a schema-valid label, and run-to-run stability is measured
+            empirically (see ``stability.py``).
         model: Which Claude model classifies. Defaults to the workhorse
-            (claude-sonnet-4-6); pass a higher tier (e.g. the Opus judge) to run
+            (claude-sonnet-5); pass a higher tier (e.g. the Opus judge) to run
             the same task on a stronger model.
         system_prompt: The instruction block (label definitions + rules) sent as
             the system prompt. Defaults to the module ``SYSTEM_PROMPT`` so callers
@@ -221,7 +242,7 @@ def classify(
     # across many calls in a row -- eval.py/gold_eval.py across every row of
     # their dataset, the optimize.py loop across ~354 scoring calls per
     # iteration -- so this is the textbook repeated-prefix caching case.
-    # Below Sonnet 4.6's ~2048-token minimum cacheable prefix the marker is a
+    # Below Sonnet 5's ~2048-token minimum cacheable prefix the marker is a
     # harmless no-op (cache_creation_input_tokens stays 0, no error); it
     # starts paying off once a prompt grows past that, which happens in
     # practice as optimize.py's loop revises and lengthens the prompt.
@@ -240,6 +261,7 @@ def classify(
         tools=[CLASSIFY_TOOL],
         tool_choice={"type": "tool", "name": "classify_article"},
         messages=[{"role": "user", "content": text}],
+        output_config=OUTPUT_CONFIG,
         temperature=anthropic.omit if temperature is None else temperature,
     )
     # Guard the refusal case before extracting the tool block: a refusal is an
@@ -282,7 +304,8 @@ def build_batch_request(
     so a batch run over the same system_prompt benefits from prompt caching
     the same way the synchronous path does once the prompt is long enough to
     qualify (see classify()'s docstring/comment for the current token-length
-    caveat on claude-sonnet-4-6).
+    caveat on claude-sonnet-5). It also mirrors the ``output_config.effort``
+    hint so a batch run behaves the same as the synchronous path.
 
     Args:
         custom_id: Caller-chosen id used to match this request's result back
@@ -291,7 +314,7 @@ def build_batch_request(
             requests list.
         text: Raw article snippet to classify.
         model: Which Claude model classifies. Defaults to the workhorse
-            (claude-sonnet-4-6); pass a higher tier (e.g. the Opus judge) for
+            (claude-sonnet-5); pass a higher tier (e.g. the Opus judge) for
             the gold-eval judge pass.
         system_prompt: The instruction block sent as the system prompt.
             Defaults to the module ``SYSTEM_PROMPT``.
@@ -314,6 +337,7 @@ def build_batch_request(
         "tools": [CLASSIFY_TOOL],
         "tool_choice": {"type": "tool", "name": "classify_article"},
         "messages": [{"role": "user", "content": text}],
+        "output_config": OUTPUT_CONFIG,
     }
     if temperature is not None:
         params["temperature"] = temperature
@@ -354,10 +378,11 @@ def parse_batch_result(result) -> dict:
 # Cache-diagnostics instrumentation -- visibility into WHEN classify()'s prompt
 # cache actually engages, without touching classify()'s hot path.
 #
-# classify() marks its system block with cache_control, but on claude-sonnet-4-6
+# classify() marks its system block with cache_control, but on claude-sonnet-5
 # the cache silently does nothing until the cached prefix (tool schema + system
 # prompt) crosses the model's ~2048-token minimum cacheable-prefix floor. The
-# current prefix sits well under that, so the marker is a no-op today. These
+# current prefix (~876 tokens on Sonnet 5) sits well under that, so the marker
+# is a no-op today. These
 # helpers measure exactly how far under, using the free /v1/messages/count_tokens
 # endpoint -- so the prompt-optimization loop (which lengthens the system prompt
 # over iterations) can see when caching will start paying off. The live
@@ -371,7 +396,8 @@ def parse_batch_result(result) -> dict:
 # project actually calls are listed (workhorse + Opus judge). Unknown models
 # return None from cacheable_prefix_gap().
 MIN_CACHEABLE_PREFIX_TOKENS = {
-    "claude-sonnet-4-6": 2048,  # current workhorse
+    "claude-sonnet-5": 2048,  # current workhorse (inferred: same-tier as Sonnet 4.6 / Fable 5)
+    "claude-sonnet-4-6": 2048,  # prior workhorse, kept for back-compat
     "claude-opus-4-8": 4096,  # gold-eval judge
 }
 

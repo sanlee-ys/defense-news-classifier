@@ -23,13 +23,28 @@ import anthropic
 import pandas as pd
 
 from classify import make_client
-from classify_rag import classify_grounded
+from classify_rag import RAG_MODEL, classify_grounded
 from eval import compute_metrics, macro_average
-from gold_eval import PREDS_PATH, load_gold
+from gold_eval import load_gold
 from retrieve import Retriever, load_corpus
 
 RAG_PREDS_PATH = "evals/gold_rag_predictions.csv"
 REPORT_PATH = "evals/gold_rag_eval.txt"
+
+# The RAG comparison's BASELINE = the SAME model as the grounded run, ungrounded.
+# It must not be gold_eval.PREDS_PATH any more: that file is the workhorse baseline,
+# now claude-sonnet-5, while the RAG path is pinned to claude-sonnet-4-6 (see
+# classify_rag.RAG_MODEL / ADR-010). Comparing a 4.6 grounded run against a Sonnet-5
+# ungrounded baseline would conflate the model change with the grounding change and
+# make "does grounding help?" unmeasurable (and spuriously fail the delta gate).
+# So the RAG eval carries its own frozen claude-sonnet-4-6 ungrounded snapshot -- the
+# pre-migration gold_predictions.csv, before the workhorse moved to Sonnet 5. It is a
+# committed fixture, not regenerated on each live run (the live evals job deletes only
+# gold_predictions.csv / gold_rag_predictions.csv, never this file), which is fine for
+# the transitional split: both RAG arms stay on one model. When ADR-010's follow-up
+# lands (drop BM25 for the domain field on Sonnet 5, or re-tune retrieval against the
+# new baseline), this fixture and RAG_MODEL move together.
+RAG_BASELINE_PREDS_PATH = "evals/gold_rag_baseline_predictions.csv"
 RETRIEVE_K = 3
 SLEEP_BETWEEN_CALLS = 0.3
 
@@ -223,8 +238,9 @@ def build_report(merged: pd.DataFrame) -> str:
         "v2 STEP 3 -- RETRIEVAL-GROUNDED vs BASELINE",
         "=" * 62,
         "",
-        f"Snippets : {m['n']}    retrieve k={RETRIEVE_K}",
+        f"Snippets : {m['n']}    retrieve k={RETRIEVE_K}    model : {RAG_MODEL}",
         "Baseline = src/classify.py (no retrieval); Grounded = + top-k corpus context.",
+        f"Both arms run on {RAG_MODEL} (the RAG pin, ADR-010) -- NOT the Sonnet-5 workhorse.",
         "",
         f"{'':<20}{'baseline':>10}{'grounded':>10}{'delta':>10}",
     ]
@@ -264,7 +280,9 @@ def main() -> None:
     else:
         print("All grounded predictions already present -- skipping API calls.\n")
 
-    base = pd.read_csv(PREDS_PATH)[["id", "pred_category", "pred_operational_domain"]]
+    base = pd.read_csv(RAG_BASELINE_PREDS_PATH)[
+        ["id", "pred_category", "pred_operational_domain"]
+    ]
     rag = pd.read_csv(RAG_PREDS_PATH)
     merged = (
         gold.rename(columns={"domain": "operational_domain"})

@@ -79,8 +79,14 @@ def _rag_merged(gold: pd.DataFrame) -> pd.DataFrame:
 
     Returns:
         Gold merged with both baseline (``pred_*``) and grounded (``rag_*``) predictions.
+
+    The RAG baseline is ``gold_eval_rag.RAG_BASELINE_PREDS_PATH`` (the RAG path's own
+    frozen claude-sonnet-4-6 ungrounded snapshot), NOT ``gold_eval.PREDS_PATH`` (the
+    workhorse baseline, now claude-sonnet-5). Both RAG arms must be the same model for
+    the grounding deltas to mean anything -- see gold_eval_rag.RAG_BASELINE_PREDS_PATH
+    and ADR-010.
     """
-    base = pd.read_csv(gold_eval.PREDS_PATH)[
+    base = pd.read_csv(gold_eval_rag.RAG_BASELINE_PREDS_PATH)[
         ["id", "pred_category", "pred_operational_domain"]
     ]
     rag = pd.read_csv(gold_eval_rag.RAG_PREDS_PATH)

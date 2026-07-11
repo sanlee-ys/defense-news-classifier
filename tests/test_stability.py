@@ -101,10 +101,55 @@ def test_summarize_empty_raises():
         stability.summarize_runs([])
 
 
+# --- label_consistency ---------------------------------------------------
+
+
+def _preds(rows):
+    """Rows = list of (id, pred_cat, pred_dom) for one run."""
+    return pd.DataFrame(
+        [
+            {"id": i, "pred_category": c, "pred_operational_domain": d}
+            for i, c, d in rows
+        ]
+    )
+
+
+def test_label_consistency_all_runs_agree_is_unit():
+    frames = [
+        _preds([("a", "policy", "air"), ("b", "industry", "sea")]),
+        _preds([("a", "policy", "air"), ("b", "industry", "sea")]),
+    ]
+    c = stability.label_consistency(frames)
+    assert c["category_consistency"] == 1.0
+    assert c["domain_consistency"] == 1.0
+
+
+def test_label_consistency_counts_disagreements():
+    frames = [
+        _preds([("a", "policy", "air"), ("b", "industry", "sea")]),
+        _preds([("a", "policy", "air"), ("b", "procurement", "land")]),  # b flips both
+    ]
+    c = stability.label_consistency(frames)
+    assert c["category_consistency"] == 0.5  # only "a" stable
+    assert c["domain_consistency"] == 0.5
+
+
+def test_label_consistency_single_run_is_trivially_unit():
+    frames = [_preds([("a", "policy", "air"), ("b", "industry", "sea")])]
+    c = stability.label_consistency(frames)
+    assert c["category_consistency"] == 1.0
+    assert c["domain_consistency"] == 1.0
+
+
+def test_label_consistency_empty_raises():
+    with pytest.raises(ValueError):
+        stability.label_consistency([])
+
+
 # --- build_stability_report ----------------------------------------------
 
 
-def test_report_includes_runs_and_noise_guidance():
+def test_report_includes_runs_noise_guidance_and_consistency():
     per_run = [
         {
             "category_accuracy": 0.79,
@@ -120,24 +165,14 @@ def test_report_includes_runs_and_noise_guidance():
         },
     ]
     summary = stability.summarize_runs(per_run)
-    report = stability.build_stability_report(per_run, summary, temperature=None)
+    consistency = {"category_consistency": 0.98, "domain_consistency": 0.99}
+    report = stability.build_stability_report(per_run, summary, consistency)
 
-    assert "Runs        : 2" in report
-    assert "Temperature : API default" in report
+    assert "Runs     : 2" in report
+    # The temperature knob is gone; sampling is the API default now.
+    assert "Temperature" not in report
     assert "category_accuracy" in report
     assert "2x the" in report  # the noise-floor guidance is present
+    assert "Label consistency" in report
+    assert "0.9800" in report and "0.9900" in report  # the consistency numbers
     assert "run 1:" in report and "run 2:" in report
-
-
-def test_report_shows_explicit_temperature():
-    per_run = [
-        {
-            "category_accuracy": 0.79,
-            "category_macro_f1": 0.765,
-            "domain_accuracy": 0.973,
-            "domain_macro_f1": 0.973,
-        }
-    ]
-    summary = stability.summarize_runs(per_run)
-    report = stability.build_stability_report(per_run, summary, temperature=0.0)
-    assert "Temperature : 0.0" in report

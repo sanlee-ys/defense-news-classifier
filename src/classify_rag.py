@@ -24,8 +24,22 @@ from __future__ import annotations
 import anthropic
 from anthropic.types import SearchResultBlockParam, TextBlockParam
 
-from classify import MODEL, classify
+from classify import classify
 from retrieve import Hit, Retriever
+
+# RAG-path model pin -- deliberately decoupled from classify.MODEL (the workhorse,
+# now claude-sonnet-5). See decisions/010-rag-path-model-pin.md.
+#
+# The workhorse migration to Sonnet 5 surfaced a real, reproduced regression on the
+# GROUNDED path only: ungrounded Sonnet-5 domain accuracy is already 94.4%, so BM25
+# grounding flipped from signal to noise for the domain field and dragged grounded
+# domain accuracy down to 85.2% (-9.3% vs a -3% floor). Category grounding was
+# unaffected (still +1.3% under Sonnet 5). That is a question about the RAG feature
+# on the new baseline, not a defect in the workhorse migration -- so the RAG path
+# stays pinned to claude-sonnet-4-6, where grounding is a measured no-regression,
+# until that follow-up is decided (ADR-010). This is a transitional split, not a
+# permanent quiet fork: `RAG_MODEL` is one line to move once the follow-up lands.
+RAG_MODEL = "claude-sonnet-4-6"
 
 GROUNDING_INSTRUCTION = (
     "Below are excerpts from related real defense-news articles, retrieved for reference. "
@@ -83,7 +97,7 @@ def classify_grounded(
     text: str,
     retriever: Retriever,
     k: int = 3,
-    model: str = MODEL,
+    model: str = RAG_MODEL,
 ) -> dict:
     """Classify ``text`` grounded in the top-k retrieved corpus docs; attach their citations.
 
@@ -97,7 +111,9 @@ def classify_grounded(
         text: Article snippet to classify.
         retriever: Retriever used to fetch the top-k grounding docs.
         k: Number of retrieved docs to include as context.
-        model: Which Claude model classifies.
+        model: Which Claude model classifies. Defaults to ``RAG_MODEL``
+            (claude-sonnet-4-6), the RAG path's own pin -- intentionally NOT the
+            workhorse (claude-sonnet-5); see ``RAG_MODEL`` / ADR-010.
 
     Returns:
         Dict with keys ``category``, ``operational_domain``, and ``citations``

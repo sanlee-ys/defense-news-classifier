@@ -65,6 +65,9 @@ def test_classify_sends_expected_request(tool_client):
     assert kwargs["messages"] == [
         {"role": "user", "content": "New defense strategy published."}
     ]
+    # The effort hint rides along via output_config (the Sonnet 5 lever that
+    # replaced the removed manual thinking budget).
+    assert kwargs["output_config"] == {"effort": classify.EFFORT}
 
 
 def test_classify_sends_custom_system_prompt(tool_client):
@@ -213,21 +216,22 @@ def test_build_batch_request_matches_classify_call_shape():
     # Reuses the same cache_control marker as the synchronous path.
     assert params["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert params["system"][0]["text"] == classify.SYSTEM_PROMPT
+    # Mirrors the synchronous path's effort hint; temperature is omitted (the
+    # API default) -- current models reject a non-default sampling value.
+    assert params["output_config"] == {"effort": classify.EFFORT}
     assert "temperature" not in params
 
 
-def test_build_batch_request_honors_model_prompt_and_temperature_overrides():
+def test_build_batch_request_honors_model_and_prompt_overrides():
     req = classify.build_batch_request(
         "row-2",
         "Some article text.",
         model="claude-opus-4-8",
         system_prompt="REVISED prompt",
-        temperature=0.0,
     )
     params = req["params"]
     assert params["model"] == "claude-opus-4-8"
     assert params["system"][0]["text"] == "REVISED prompt"
-    assert params["temperature"] == 0.0
 
 
 def test_parse_batch_result_returns_validated_labels():

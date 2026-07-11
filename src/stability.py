@@ -10,9 +10,15 @@ Rule of thumb it lets you apply: a difference between two configs is only
 meaningful if it clears roughly 2x the run-to-run standard deviation measured
 here. Below that, treat it as noise.
 
+It also reports a direct **label-consistency** number: the fraction of items
+whose predicted label is identical across *every* run. This replaces the old
+``temperature=0`` determinism knob -- current models (Sonnet 5+) reject any
+non-default sampling value with a 400, and ``strict: true`` already guarantees a
+schema-valid label, so run-to-run stability is now *measured* empirically here
+rather than *forced* via temperature.
+
 Usage:
-    uv run python src/stability.py --runs 5                 # 5 passes, API default temp
-    uv run python src/stability.py --runs 5 --temperature 0 # pin temperature to 0
+    uv run python src/stability.py --runs 5   # 5 passes at the API-default sampling
 
 Each run's raw predictions are saved to evals/runs/predictions_run{k}.csv, and
 the summary is written to evals/stability.txt. Needs ANTHROPIC_API_KEY.
@@ -99,28 +105,58 @@ def summarize_runs(per_run: list[dict]) -> dict:
     return summary
 
 
+def label_consistency(pred_frames: list[pd.DataFrame]) -> dict:
+    """Fraction of items whose predicted label is identical across every run.
+
+    This is the direct empirical replacement for the old ``temperature=0``
+    determinism check: rather than *forcing* repeatability with a sampling
+    parameter (which current models reject), it *measures* it. For each item id,
+    it asks whether all N runs produced the same ``category`` (and the same
+    ``operational_domain``); the reported number is the fraction that did. A
+    single run is trivially self-consistent, so this is only meaningful for N>=2.
+
+    Args:
+        pred_frames: One predictions DataFrame per run, each with columns
+            ``id``, ``pred_category``, ``pred_operational_domain``.
+
+    Returns:
+        Dict with keys ``category_consistency`` and ``domain_consistency``,
+        each a fraction in ``[0, 1]``.
+    """
+    if not pred_frames:
+        raise ValueError("pred_frames must contain at least one run")
+    cat = pd.concat([f.set_index("id")["pred_category"] for f in pred_frames], axis=1)
+    dom = pd.concat(
+        [f.set_index("id")["pred_operational_domain"] for f in pred_frames], axis=1
+    )
+    return {
+        "category_consistency": round(float((cat.nunique(axis=1) == 1).mean()), 4),
+        "domain_consistency": round(float((dom.nunique(axis=1) == 1).mean()), 4),
+    }
+
+
 def build_stability_report(
-    per_run: list[dict], summary: dict, temperature: float | None
+    per_run: list[dict], summary: dict, consistency: dict
 ) -> str:
     """Format a human-readable stability report.
 
     Args:
         per_run: Per-run metric dicts.
         summary: Aggregated stats from ``summarize_runs``.
-        temperature: Temperature used for the runs (``None`` = API default).
+        consistency: Per-item label-agreement fractions from ``label_consistency``.
 
     Returns:
         Multi-line report string.
     """
     n = len(per_run)
-    temp_label = "API default" if temperature is None else str(temperature)
     lines = [
         "=" * 70,
         "DEFENSE NEWS CLASSIFIER — STABILITY (multi-run) REPORT",
         "=" * 70,
         "",
-        f"Runs        : {n}",
-        f"Temperature : {temp_label}",
+        f"Runs     : {n}",
+        "Sampling : API default (no temperature -- current models reject it; "
+        "strict:true guarantees a valid label)",
         "",
         f"{'metric':<22}{'mean':>8}{'std':>8}{'min':>8}{'max':>8}{'spread':>8}",
         "-" * 62,
@@ -134,9 +170,15 @@ def build_stability_report(
         )
     lines += [
         "",
+        "Label consistency (fraction of items with the SAME label across all runs):",
+        f"  category : {consistency['category_consistency']:.4f}",
+        f"  domain   : {consistency['domain_consistency']:.4f}",
+        "",
         "Reading this: 'std' is the run-to-run noise floor. A difference between",
         "two prompt/config variants is only meaningful if it clears about 2x the",
         "std for that metric; smaller gaps are indistinguishable from sampling noise.",
+        "Label consistency is the direct determinism measure that replaces the old",
+        "temperature=0 knob: 1.000 means every item got the same label every run.",
         "",
         "Per-run values:",
     ]
@@ -152,13 +194,12 @@ def build_stability_report(
 # ---------------------------------------------------------------------------
 
 
-def run_one_pass(client, df: pd.DataFrame, temperature: float | None) -> pd.DataFrame:
+def run_one_pass(client, df: pd.DataFrame) -> pd.DataFrame:
     """Classify every article once and return a predictions DataFrame.
 
     Args:
         client: Authenticated Anthropic client.
         df: Dataset with columns ``id`` and ``text``.
-        temperature: Sampling temperature to pass through to the classifier.
 
     Returns:
         DataFrame with columns ``id``, ``pred_category``,
@@ -167,7 +208,7 @@ def run_one_pass(client, df: pd.DataFrame, temperature: float | None) -> pd.Data
     rows = []
     total = len(df)
     for i, (_, row) in enumerate(df.iterrows()):
-        pred = classify_with_retry(client, row["text"], temperature=temperature)
+        pred = classify_with_retry(client, row["text"])
         rows.append(
             {
                 "id": row["id"],
@@ -188,12 +229,6 @@ def main() -> None:
     """
     parser = argparse.ArgumentParser(description="Multi-run eval stability harness.")
     parser.add_argument("--runs", type=int, default=5, help="number of full passes")
-    parser.add_argument(
-        "--temperature",
-        type=float,
-        default=None,
-        help="sampling temperature (default: API default)",
-    )
     args = parser.parse_args()
 
     os.makedirs(RUNS_DIR, exist_ok=True)
@@ -201,21 +236,23 @@ def main() -> None:
     n_calls = args.runs * len(df)
     print(
         f"Running {args.runs} passes over {len(df)} articles "
-        f"= {n_calls} API calls (temperature: "
-        f"{'default' if args.temperature is None else args.temperature}).\n"
+        f"= {n_calls} API calls (API-default sampling).\n"
     )
 
     client = make_client()
     per_run = []
+    pred_frames = []
     for k in range(1, args.runs + 1):
         print(f"Run {k}/{args.runs}:", flush=True)
-        preds = run_one_pass(client, df, args.temperature)
+        preds = run_one_pass(client, df)
         preds.to_csv(f"{RUNS_DIR}/predictions_run{k}.csv", index=False)
+        pred_frames.append(preds)
         merged = df.merge(preds, on="id")
         per_run.append(headline_metrics(merged))
 
     summary = summarize_runs(per_run)
-    report = build_stability_report(per_run, summary, args.temperature)
+    consistency = label_consistency(pred_frames)
+    report = build_stability_report(per_run, summary, consistency)
     with open(STABILITY_PATH, "w", encoding="utf-8") as f:
         f.write(report)
     print("\n" + report)

@@ -2,8 +2,9 @@
 v2 STEP 3 -- RETRIEVAL-GROUNDED vs BASELINE
 ==============================================================
 
-Snippets : 54    retrieve k=3
+Snippets : 54    retrieve k=3    model : claude-sonnet-4-6
 Baseline = src/classify.py (no retrieval); Grounded = + top-k corpus context.
+Both arms run on claude-sonnet-4-6 (the RAG pin, ADR-010) -- NOT the Sonnet-5 workhorse.
 
                       baseline  grounded     delta
 Category accuracy        88.9%     90.7%     +1.9%
