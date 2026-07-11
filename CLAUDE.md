@@ -91,7 +91,7 @@ Each web session runs in its own fresh container and can't see another session's
 ## Versioning roadmap
 
 v1 (synthetic, self-graded) and v2 (real text + human gold + BM25 retrieval) have shipped;
-**`v2.0.0` is the current release.** Releases follow **semver** (`MAJOR.MINOR.PATCH`) and
+**`v2.0.1` is the current release.** Releases follow **semver** (`MAJOR.MINOR.PATCH`) and
 [Keep a Changelog](https://keepachangelog.com/) — every milestone gets a git tag + a CHANGELOG
 entry. The line to internalize:
 
@@ -104,11 +104,11 @@ entry. The line to internalize:
   methodology changes so prior results/integrations no longer apply. **Bumping MAJOR resets
   MINOR *and* PATCH to 0.**
 
-A worked progression from today's `v2.0.0` (the concrete plan, not just the theory):
+A worked progression from `v2.0.0` (the concrete plan, not just the theory):
 
 | Version | Bump | What it would ship | Why that bump |
 |---|---|---|---|
-| **v2.0.1** | patch | Backfill the v2 eval modules' missing tests (`gold_eval_rag.py` is at 0% coverage, `gold_eval.py` 55%, `retrieve.py` 76%) and fix any edge cases they expose | Pure correctness/hardening — no feature, contract untouched |
+| **v2.0.1** | patch | Backfill the v2 eval modules' missing tests (`gold_eval_rag.py` is at 0% coverage, `gold_eval.py` 55%, `retrieve.py` 76%) and fix any edge cases they expose | Pure correctness/hardening — no feature, contract untouched — **shipped** |
 | **v2.1.0** | minor | **Scale the eval with the validated judge** — grade 300+ real snippets with the Opus judge (validated at 88.9% / 94.4%) and report confidence intervals, so n=54's noise floor shrinks | New capability, same output contract → MINOR; PATCH resets to 0 |
 | **v2.1.1** | patch | Fix whatever the scaled run exposes — e.g. a resume/batching bug in the judge harness or a larger-data CI timeout | A fix *on top of* v2.1.0 → third digit increments |
 | **v2.2.0** | minor | **Tiered model routing** — escalate only low-confidence `industry`-vs-`procurement` cases to Opus, measure the cost/quality trade | Additive, callers unaffected → MINOR again; PATCH back to 0 |
@@ -117,6 +117,19 @@ A worked progression from today's `v2.0.0` (the concrete plan, not just the theo
 Read straight down the third digit: it climbs *within* a line (`2.0.1`, `2.1.1`) and **resets to
 0 every time a digit to its left moves** (`2.1.0`, `2.2.0`, `3.0.0`). That reset rule is the
 whole game — a version number is a promise about what changed, not a counter.
+
+**Landed on `main`, not in the progression above (both still `[Unreleased]` in the CHANGELOG):**
+- **Evals-as-CI capability gate** ([ADR-007](decisions/007-evals-as-ci-gate.md)) — CI tooling
+  (wires the gold-set evals into CI as an offline PR gate plus a paid live gate). It does not
+  change the `{category, operational_domain}` output contract, so on its own it doesn't earn a
+  bump — it rides along with whichever version is next tagged.
+- **Rung-1 prompt-optimization loop, autonomy ladder L3** ([ADR-005](decisions/005-agentic-prompt-optimization-loop.md),
+  [spec](docs/specs/prompt-optimization-loop.md)) — a new, backward-compatible capability, so by
+  the rule above it *would* be MINOR. The loop spec's §11 deliberately defers that bump
+  **until after `v2.1.0`** ("scale the eval" — v2.1.0 is what shrinks the noise floor this
+  loop's own honest numbers depend on), which has not shipped yet. So this capability is built,
+  tested, and merged, but intentionally carries no version number yet — that's the spec's
+  sequencing call, not an oversight.
 
 **Guiding principle (carried over from v1):** model tier and feature scope are per-task
 cost/quality knobs **decided by the eval, not by default** — measure first, escalate only where
