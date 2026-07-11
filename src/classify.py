@@ -11,6 +11,8 @@ from typing import cast
 
 import anthropic
 from anthropic.types import TextBlockParam, ToolParam, ToolUseBlock
+from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
+from anthropic.types.messages.batch_create_params import Request
 
 CATEGORIES = ["procurement", "operations", "policy", "technology", "industry"]
 DOMAINS = ["air", "land", "sea", "cyber", "space", "multi"]
@@ -43,6 +45,13 @@ choose the one that is most prominent."""
 CLASSIFY_TOOL: ToolParam = {
     "name": "classify_article",
     "description": "Return the category and operational domain for a defense-news snippet.",
+    # strict=true turns on server-side constrained decoding: the API guarantees
+    # tool_use.input validates against input_schema, including enum membership,
+    # before the response is ever returned to us. See decisions/008 for why this
+    # replaces the client-side re-sample-on-invalid-label loop that used to live
+    # in classify() below (ADR-002 predates strict mode, which wasn't available
+    # then). Strict mode requires additionalProperties: false alongside required.
+    "strict": True,
     "input_schema": {
         "type": "object",
         "properties": {
@@ -58,6 +67,7 @@ CLASSIFY_TOOL: ToolParam = {
             },
         },
         "required": ["category", "operational_domain"],
+        "additionalProperties": False,
     },
 }
 
@@ -65,10 +75,14 @@ CLASSIFY_TOOL: ToolParam = {
 class InvalidLabelError(ValueError):
     """Raised when the model returns a label outside the allowed enum.
 
-    A tool-use ``enum`` strongly biases the model toward valid labels but is
-    not a hard server-side constraint, so on rare occasions the model can
-    return an out-of-enum value. We validate the result ourselves and surface
-    it rather than letting a bad label flow silently into the metrics.
+    Kept as a defensive backstop, not the primary guard it was before strict
+    mode: with ``strict: true`` on CLASSIFY_TOOL, the API's constrained
+    decoding enforces the schema (including these enums) server-side before
+    the response is ever returned, so an out-of-enum ``tool_use.input`` should
+    no longer occur in practice. ``classify()`` still validates and raises
+    this rather than silently trusting the wire, in case that guarantee is
+    ever violated (e.g. an API regression) -- but it no longer re-samples on
+    failure, since there is nothing left for a re-sample to routinely fix.
     """
 
 
@@ -94,11 +108,13 @@ def classify(
 ) -> dict:
     """Classify a single defense-news article snippet.
 
-    Makes one LLM call with forced tool use so the response is always
-    structured JSON — never free text. The tool-use ``enum`` biases the model
-    toward valid labels but does not hard-enforce them, so the result is
-    validated against the allowed sets; on the rare out-of-enum response the
-    call is re-sampled up to three times before raising.
+    Makes one LLM call with forced, strict tool use so the response is always
+    structured JSON — never free text — and is guaranteed by the API's
+    constrained decoding to validate against CLASSIFY_TOOL's schema (including
+    both enums) before we ever see it. ``_validate`` is still run as a
+    defensive backstop (see ``InvalidLabelError``), but there is no re-sample
+    loop any more: a single out-of-schema response would indicate the
+    guarantee itself failed, which a client-side retry can't fix.
 
     Args:
         client: Authenticated Anthropic client.
@@ -118,8 +134,9 @@ def classify(
         Dict with keys ``category`` and ``operational_domain``, both str.
 
     Raises:
-        InvalidLabelError: If all four successive responses fall outside the
-            allowed label sets.
+        InvalidLabelError: If the response falls outside the allowed label
+            sets despite ``strict: true`` -- see ``InvalidLabelError``'s
+            docstring for why this should no longer occur in practice.
     """
     # cache_control on the system block caches it AND the tool schema (tools
     # render before system in the API's prefix, so a breakpoint on the last
@@ -139,26 +156,112 @@ def classify(
 
     # Pass the SDK's `omit` sentinel when no temperature is requested, so the
     # API uses its own default rather than us forcing a value.
-    last_exc: InvalidLabelError | None = None
-    for _ in range(
-        4
-    ):  # one normal call, plus up to three re-samples on an invalid label
-        response = client.messages.create(
-            model=model,
-            max_tokens=256,
-            system=[system_block],
-            tools=[CLASSIFY_TOOL],
-            tool_choice={"type": "tool", "name": "classify_article"},
-            messages=[{"role": "user", "content": text}],
-            temperature=anthropic.omit if temperature is None else temperature,
+    response = client.messages.create(
+        model=model,
+        max_tokens=256,
+        system=[system_block],
+        tools=[CLASSIFY_TOOL],
+        tool_choice={"type": "tool", "name": "classify_article"},
+        messages=[{"role": "user", "content": text}],
+        temperature=anthropic.omit if temperature is None else temperature,
+    )
+    tool_block = next(b for b in response.content if isinstance(b, ToolUseBlock))
+    return _validate(cast(dict, tool_block.input))
+
+
+# ---------------------------------------------------------------------------
+# Message Batches API path -- an alternative to calling classify() once per
+# article, for non-latency-sensitive bulk runs (a full corpus, or the
+# gold-eval judge pass). See decisions/009-message-batches-for-bulk-runs.md
+# for when to reach for this instead of the synchronous loop.
+# ---------------------------------------------------------------------------
+
+
+class BatchItemError(RuntimeError):
+    """Raised when one Message Batches API result item did not succeed.
+
+    Distinct from InvalidLabelError: a batch item can come back "errored",
+    "canceled", or "expired" -- outcomes the synchronous classify() path
+    can't produce, since a synchronous call either returns a result or raises
+    an SDK exception. InvalidLabelError is still raised separately for a
+    "succeeded" item whose labels are somehow out of range.
+    """
+
+
+def build_batch_request(
+    custom_id: str,
+    text: str,
+    model: str = MODEL,
+    system_prompt: str = SYSTEM_PROMPT,
+    temperature: float | None = None,
+) -> Request:
+    """Build one Message Batches API request with classify()'s exact call shape.
+
+    Mirrors classify()'s system block -- including its cache_control marker --
+    so a batch run over the same system_prompt benefits from prompt caching
+    the same way the synchronous path does once the prompt is long enough to
+    qualify (see classify()'s docstring/comment for the current token-length
+    caveat on claude-sonnet-4-6).
+
+    Args:
+        custom_id: Caller-chosen id used to match this request's result back
+            to its row once the batch completes. Batch results arrive in any
+            order, so callers must key on this -- never on position in the
+            requests list.
+        text: Raw article snippet to classify.
+        model: Which Claude model classifies. Defaults to the workhorse
+            (claude-sonnet-4-6); pass a higher tier (e.g. the Opus judge) for
+            the gold-eval judge pass.
+        system_prompt: The instruction block sent as the system prompt.
+            Defaults to the module ``SYSTEM_PROMPT``.
+        temperature: Optional sampling temperature; omitted (API default)
+            when ``None``, matching classify()'s behavior.
+
+    Returns:
+        A ``Request`` ready to append to the ``requests`` list passed to
+        ``client.messages.batches.create``.
+    """
+    system_block: TextBlockParam = {
+        "type": "text",
+        "text": system_prompt,
+        "cache_control": {"type": "ephemeral"},
+    }
+    params: MessageCreateParamsNonStreaming = {
+        "model": model,
+        "max_tokens": 256,
+        "system": [system_block],
+        "tools": [CLASSIFY_TOOL],
+        "tool_choice": {"type": "tool", "name": "classify_article"},
+        "messages": [{"role": "user", "content": text}],
+    }
+    if temperature is not None:
+        params["temperature"] = temperature
+    return Request(custom_id=custom_id, params=params)
+
+
+def parse_batch_result(result) -> dict:
+    """Extract and validate the classified labels from one batch result item.
+
+    Args:
+        result: One item yielded by iterating
+            ``client.messages.batches.results(batch_id)``.
+
+    Returns:
+        Dict with keys ``category`` and ``operational_domain``, validated the
+        same way as classify()'s return value.
+
+    Raises:
+        BatchItemError: If the item's result type is not ``"succeeded"``.
+        InvalidLabelError: If a succeeded item's labels are somehow still out
+            of range -- the same defensive backstop classify() applies.
+    """
+    if result.result.type != "succeeded":
+        raise BatchItemError(
+            f"batch item {result.custom_id!r} did not succeed: {result.result.type}"
         )
-        tool_block = next(b for b in response.content if isinstance(b, ToolUseBlock))
-        try:
-            return _validate(cast(dict, tool_block.input))
-        except InvalidLabelError as exc:
-            last_exc = exc  # try once more; the next sample usually lands in range
-    assert last_exc is not None  # loop ran at least once
-    raise last_exc
+    message = result.result.message
+    tool_block = next(b for b in message.content if isinstance(b, ToolUseBlock))
+    return _validate(cast(dict, tool_block.input))
 
 
 def make_client() -> anthropic.Anthropic:

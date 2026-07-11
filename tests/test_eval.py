@@ -5,6 +5,9 @@ report text) on hand-built frames where the right answer is obvious, plus
 the retry wrapper around the classifier.
 """
 
+import os
+import sys
+
 import pandas as pd
 import pytest
 
@@ -227,6 +230,7 @@ def _write_dataset(tmp_path):
 
 def test_main_runs_predictions_and_writes_all_outputs(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)  # DATA_PATH/PREDS_PATH/etc are relative paths
+    monkeypatch.setattr(sys, "argv", ["eval.py"])  # argparse must not see pytest's argv
     _write_dataset(tmp_path)
 
     monkeypatch.setattr(evalmod, "make_client", lambda: object())
@@ -253,6 +257,7 @@ def test_main_runs_predictions_and_writes_all_outputs(monkeypatch, tmp_path):
 
 def test_main_skips_api_when_predictions_already_complete(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["eval.py"])  # argparse must not see pytest's argv
     _write_dataset(tmp_path)
 
     # Pre-seed a complete predictions file so the resume branch is taken.
@@ -270,5 +275,109 @@ def test_main_skips_api_when_predictions_already_complete(monkeypatch, tmp_path)
     monkeypatch.setattr(evalmod, "make_client", boom)
 
     evalmod.main()  # should not raise — no API client built
+
+
+# --- run_predictions_batch (Message Batches API path) ---------------------
+
+
+def test_run_predictions_batch_writes_one_row_per_article(
+    monkeypatch, batch_client, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    df = _write_dataset(tmp_path)
+    os.makedirs("evals", exist_ok=True)
+
+    client = batch_client(
+        {
+            "0": {"category": "operations", "operational_domain": "air"},
+            "1": {"category": "policy", "operational_domain": "sea"},
+        }
+    )
+    evalmod.run_predictions_batch(client, df, done_ids=set())
+
+    preds = pd.read_csv(evalmod.PREDS_PATH)
+    assert len(preds) == 2
+    assert set(preds["id"]) == {0, 1}
+
+
+def test_run_predictions_batch_submits_only_todo_rows(
+    monkeypatch, batch_client, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    df = _write_dataset(tmp_path)
+    os.makedirs("evals", exist_ok=True)
+
+    client = batch_client({"1": {"category": "policy", "operational_domain": "sea"}})
+    evalmod.run_predictions_batch(client, df, done_ids={0})
+
+    submitted_ids = {r["custom_id"] for r in client.messages.batches.created_requests}
+    assert submitted_ids == {"1"}
+
+
+def test_run_predictions_batch_skips_a_bad_item_without_aborting(
+    monkeypatch, batch_client, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    df = _write_dataset(tmp_path)
+    os.makedirs("evals", exist_ok=True)
+
+    client = batch_client(
+        {
+            "0": {"category": "operations", "operational_domain": "air"},
+            "1": "errored",  # batch item failed -- must not crash the whole run
+        }
+    )
+    evalmod.run_predictions_batch(client, df, done_ids=set())
+
+    preds = pd.read_csv(evalmod.PREDS_PATH)
+    assert set(preds["id"]) == {0}  # id 1 stays todo, not written
+
+
+def test_run_predictions_batch_noop_when_nothing_todo(
+    monkeypatch, batch_client, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    df = _write_dataset(tmp_path)
+
+    def boom(requests):
+        raise AssertionError("must not submit a batch when everything is already done")
+
+    client = batch_client({})
+    client.messages.batches.create = boom
+    evalmod.run_predictions_batch(client, df, done_ids={0, 1})  # should not raise
+
+
+def test_main_batch_flag_calls_run_predictions_batch(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["eval.py", "--batch"])
+    _write_dataset(tmp_path)
+
+    monkeypatch.setattr(evalmod, "make_client", lambda: object())
+
+    called = {}
+
+    def fake_batch(_client, _df, _done_ids):
+        called["yes"] = True
+        pd.DataFrame(
+            [
+                {
+                    "id": 0,
+                    "pred_category": "operations",
+                    "pred_operational_domain": "air",
+                },
+                {"id": 1, "pred_category": "policy", "pred_operational_domain": "sea"},
+            ]
+        ).to_csv(evalmod.PREDS_PATH, index=False)
+
+    monkeypatch.setattr(evalmod, "run_predictions_batch", fake_batch)
+
+    def boom(*_a, **_kw):
+        raise AssertionError("--batch must not fall through to run_predictions")
+
+    monkeypatch.setattr(evalmod, "run_predictions", boom)
+
+    evalmod.main()
+    assert called == {"yes": True}
+    assert (tmp_path / "evals" / "metrics.txt").exists()
 
     assert (tmp_path / "evals" / "metrics.txt").exists()

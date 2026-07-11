@@ -11,6 +11,8 @@ Decisions are recorded here as they are made. Each ADR captures the context, the
 | [005](005-agentic-prompt-optimization-loop.md) | Optimize the classifier prompt with an autonomous, error-driven agent, guarded by a 3-way split | Accepted |
 | [006](006-autonomy-ladder-portfolio-spine.md) | Make an autonomy ladder the portfolio spine, with the classifier as the single protagonist | Accepted |
 | [007](007-evals-as-ci-gate.md) | Wire the v2 gold-set evals into CI as a two-gate quality gate, split by API cost and fork-PR secret safety | Accepted |
+| [008](008-strict-structured-outputs.md) | Enforce enum validity server-side with `strict: true`, retire the client-side re-sample | Accepted |
+| [009](009-message-batches-for-bulk-runs.md) | Add a Message Batches API path for non-latency-sensitive bulk classification | Accepted |
 
 ## Format
 

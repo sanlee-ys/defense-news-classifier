@@ -6,15 +6,30 @@ and a misclassification log. All outputs are saved to evals/.
 
 Resume support: if evals/predictions.csv already exists from a previous
 run (or partial run), articles that already have predictions are skipped.
+
+Two prediction paths are available (see decisions/009):
+  - The default synchronous path (run_predictions): one classify() call per
+    article, in real time. Use for interactive/latency-sensitive runs.
+  - --batch (run_predictions_batch): submits the whole corpus as one Message
+    Batches API request. ~50% cheaper, but results aren't available until the
+    batch ends (usually within an hour); use for unattended bulk runs.
 """
 
+import argparse
 import os
 import time
 
 import anthropic
 import pandas as pd
 
-from classify import classify, make_client
+from classify import (
+    BatchItemError,
+    InvalidLabelError,
+    build_batch_request,
+    classify,
+    make_client,
+    parse_batch_result,
+)
 
 DATA_PATH = "data/synthetic_articles.csv"
 PREDS_PATH = "evals/predictions.csv"
@@ -191,6 +206,83 @@ def run_predictions(
             time.sleep(SLEEP_BETWEEN_CALLS)
 
 
+def run_predictions_batch(
+    client: anthropic.Anthropic,
+    df: pd.DataFrame,
+    done_ids: set,
+    poll_interval: float = 30.0,
+) -> None:
+    """Classify every not-yet-done article via the Message Batches API.
+
+    An alternative to run_predictions() for non-latency-sensitive bulk runs
+    over the whole corpus: one batch submission instead of one synchronous
+    request per article, at ~50% of the per-token cost of the synchronous
+    path. See decisions/009 for the full tradeoff.
+
+    Unlike run_predictions(), there's no per-article progress to print while
+    the batch is in flight -- results only become available once the whole
+    batch reaches processing_status "ended" (most finish within an hour; up
+    to 24h). If the process is interrupted after submission but before the
+    batch ends, rerunning this function resubmits a new batch for whatever
+    is still in `done_ids`'s complement -- there's no batch-id checkpoint to
+    resume against, so an interrupted wait does re-pay for the in-flight
+    batch's tokens on the next attempt. That's an acceptable tradeoff for a
+    background/cron use case; use the synchronous path if resume-per-request
+    granularity matters more than the batch discount.
+
+    Args:
+        client: Authenticated Anthropic client.
+        df: Full dataset DataFrame with at least columns ``id`` and ``text``.
+        done_ids: Set of article IDs that already have predictions and can
+            be skipped.
+        poll_interval: Seconds to sleep between polling the batch's status.
+    """
+    todo = df[~df["id"].isin(done_ids)].reset_index(drop=True)
+    if todo.empty:
+        return
+
+    requests = [
+        build_batch_request(str(row["id"]), row["text"]) for _, row in todo.iterrows()
+    ]
+    print(f"Submitting a batch of {len(requests)} requests...", flush=True)
+    batch = client.messages.batches.create(requests=requests)
+    print(
+        f"Batch {batch.id} submitted; polling every {poll_interval:.0f}s...", flush=True
+    )
+
+    while True:
+        batch = client.messages.batches.retrieve(batch.id)
+        if batch.processing_status == "ended":
+            break
+        print(
+            f"  status={batch.processing_status}  "
+            f"processing={batch.request_counts.processing}",
+            flush=True,
+        )
+        time.sleep(poll_interval)
+
+    print("Batch ended; retrieving results...", flush=True)
+    write_header = not os.path.exists(PREDS_PATH)
+    for result in client.messages.batches.results(batch.id):
+        try:
+            pred = parse_batch_result(result)
+        except (BatchItemError, InvalidLabelError) as exc:
+            # Skip, don't abort the whole batch over one bad item -- the id
+            # stays out of PREDS_PATH, so it's picked up as still-todo on
+            # the next run (sync or batch).
+            print(f"  [skip] id={result.custom_id}: {exc}", flush=True)
+            continue
+        out = {
+            "id": int(result.custom_id),
+            "pred_category": pred["category"],
+            "pred_operational_domain": pred["operational_domain"],
+        }
+        pd.DataFrame([out]).to_csv(
+            PREDS_PATH, mode="a", header=write_header, index=False
+        )
+        write_header = False
+
+
 # ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
@@ -260,12 +352,26 @@ def main() -> None:
     """Run the full eval pipeline: predict, score, and save all artefacts.
 
     Loads the dataset from DATA_PATH, resumes any existing predictions from
-    PREDS_PATH, runs remaining API calls, then writes metrics, confusion
-    matrices, and a misclassification log to the ``evals/`` directory.
+    PREDS_PATH, runs remaining API calls (synchronously by default, or via
+    the Message Batches API with --batch -- see decisions/009), then writes
+    metrics, confusion matrices, and a misclassification log to the
+    ``evals/`` directory.
 
     Raises:
         EnvironmentError: If ``ANTHROPIC_API_KEY`` is not set (via make_client).
     """
+    parser = argparse.ArgumentParser(description="Defense-news classifier eval.")
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help=(
+            "classify the corpus via the Message Batches API instead of one "
+            "synchronous request per article -- ~50%% cheaper, non-interactive "
+            "(results land once the whole batch ends, usually within an hour)"
+        ),
+    )
+    args = parser.parse_args()
+
     os.makedirs("evals", exist_ok=True)
 
     df = pd.read_csv(DATA_PATH)
@@ -286,7 +392,10 @@ def main() -> None:
     # Run any missing predictions, writing each to PREDS_PATH as it completes.
     if done_ids < set(df["id"]):
         client = make_client()
-        run_predictions(client, df, done_ids)
+        if args.batch:
+            run_predictions_batch(client, df, done_ids)
+        else:
+            run_predictions(client, df, done_ids)
         print(f"\nPredictions saved to {PREDS_PATH}")
     else:
         print("All predictions already present — skipping API calls.\n")

@@ -5,6 +5,8 @@ loop hits the network and is exercised manually, like eval.py's run_predictions.
 """
 
 import csv
+import os
+import sys
 
 import pandas as pd
 import pytest
@@ -164,6 +166,9 @@ def test_retry_raises_value_error_when_max_retries_is_zero():
 
 def test_main_runs_predictions_and_writes_all_outputs(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys, "argv", ["gold_eval.py"]
+    )  # keep argparse off pytest's argv
     (tmp_path / "data" / "gold").mkdir(parents=True)
     _write_gold(
         tmp_path / "data" / "gold" / "gold.csv",
@@ -190,6 +195,9 @@ def test_main_runs_predictions_and_writes_all_outputs(monkeypatch, tmp_path):
 
 def test_main_skips_api_when_predictions_already_complete(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys, "argv", ["gold_eval.py"]
+    )  # keep argparse off pytest's argv
     (tmp_path / "data" / "gold").mkdir(parents=True)
     _write_gold(
         tmp_path / "data" / "gold" / "gold.csv",
@@ -224,4 +232,147 @@ def test_main_skips_api_when_predictions_already_complete(monkeypatch, tmp_path)
 
     gold_eval.main()  # should not raise — no API client built
 
+    assert (tmp_path / "evals" / "gold_eval.txt").exists()
+
+
+# --- run_predictions_batch (Message Batches API path) ----------------------
+
+
+def _gold_df():
+    return pd.DataFrame(
+        [_row("g001", "procurement", "air"), _row("g002", "operations", "sea")]
+    )
+
+
+def test_run_predictions_batch_writes_one_combined_row_per_gold_id(
+    monkeypatch, batch_client, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    os.makedirs("evals", exist_ok=True)
+    df = _gold_df()
+
+    client = batch_client(
+        {
+            "g001::workhorse": {"category": "procurement", "operational_domain": "air"},
+            "g001::judge": {"category": "procurement", "operational_domain": "air"},
+            "g002::workhorse": {"category": "policy", "operational_domain": "sea"},
+            "g002::judge": {"category": "operations", "operational_domain": "sea"},
+        }
+    )
+    gold_eval.run_predictions_batch(client, df, done_ids=set())
+
+    preds = pd.read_csv(gold_eval.PREDS_PATH)
+    assert len(preds) == 2
+    row = preds[preds["id"] == "g001"].iloc[0]
+    assert row["pred_category"] == "procurement"
+    assert row["judge_category"] == "procurement"
+    row2 = preds[preds["id"] == "g002"].iloc[0]
+    assert row2["pred_category"] == "policy"
+    assert row2["judge_category"] == "operations"
+
+
+def test_run_predictions_batch_submits_both_models_for_each_todo_row(
+    monkeypatch, batch_client, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    os.makedirs("evals", exist_ok=True)
+    df = _gold_df()
+
+    client = batch_client(
+        {
+            "g002::workhorse": {"category": "policy", "operational_domain": "sea"},
+            "g002::judge": {"category": "operations", "operational_domain": "sea"},
+        }
+    )
+    gold_eval.run_predictions_batch(client, df, done_ids={"g001"})
+
+    submitted = client.messages.batches.created_requests
+    submitted_ids = {r["custom_id"] for r in submitted}
+    assert submitted_ids == {"g002::workhorse", "g002::judge"}
+    models = {r["custom_id"]: r["params"]["model"] for r in submitted}
+    assert models["g002::workhorse"] == gold_eval.WORKHORSE_MODEL
+    assert models["g002::judge"] == gold_eval.JUDGE_MODEL
+
+
+def test_run_predictions_batch_drops_row_if_either_model_errors(
+    monkeypatch, batch_client, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    os.makedirs("evals", exist_ok=True)
+    df = _gold_df()
+
+    client = batch_client(
+        {
+            "g001::workhorse": {"category": "procurement", "operational_domain": "air"},
+            "g001::judge": "errored",  # one model failed for g001
+            "g002::workhorse": {"category": "policy", "operational_domain": "sea"},
+            "g002::judge": {"category": "operations", "operational_domain": "sea"},
+        }
+    )
+    gold_eval.run_predictions_batch(client, df, done_ids=set())
+
+    preds = pd.read_csv(gold_eval.PREDS_PATH)
+    # g001 is dropped entirely (half a row is worse than no row -- it stays todo).
+    assert set(preds["id"]) == {"g002"}
+
+
+def test_run_predictions_batch_noop_when_nothing_todo(
+    monkeypatch, batch_client, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    df = _gold_df()
+
+    def boom(requests):
+        raise AssertionError("must not submit a batch when everything is already done")
+
+    client = batch_client({})
+    client.messages.batches.create = boom
+    gold_eval.run_predictions_batch(
+        client, df, done_ids={"g001", "g002"}
+    )  # should not raise
+
+
+def test_main_batch_flag_calls_run_predictions_batch(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["gold_eval.py", "--batch"])
+    (tmp_path / "data" / "gold").mkdir(parents=True)
+    _write_gold(
+        tmp_path / "data" / "gold" / "gold.csv",
+        [_row("g001", "procurement", "air"), _row("g002", "operations", "sea")],
+    )
+
+    monkeypatch.setattr(gold_eval, "make_client", lambda: object())
+
+    called = {}
+
+    def fake_batch(_client, _df, _done_ids):
+        called["yes"] = True
+        pd.DataFrame(
+            [
+                {
+                    "id": "g001",
+                    "pred_category": "procurement",
+                    "pred_operational_domain": "air",
+                    "judge_category": "procurement",
+                    "judge_operational_domain": "air",
+                },
+                {
+                    "id": "g002",
+                    "pred_category": "operations",
+                    "pred_operational_domain": "sea",
+                    "judge_category": "operations",
+                    "judge_operational_domain": "sea",
+                },
+            ]
+        ).to_csv(gold_eval.PREDS_PATH, index=False)
+
+    monkeypatch.setattr(gold_eval, "run_predictions_batch", fake_batch)
+
+    def boom(*_a, **_kw):
+        raise AssertionError("--batch must not fall through to run_predictions")
+
+    monkeypatch.setattr(gold_eval, "run_predictions", boom)
+
+    gold_eval.main()
+    assert called == {"yes": True}
     assert (tmp_path / "evals" / "gold_eval.txt").exists()
