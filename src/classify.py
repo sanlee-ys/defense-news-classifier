@@ -10,9 +10,19 @@ import sys
 from typing import cast
 
 import anthropic
-from anthropic.types import TextBlockParam, ToolParam, ToolUseBlock
+from anthropic.types import (
+    SearchResultBlockParam,
+    TextBlockParam,
+    ToolParam,
+    ToolUseBlock,
+)
 from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
 from anthropic.types.messages.batch_create_params import Request
+
+# The user-message content classify() accepts: either a plain article string, or a
+# list of content blocks (used by the RAG layer to present retrieved passages as
+# first-class ``search_result`` blocks so the API attaches source/title citations).
+UserContent = str | list[TextBlockParam | SearchResultBlockParam]
 
 CATEGORIES = ["procurement", "operations", "policy", "technology", "industry"]
 DOMAINS = ["air", "land", "sea", "cyber", "space", "multi"]
@@ -101,7 +111,7 @@ def _validate(result: dict) -> dict:
 
 def classify(
     client: anthropic.Anthropic,
-    text: str,
+    text: UserContent,
     temperature: float | None = None,
     model: str = MODEL,
     system_prompt: str = SYSTEM_PROMPT,
@@ -118,7 +128,11 @@ def classify(
 
     Args:
         client: Authenticated Anthropic client.
-        text: Raw article snippet to classify.
+        text: The user-message content to classify. Usually a raw article
+            snippet (``str``), but the RAG layer (``classify_rag``) passes a
+            list of content blocks so retrieved passages ride along as
+            first-class ``search_result`` blocks; either is forwarded to the
+            API's user-message ``content`` field unchanged.
         temperature: Optional sampling temperature. Left at the API default
             when ``None``; set to ``0`` for the most repeatable output, or pass
             a fixed value when measuring run-to-run variance.
