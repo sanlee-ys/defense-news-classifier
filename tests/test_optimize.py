@@ -210,6 +210,25 @@ class _ScriptedBackend:
         )
 
 
+class _ProposeFailsBackend(_ScriptedBackend):
+    """Like _ScriptedBackend, but propose() always raises ProposalError.
+
+    For testing run_optimization's graceful-stop path when the proposer
+    itself can't produce a usable revision (as opposed to a scoring row --
+    that's the separate `_OneBadRowBackend` case below).
+    """
+
+    def __init__(self, *args, fail_tokens=999, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fail_tokens = fail_tokens
+
+    def propose(self, current_prompt, feedback):
+        self.propose_feedback_log.append(feedback)
+        raise optimize.ProposalError(
+            "boom: propose_revision truncated mid-JSON", tokens=self.fail_tokens
+        )
+
+
 class _FakeUsage:
     """Mimics anthropic's response.usage.
 
@@ -243,6 +262,37 @@ class _FakeProposeMessages:
 class _FakeProposeClient:
     def __init__(self, payload, usage=(100, 50)):
         self.messages = _FakeProposeMessages(payload, usage)
+
+
+class _FakeProposeSequenceMessages:
+    """Returns a different payload per create() call.
+
+    For propose()'s own retry loop (test_propose_retries_* below).
+    A `None` entry simulates a response with no ToolUseBlock at all
+    (truncated before the tool call even opens); a dict missing a required
+    key simulates truncation mid-JSON, after the block opens but before it
+    closes. The final entry repeats if create() is called more times than
+    there are payloads -- same convention as conftest's FakeSequenceMessages.
+    """
+
+    def __init__(self, payloads, usage=(100, 50)):
+        self._payloads = list(payloads)
+        self.usage = _FakeUsage(*usage)
+        self.calls = 0
+        self.last_kwargs = None
+
+    def create(self, **kwargs):
+        self.last_kwargs = kwargs
+        i = min(self.calls, len(self._payloads) - 1)
+        self.calls += 1
+        payload = self._payloads[i]
+        blocks = [] if payload is None else [make_tool_block(payload)]
+        return types.SimpleNamespace(content=blocks, usage=self.usage)
+
+
+class _FakeProposeSequenceClient:
+    def __init__(self, payloads, usage=(100, 50)):
+        self.messages = _FakeProposeSequenceMessages(payloads, usage)
 
 
 # ---------------------------------------------------------------------------
@@ -1020,6 +1070,61 @@ def test_anthropic_backend_propose_sends_expected_request_and_exact_tokens():
     assert kwargs["tool_choice"] == {"type": "tool", "name": "propose_revision"}
     assert "CURRENT PROMPT" in kwargs["messages"][0]["content"]
     assert "FEEDBACK TEXT" in kwargs["messages"][0]["content"]
+    # 4096, not the original 2048: the echoed-back revised_prompt grows every
+    # iteration (observed 239 -> 980 -> 1670 tokens across three live
+    # iterations) and a response cut off mid-JSON crashed a live run at
+    # iteration 3 with a KeyError on the truncated tool payload.
+    assert kwargs["max_tokens"] == 4096
+
+
+def test_propose_retries_on_truncated_payload_then_succeeds():
+    # First two responses are missing `revised_prompt` -- as if the tool
+    # call's JSON was cut off mid-object before it closed. The third is
+    # complete. propose() must retry rather than raising, and every
+    # attempt's real token cost (even the failed ones) must be reflected
+    # in the final outcome.
+    bad = {"rationale": "r", "edit_summary": "e"}  # missing revised_prompt
+    good = {"revised_prompt": "R", "rationale": "r", "edit_summary": "e"}
+    client = _FakeProposeSequenceClient([bad, bad, good], usage=(100, 50))
+    backend = optimize.AnthropicBackend(client, model="claude-sonnet-4-6")
+
+    outcome = backend.propose("CURRENT", "FEEDBACK")
+
+    assert outcome.revised_prompt == "R"
+    assert client.messages.calls == 3
+    assert outcome.tokens == 450  # 150 tokens/attempt x 3 -- none dropped
+
+
+def test_propose_retries_when_no_tool_block_returned():
+    # Extreme truncation: the response has no ToolUseBlock at all (cut off
+    # before the tool call even opens). Must be caught (StopIteration), not
+    # crash with an unhandled exception.
+    good = {"revised_prompt": "R", "rationale": "r", "edit_summary": "e"}
+    client = _FakeProposeSequenceClient([None, good], usage=(20, 20))
+    backend = optimize.AnthropicBackend(client, model="claude-sonnet-4-6")
+
+    outcome = backend.propose("CURRENT", "FEEDBACK")
+
+    assert outcome.revised_prompt == "R"
+    assert client.messages.calls == 2
+
+
+def test_propose_raises_proposal_error_after_exhausting_retries():
+    bad = {
+        "rationale": "r",
+        "edit_summary": "e",
+    }  # missing revised_prompt, every attempt
+    client = _FakeProposeSequenceClient([bad, bad, bad], usage=(100, 50))
+    backend = optimize.AnthropicBackend(client, model="claude-sonnet-4-6")
+
+    with pytest.raises(optimize.ProposalError) as exc_info:
+        backend.propose("CURRENT", "FEEDBACK", max_retries=3)
+
+    assert client.messages.calls == 3
+    # Every failed attempt still spent real tokens -- the caller (
+    # run_optimization) needs this to keep tokens_spent honest even though
+    # the run is about to stop.
+    assert exc_info.value.tokens == 450  # 150 x 3
 
 
 def test_estimate_tokens_scales_with_input_length():
@@ -1303,6 +1408,48 @@ def test_run_optimization_stops_on_token_budget(tmp_path):
     assert iters[-1]["iteration"] == 1
     assert iters[-1]["done_signal"] == "budget_tokens"
     assert iters[-1]["tokens_spent"] == 650
+
+
+def test_run_optimization_stops_gracefully_when_proposer_exhausts_retries(tmp_path):
+    # A proposer that never yields a usable revision (persistent truncation)
+    # must stop the run cleanly and report the best iteration found so far
+    # -- not propagate a KeyError and abort with the baseline's results
+    # unrecorded. Live precedent: exactly this crashed an unattended run at
+    # iteration 3 before this hotfix.
+    a_df, b_df, c_df = (
+        _marker_df("A_MARKER", 4, start_id=0),
+        _marker_df("B_MARKER", 4, start_id=100),
+        _marker_df("C_MARKER", 2, start_id=200),
+    )
+    split = optimize.Split(
+        a=a_df, b=b_df, c=c_df, hashes={"A": "h", "B": "h", "C": "h"}
+    )
+    backend = _ProposeFailsBackend(a_df, b_df, c_df, score_tokens=10, fail_tokens=999)
+    config = optimize.OptimizationConfig(
+        start_prompt="BASE", max_iterations=8, target_f1=1.1
+    )
+
+    path = optimize.run_optimization(
+        backend, split, config, run_log_path=str(tmp_path / "run.jsonl")
+    )
+    all_records = optimize.read_run_log(path)
+    iters = optimize.iteration_records(all_records)
+
+    # Only the baseline (iteration 0) exists: propose() failed before
+    # iteration 1 could produce a new prompt/scores, so no iteration-1
+    # record was ever written -- there is nothing to attach it to.
+    assert [r["iteration"] for r in iters] == [0]
+    assert backend.propose_feedback_log  # propose() really was called once
+
+    summary = all_records[-1]
+    assert summary["type"] == "run_summary"
+    assert summary["done_signal"] == "proposer_failed"
+    assert summary["best_iteration"] == 0
+    # Baseline scoring: 3 splits x 10 tokens = 30. The failed proposal still
+    # spent 999 real tokens (propose()'s own retries exhausted before
+    # raising) -- that cost must not vanish from the total just because no
+    # new iteration record exists to carry it.
+    assert summary["total_tokens_spent"] == 30 + 999
 
 
 # ---------------------------------------------------------------------------

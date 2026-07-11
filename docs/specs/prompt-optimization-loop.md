@@ -108,6 +108,15 @@ Stop on the **first** of:
 
 The fired condition is recorded.
 
+**Operational safety stop (outside the three above):** if the optimizer model's
+`propose_revision` call cannot be turned into a usable prompt after retrying (e.g.
+persistent truncation at `max_tokens`, missing a required field), the run stops with
+`done_signal: "proposer_failed"` and reports the best iteration found so far, rather
+than crashing an unattended run and losing every already-paid iteration. This is not
+one of the three algorithmic stop conditions above — no threshold/plateau/budget logic
+fired — it is a hardening measure for a live-observed failure mode (`src/optimize.py`'s
+`AnthropicBackend.propose()` and its `ProposalError`).
+
 ### 5.5 Primary metric
 
 **Macro-F1 on `category`**, computed via `macro_average(compute_metrics(...))` from `src/eval.py` — the repo's stated honest single number for an imbalanced problem. `operational_domain` is tracked and reported but `category` macro-F1 drives the done-signal. *(Confirm-point — see §13.)*

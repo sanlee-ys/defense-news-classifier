@@ -171,6 +171,22 @@ class ProposeOutcome:
     tokens: int
 
 
+class ProposalError(RuntimeError):
+    """Raised when `propose()` exhausts its retries without a usable payload.
+
+    E.g. the response hit `max_tokens` before the tool call's JSON closed,
+    or the tool payload is missing a required field either way. `tokens`
+    carries the real API spend across every attempt (including the failed
+    ones), so a caller that stops the run on this error can still add it to
+    `tokens_spent` instead of under-reporting cost.
+    """
+
+    def __init__(self, message: str, tokens: int):
+        """Store `tokens` (real spend across all attempts) alongside the message."""
+        super().__init__(message)
+        self.tokens = tokens
+
+
 @dataclass(frozen=True)
 class SplitScore:
     """One split's scores under one prompt, plus the merged predictions.
@@ -968,38 +984,73 @@ class AnthropicBackend:
             merged=merged, tokens=tokens, unclassified_ids=unclassified_ids
         )
 
-    def propose(self, current_prompt: str, feedback: str) -> ProposeOutcome:
+    def propose(
+        self, current_prompt: str, feedback: str, max_retries: int = 3
+    ) -> ProposeOutcome:
         """Ask the optimizer model for a revised prompt, with exact token usage.
+
+        The revised prompt this echoes back grows with every iteration (the
+        proposer tends to add rules/examples on top of the previous prompt,
+        observed 239 -> 980 -> 1670 tokens across the first three live
+        iterations), and it must fit inside `max_tokens` alongside the
+        rationale and edit_summary in the same forced tool call. A response
+        cut off mid-JSON either drops `tool_block` entirely or leaves the
+        parsed `payload` missing a required key -- observed live at
+        iteration 3 (~1670-token prompt) as a `KeyError` on
+        `payload["revised_prompt"]` that aborted an unattended run. This
+        retries up to `max_retries` times on that failure mode before
+        raising `ProposalError`, mirroring `_classify_retry`'s budget.
 
         Args:
             current_prompt: The prompt being revised.
             feedback: Set-A-only feedback text from `build_feedback`.
+            max_retries: Maximum attempts before raising `ProposalError`.
 
         Returns:
             `ProposeOutcome` with the revised prompt, rationale, edit
             summary, and exact input+output token count from
-            `response.usage`.
+            `response.usage`, summed across every attempt (failed retries
+            spend real tokens too).
+
+        Raises:
+            ProposalError: If every attempt fails to yield a complete
+                payload. Carries the tokens spent across all attempts.
         """
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=2048,
-            system=OPTIMIZER_SYSTEM_PROMPT,
-            tools=[PROPOSE_TOOL],
-            tool_choice={"type": "tool", "name": "propose_revision"},
-            messages=[
-                {
-                    "role": "user",
-                    "content": _build_proposer_message(current_prompt, feedback),
-                }
-            ],
-        )
-        tool_block = next(b for b in response.content if isinstance(b, ToolUseBlock))
-        payload = cast(dict, tool_block.input)
-        tokens = int(response.usage.input_tokens) + int(response.usage.output_tokens)
-        return ProposeOutcome(
-            revised_prompt=payload["revised_prompt"],
-            rationale=payload["rationale"],
-            edit_summary=payload["edit_summary"],
+        tokens = 0
+        last_error: Exception | None = None
+        for _ in range(max_retries):
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=4096,
+                system=OPTIMIZER_SYSTEM_PROMPT,
+                tools=[PROPOSE_TOOL],
+                tool_choice={"type": "tool", "name": "propose_revision"},
+                messages=[
+                    {
+                        "role": "user",
+                        "content": _build_proposer_message(current_prompt, feedback),
+                    }
+                ],
+            )
+            tokens += int(response.usage.input_tokens) + int(
+                response.usage.output_tokens
+            )
+            try:
+                tool_block = next(
+                    b for b in response.content if isinstance(b, ToolUseBlock)
+                )
+                payload = cast(dict, tool_block.input)
+                return ProposeOutcome(
+                    revised_prompt=payload["revised_prompt"],
+                    rationale=payload["rationale"],
+                    edit_summary=payload["edit_summary"],
+                    tokens=tokens,
+                )
+            except (StopIteration, KeyError) as exc:
+                last_error = exc
+        raise ProposalError(
+            f"propose_revision call incomplete after {max_retries} attempts "
+            f"(likely truncated at max_tokens): {last_error!r}",
             tokens=tokens,
         )
 
@@ -1247,7 +1298,23 @@ def run_optimization(
             f"Iteration {iteration}: proposing a revision from set-A feedback...",
             flush=True,
         )
-        proposal = backend.propose(prompt, feedback_text)
+        try:
+            proposal = backend.propose(prompt, feedback_text)
+        except ProposalError as exc:
+            # The proposer itself, not a scoring row, is what's stuck --
+            # re-calling it with the same feedback would just fail again,
+            # so this stops the run rather than looping on a fixed cost.
+            # `exc.tokens` covers every failed attempt inside propose(), so
+            # the real spend is still reflected even though this iteration
+            # produces no new prompt/scores/iteration record.
+            tokens_spent += exc.tokens
+            print(f"  proposer failed after retries: {exc}", flush=True)
+            print(
+                "  stopping early -- reporting the best iteration found so far.",
+                flush=True,
+            )
+            signal = "proposer_failed"
+            break
         tokens_spent += int(proposal.tokens)
 
         previous_prompt = prompt
@@ -1301,6 +1368,15 @@ def run_optimization(
         records.append(record)
 
     summary = make_run_summary(records, signal)
+    if signal == "proposer_failed":
+        # make_run_summary derives total_tokens_spent from the last WRITTEN
+        # iteration record, which predates the failed proposal (no new
+        # record is written when propose() gives up -- there is no new
+        # prompt/scores to attach it to). `tokens_spent` here already
+        # includes that failed attempt's real cost (added at the `except
+        # ProposalError` above), so it overrides the field rather than
+        # letting the summary silently under-report the true spend.
+        summary["total_tokens_spent"] = tokens_spent
     append_run_log(run_log_path, summary)
     print(
         f"\nStopped: {signal}. Best iteration: {summary['best_iteration']} "
