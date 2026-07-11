@@ -41,6 +41,7 @@ import difflib
 import hashlib
 import json
 import os
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol, cast
@@ -61,7 +62,15 @@ DEFAULT_SPLIT_RATIO = 0.7  # spec's proposed ~210/90 split of the 300 synthetic 
 DEFAULT_SEED = 42
 DEFAULT_PLATEAU_N = 3  # spec section 5.4: plateau = no B-improvement for N=3 iterations
 DEFAULT_MAX_ITERATIONS = 8
-DEFAULT_TOKEN_BUDGET = 200_000
+# Sized so the ITERATION cap is the binding stop and the token budget stays
+# what F8 means it to be: the runaway backstop. One scoring pass over the
+# default split (A=210 + B=90 + C=54 = 354 classify calls) estimates at
+# ~185k tokens (see _estimate_tokens), and a full default run is 9 scoring
+# passes (baseline + 8 iterations) plus 8 proposer calls -- ~1.7M estimated
+# tokens. 2M gives that run headroom; a budget below ~1.7M silently turns
+# every default run into a "budget_tokens" stop after iteration 1, which is
+# a degenerate loop, not an optimization.
+DEFAULT_TOKEN_BUDGET = 2_000_000
 # The spec (section 13) leaves the exact target unconfirmed. 0.90 is a
 # deliberately conservative placeholder -- clearly above the current v1
 # category macro-F1 baseline (0.765, evals/metrics.txt) without assuming a
@@ -75,13 +84,19 @@ MAX_FEEDBACK_EXAMPLES = 12  # spec section 5.3: "up to ~10-15"; plan pins ~12
 # operational_domain} by tests/test_classify.py and tests/test_contract.py,
 # so it does not surface response.usage. Rather than change that pinned
 # contract or bypass classify() and duplicate its request/validation logic,
-# scoring-call tokens are a documented character-count estimate. It leans
-# slightly high on purpose, so the --token-budget fail-safe (F8) trips a
-# little early rather than late. The proposer/optimizer call is NOT
-# estimated -- AnthropicBackend.propose() calls the client directly and
-# reads exact counts from response.usage.
+# scoring-call tokens are a documented character-count estimate. For the
+# --token-budget fail-safe (F8) to trip early rather than late, the estimate
+# must lean HIGH, which means counting more than just the prose: every
+# classify() request also bills the CLASSIFY_TOOL JSON schema, the
+# message/tool_choice framing, and the tool-call output (~120-190 real tokens
+# per call that len(prompt)+len(text) never sees). _PER_CALL_OVERHEAD_TOKENS
+# covers all of that with margin -- deliberately generous, so the estimate
+# overshoots real billed tokens instead of undershooting them. The
+# proposer/optimizer call is NOT estimated -- AnthropicBackend.propose()
+# calls the client directly and reads exact counts from response.usage.
 _CHARS_PER_TOKEN = 4
 _ESTIMATED_OUTPUT_TOKENS = 60
+_PER_CALL_OVERHEAD_TOKENS = 250
 
 
 # ---------------------------------------------------------------------------
@@ -423,6 +438,13 @@ def check_done_signal(
     guaranteed backstop (F8): even if the threshold/plateau logic has a bug,
     a runaway loop still halts.
 
+    THRESHOLD never fires at iteration 0: the baseline is scored before any
+    prompt edit exists, so a target at or below the starting B score would
+    otherwise stop the run with zero proposals and report a "successful"
+    threshold convergence on the un-optimized prompt -- a vacuous signal.
+    A run must make at least one edit before it may declare done-by-target.
+    The BUDGET backstop still applies at iteration 0 (F8 is unconditional).
+
     Reads only `b_f1_history` -- set A is never consulted here, which is
     what keeps the stop condition honest (the Goodhart guard: optimizing and
     detecting "done" on the same set would make the signal optimistically
@@ -442,7 +464,7 @@ def check_done_signal(
         `"threshold"`, `"plateau"`, `"budget_iterations"`, `"budget_tokens"`,
         or `None` if the loop should continue.
     """
-    if b_f1_history and b_f1_history[-1] >= target_f1:
+    if iteration >= 1 and b_f1_history and b_f1_history[-1] >= target_f1:
         return "threshold"
     if plateau_detected(b_f1_history, plateau_n):
         return "plateau"
@@ -618,9 +640,15 @@ def make_run_summary(records: list, done_signal: str | None) -> dict:
     """
     best_iteration = select_best_iteration(records)
     first, last = records[0], records[-1]
+    best = next(r for r in records if r["iteration"] == best_iteration)
+    # Deltas and the overfitting headline are measured baseline -> BEST, not
+    # baseline -> final: on a plateau or budget stop the final prompt is by
+    # construction not the winner, and reporting the discarded prompt's gap
+    # next to best_iteration would attribute the wrong number to the prompt
+    # actually being shipped.
     delta = {
         split: round(
-            last["scores"][split]["macro_f1"] - first["scores"][split]["macro_f1"], 4
+            best["scores"][split]["macro_f1"] - first["scores"][split]["macro_f1"], 4
         )
         for split in ("A", "B", "C")
     }
@@ -653,9 +681,13 @@ def new_run_log_path(directory: str = RUN_LOG_DIR) -> str:
 def append_run_log(path: str, record: dict) -> None:
     """Append one record as a JSON line to the run-log file (creates it if new).
 
-    Appending -- never rewriting the whole file -- is what makes the run
-    resume-safe (N4): a crash mid-run loses at most the in-progress
-    iteration, never any already-completed one.
+    Appending -- never rewriting the whole file -- is what makes the run's
+    DATA crash-safe (N4): a crash mid-run loses at most the in-progress
+    iteration's record, never any already-completed one. Note the guarantee
+    is about the log, not the process: unlike `eval.py`'s per-row resume,
+    a re-run after a crash starts a fresh run from iteration 0 (and, live,
+    re-spends the tokens). Continuing a partial run from its log is future
+    work, recorded in decisions/005.
 
     Args:
         path: Run-log JSONL file path.
@@ -705,11 +737,14 @@ def _estimate_tokens(system_prompt: str, text: str) -> int:
         text: The article snippet being classified.
 
     Returns:
-        Estimated input tokens (~4 chars/token, rounded up) plus a fixed
-        allowance for the short structured-output tool call.
+        Estimated input tokens (~4 chars/token, rounded up) plus fixed
+        allowances for the structured-output tool call and the per-request
+        overhead (tool schema + message framing) that character counting
+        never sees.
     """
     input_chars = len(system_prompt) + len(text)
-    return -(-input_chars // _CHARS_PER_TOKEN) + _ESTIMATED_OUTPUT_TOKENS  # ceil div
+    estimated_input = -(-input_chars // _CHARS_PER_TOKEN)  # ceil div
+    return estimated_input + _ESTIMATED_OUTPUT_TOKENS + _PER_CALL_OVERHEAD_TOKENS
 
 
 OPTIMIZER_SYSTEM_PROMPT = """You are optimizing the system prompt for a defense-news \
@@ -768,6 +803,46 @@ def _build_proposer_message(current_prompt: str, feedback: str) -> str:
     )
 
 
+def _classify_retry(
+    client: anthropic.Anthropic,
+    text: str,
+    model: str,
+    system_prompt: str,
+    max_retries: int = 3,
+) -> dict:
+    """classify() with exponential backoff on transient API errors.
+
+    Mirrors `gold_eval.classify_retry` (which cannot be reused directly
+    because it does not take a `system_prompt`, and the loop scores a
+    different prompt every iteration). A live run makes ~354 scoring calls
+    per iteration for many iterations unattended; without this, a single
+    429/500 mid-run aborts the whole loop and forfeits every already-paid
+    iteration.
+
+    Args:
+        client: Authenticated Anthropic client.
+        text: Article snippet to classify.
+        model: Model id for the call.
+        system_prompt: The (iteration-specific) prompt being scored.
+        max_retries: Maximum number of attempts before re-raising.
+
+    Returns:
+        Dict with keys ``category`` and ``operational_domain``.
+
+    Raises:
+        anthropic.InternalServerError: If all retries are exhausted on a 500.
+        anthropic.RateLimitError: If all retries are exhausted on a 429.
+    """
+    for attempt in range(max_retries):
+        try:
+            return classify(client, text, model=model, system_prompt=system_prompt)
+        except (anthropic.InternalServerError, anthropic.RateLimitError):
+            if attempt == max_retries - 1:
+                raise
+            time.sleep(2 ** (attempt + 1))
+    raise ValueError("max_retries must be >= 1")
+
+
 class AnthropicBackend:
     """Live backend: scores via classify(), proposes via a direct tool-use call.
 
@@ -791,7 +866,9 @@ class AnthropicBackend:
 
         Reuses `classify()` itself rather than a hand-rolled duplicate
         request, so the loop inherits its label-validation and
-        re-sample-on-invalid-label safety net for free.
+        re-sample-on-invalid-label safety net for free -- wrapped in
+        `_classify_retry` so a transient 429/500 backs off and retries
+        instead of aborting the whole unattended run.
 
         Args:
             prompt: System prompt to score.
@@ -805,7 +882,7 @@ class AnthropicBackend:
         tokens = 0
         total = len(df)
         for i, (_, row) in enumerate(df.iterrows()):
-            pred = classify(
+            pred = _classify_retry(
                 self.client, row["text"], model=self.model, system_prompt=prompt
             )
             rows.append(

@@ -21,8 +21,13 @@ The real run lands when San runs the live command from the project
 [README](../../README.md#rung-1-the-prompt-optimization-loop) himself:
 
 ```bash
-uv run --env-file .env python src/optimize.py --max-iterations 8 --token-budget 200000
+uv run --env-file .env python src/optimize.py --max-iterations 8
 ```
+
+(The default token budget, 2M, is deliberately above a full default run's
+~1.7M estimated spend: the iteration cap is meant to be the binding stop,
+the token budget the runaway backstop -- see `DEFAULT_TOKEN_BUDGET`'s
+comment in `src/optimize.py`.)
 
 That produces a new `run_<UTC-timestamp>.jsonl` here alongside the sample.
 
@@ -57,7 +62,7 @@ this file** -- nothing about a completed run lives anywhere else.
 {
   "type": "run_metadata",
   "model": "claude-sonnet-4-6",
-  "token_budget": 200000,
+  "token_budget": 2000000,
   "iteration_cap": 8,
   "split_hashes": {"A": "...", "B": "...", "C": "..."},
   "start_prompt": "<the classifier's starting system prompt>",
@@ -130,7 +135,10 @@ being explicit about:
 Everything in this record is a **precomputed convenience**, not new
 information -- it is a pure function of the `iteration` records above it
 (`best_iteration` = `select_best_iteration(records)`; the deltas are
-first-vs-last A/B/C scores). A crash before this line is written costs
+baseline-vs-**best** A/B/C scores -- measured on the winning iteration, not
+the final one, because on a plateau or budget stop the final prompt is by
+construction not the one being shipped, and the headline overfitting number
+should describe the winner). A crash before this line is written costs
 nothing but the convenience: the same numbers are recoverable by reading
 the iteration records directly. This is why it is a trailer rather than
 folded into the leading `run_metadata` record -- metadata is written before

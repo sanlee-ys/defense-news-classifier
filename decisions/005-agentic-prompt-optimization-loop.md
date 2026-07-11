@@ -64,11 +64,15 @@ spec stays the historical contract; this ADR is where implementation-time decisi
 - **Run-log persistence** (§13 "confirm location + naming"): one append-only JSONL file per run
   at `evals/optimize/run_<UTC-timestamp>.jsonl` — a leading `run_metadata` line, one line per
   iteration, a trailing `run_summary` line. Append-only (not one rewritten JSON object) is what
-  gives N4 resume-safety: a crash costs at most the one in-progress iteration, never the whole
-  log. Schema documented in [`evals/optimize/README.md`](../evals/optimize/README.md). A single
-  pretty-printed JSON object would read nicer but loses that resume property — rejected for the
-  same reason a single 2-way split was rejected above: the safety property matters more than the
-  convenience for an unattended, real-money loop.
+  gives N4 its crash-safety: a crash costs at most the one in-progress iteration's *record*,
+  never the whole log. Schema documented in
+  [`evals/optimize/README.md`](../evals/optimize/README.md). A single pretty-printed JSON object
+  would read nicer but loses that property — rejected for the same reason a single 2-way split
+  was rejected above: the safety property matters more than the convenience for an unattended,
+  real-money loop. To be precise about what N4 does *not* buy here: the data survives, but the
+  *process* does not resume — unlike `eval.py`'s per-row checkpoint, re-running after a crash
+  starts a fresh run from iteration 0 and (live) re-spends the tokens already paid. Continuing a
+  partial run from its log (`--resume <run-log>`) is deliberate future work, not silently claimed.
 - **Winner selection** (not explicitly asked in §13, but consequential and spec-silent): the
   reported "best" prompt is `argmax` of B macro-F1 across all iterations (recorded as
   `best_iteration` in the run log's trailer), never C (would consume the held-out set for a

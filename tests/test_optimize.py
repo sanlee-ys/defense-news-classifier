@@ -525,6 +525,20 @@ def test_check_done_signal_threshold_fires_when_target_reached():
     assert signal == "threshold"
 
 
+def test_check_done_signal_threshold_never_fires_at_iteration_zero():
+    # A baseline that already meets the target must NOT stop the run: no edit
+    # has been proposed yet, so "threshold" would be a vacuous success signal
+    # reported on the un-optimized prompt.
+    signal = optimize.check_done_signal([0.95], 0.9, 0, 10, 0, 999_999)
+    assert signal is None
+
+
+def test_check_done_signal_budget_still_backstops_iteration_zero():
+    # F8 is unconditional: even at the baseline, a blown token budget halts.
+    signal = optimize.check_done_signal([0.95], 0.9, 0, 10, 5000, 5000)
+    assert signal == "budget_tokens"
+
+
 def test_check_done_signal_returns_none_when_nothing_fires():
     signal = optimize.check_done_signal([0.5, 0.6], 0.9, 1, 10, 0, 999_999)
     assert signal is None
@@ -707,6 +721,40 @@ def test_make_run_summary_computes_deltas_and_best_iteration():
     assert summary["total_tokens_spent"] == 20
 
 
+def test_make_run_summary_measures_deltas_on_best_not_final():
+    # Plateau-shaped run: B peaks at iteration 1, then declines until the stop.
+    # The headline deltas/overfitting gap must describe the winner (iteration
+    # 1), not the discarded final prompt (iteration 3) -- otherwise the
+    # summary attributes iteration 3's inflated A-vs-C gap to the prompt that
+    # actually ships.
+    def rec(iteration, a, b, c, tokens):
+        return {
+            "iteration": iteration,
+            "tokens_spent": tokens,
+            "scores": {
+                "A": {"macro_f1": a},
+                "B": {"macro_f1": b},
+                "C": {"macro_f1": c},
+            },
+        }
+
+    records = [
+        rec(0, 0.5, 0.5, 0.5, 10),
+        rec(1, 0.7, 0.85, 0.6, 20),  # the peak-B winner
+        rec(2, 0.8, 0.84, 0.55, 30),
+        rec(3, 0.95, 0.82, 0.52, 40),  # final, not best
+    ]
+    summary = optimize.make_run_summary(records, "plateau")
+    assert summary["best_iteration"] == 1
+    assert summary["final_iteration"] == 3
+    # Baseline -> BEST, not baseline -> final (which would be A:0.45, C:0.02).
+    assert summary["delta_macro_f1"] == {"A": 0.2, "B": 0.35, "C": 0.1}
+    assert summary["overfitting_gap_a_vs_c"] == round(0.2 - 0.1, 4)
+    # total_tokens_spent still reflects the whole run, including the
+    # iterations after the peak -- spend is real even when discarded.
+    assert summary["total_tokens_spent"] == 40
+
+
 def test_append_and_read_run_log_roundtrip(tmp_path):
     path = str(tmp_path / "run.jsonl")
     optimize.append_run_log(path, {"type": "run_metadata", "x": 1})
@@ -815,6 +863,89 @@ def test_estimate_tokens_scales_with_input_length():
     longer = optimize._estimate_tokens("sys" * 100, "text" * 100)
     assert longer > short
     assert short >= optimize._ESTIMATED_OUTPUT_TOKENS
+
+
+def test_estimate_tokens_includes_per_call_overhead():
+    # The estimate must lean HIGH (the F8 budget check compares against it),
+    # so it has to count more than chars/4 + output: every real call also
+    # bills the tool schema and message framing. Guard both the constant's
+    # presence in the sum and that it stays large enough to plausibly cover
+    # that overhead (~120-190 real tokens per call).
+    prompt, text = "sys", "text"
+    naive = -(-(len(prompt) + len(text)) // optimize._CHARS_PER_TOKEN)
+    estimate = optimize._estimate_tokens(prompt, text)
+    assert estimate == (
+        naive + optimize._ESTIMATED_OUTPUT_TOKENS + optimize._PER_CALL_OVERHEAD_TOKENS
+    )
+    assert optimize._PER_CALL_OVERHEAD_TOKENS >= 200
+
+
+class _FakeRateLimit(Exception):
+    pass
+
+
+class _FakeServerError(Exception):
+    pass
+
+
+@pytest.fixture()
+def patch_anthropic_errors(monkeypatch):
+    """Swap the SDK exception classes for plain ones we can raise freely.
+
+    Also replaces time.sleep so the retry backoff doesn't actually wait.
+    Same convention as tests/test_gold_eval.py's fixture of the same name.
+    """
+    monkeypatch.setattr(optimize.anthropic, "RateLimitError", _FakeRateLimit)
+    monkeypatch.setattr(optimize.anthropic, "InternalServerError", _FakeServerError)
+    monkeypatch.setattr(optimize.time, "sleep", lambda *_: None)
+
+
+def test_classify_retry_recovers_after_transient_errors(
+    monkeypatch, patch_anthropic_errors
+):
+    attempts = {"n": 0}
+
+    def flaky_classify(client, text, model, system_prompt):
+        attempts["n"] += 1
+        if attempts["n"] < 3:
+            raise _FakeRateLimit("429")
+        return {"category": "industry", "operational_domain": "land"}
+
+    monkeypatch.setattr(optimize, "classify", flaky_classify)
+    result = optimize._classify_retry(
+        None, "x", "claude-sonnet-4-6", system_prompt="PROMPT", max_retries=3
+    )
+
+    assert result["operational_domain"] == "land"
+    assert attempts["n"] == 3
+
+
+def test_classify_retry_passes_the_iteration_prompt_through(
+    monkeypatch, patch_anthropic_errors
+):
+    seen = {}
+
+    def fake_classify(client, text, model, system_prompt):
+        seen["system_prompt"] = system_prompt
+        return {"category": "policy", "operational_domain": "multi"}
+
+    monkeypatch.setattr(optimize, "classify", fake_classify)
+    optimize._classify_retry(None, "x", "claude-sonnet-4-6", system_prompt="REVISED v3")
+
+    assert seen["system_prompt"] == "REVISED v3"
+
+
+def test_classify_retry_reraises_after_exhausting_attempts(
+    monkeypatch, patch_anthropic_errors
+):
+    def always_fails(client, text, model, system_prompt):
+        raise _FakeServerError("500")
+
+    monkeypatch.setattr(optimize, "classify", always_fails)
+    with pytest.raises(_FakeServerError):
+        optimize._classify_retry(
+            None, "x", "claude-sonnet-4-6", system_prompt="P", max_retries=2
+        )
 
 
 # ---------------------------------------------------------------------------

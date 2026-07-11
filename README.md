@@ -378,9 +378,12 @@ uv run python src/optimize.py --dry-run
 
 # A real optimization run (spends real tokens against your Anthropic key). Each iteration
 # re-scores all of A+B+C (~354 classify calls with the default split) plus one proposer call,
-# so 8 iterations is on the order of 2,800+ calls — set --max-iterations/--token-budget with
-# that in mind.
-uv run --env-file .env python src/optimize.py --max-iterations 8 --token-budget 200000
+# so 8 iterations is on the order of 2,800+ calls and ~1.7M estimated tokens (~$5-8 at current
+# Sonnet pricing). The default token budget (2M) is sized so the ITERATION cap is what stops a
+# full default run and the token budget stays the runaway backstop — if you lower it, know that
+# one scoring pass estimates at ~185k tokens, so e.g. --token-budget 200000 stops after a
+# single edit.
+uv run --env-file .env python src/optimize.py --max-iterations 8
 ```
 
 Either command writes an append-only JSONL run log to `evals/optimize/run_<UTC-timestamp>.jsonl` —
