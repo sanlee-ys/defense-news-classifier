@@ -411,6 +411,31 @@ of silently skipping or half-running. Note `gh workflow run` only finds workflow
 that exist on the ref you dispatch against (the default branch, unless you pass `--ref`),
 so this only works once `evals.yml` has been merged to `main`.
 
+### Enforce the gate (required status check)
+
+A failing check is not the same as a blocked merge. As shipped, `offline-gate` reports a
+red X on a breaching PR, but GitHub still shows a green "Merge" button next to it — nothing
+stops the merge until `offline-gate` is marked a **required status check** in this repo's
+branch protection. That's a one-time repo setting, not something `evals.yml` can declare on
+its own behalf. Turn it on for `main`:
+
+```bash
+gh api repos/sanlee-ys/defense-news-classifier/branches/main/protection \
+  --method PUT --input - <<'JSON'
+{
+  "required_status_checks": {"strict": false, "contexts": ["offline-gate"]},
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null
+}
+JSON
+```
+
+(Equivalently: Settings -> Branches -> add/edit the `main` rule -> "Require status checks
+to pass before merging" -> select `offline-gate`.) `offline-gate` is the right check to
+require — it runs on every PR. `live-capability-eval` deliberately does not (see above), so
+it would never report on the PR being merged and there is nothing to require.
+
 ### Run the gate locally
 
 No key needed — it grades whatever is already committed:

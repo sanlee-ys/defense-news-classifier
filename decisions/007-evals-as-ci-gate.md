@@ -81,10 +81,13 @@ judge, 300+ snippets) is the path to tightening them.
 
 ## Consequences
 
-- The shipped v2 capability numbers are now enforced, not just reported: a regression that
-  clears the loose floor still needs a human to notice, but a *large* regression (bad
-  prompt edit, wrong model string, broken retrieval) fails CI outright, on every PR, for
-  free.
+- The shipped v2 capability numbers are now checked on every PR, not just reported: a
+  regression that clears the loose floor still needs a human to notice, but a *large*
+  regression (bad prompt edit, wrong model string, broken retrieval) fails the
+  `offline-gate` check outright, for free. That check only *blocks the merge* once
+  `offline-gate` is marked a required status check in branch protection — a one-time repo
+  setting `evals.yml` cannot declare on its own behalf; see README.md's "Enforce the gate"
+  go-live step.
 - **`eval_gate.py` is exercised on every push/PR** even though it never calls the API, so
   the gate's own logic (threshold parsing, breach detection, exit code) stays continuously
   tested in the same place it will actually run when the live job fires.

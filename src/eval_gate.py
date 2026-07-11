@@ -143,6 +143,34 @@ def _rows_for_rag(m: dict, floors: dict) -> list[tuple[str, float, float]]:
     ]
 
 
+def _check_sample_size(label: str, n: int, expected: int) -> bool:
+    """Fail loudly if a merge silently dropped gold rows.
+
+    ``_baseline_merged``/``_rag_merged`` inner-join gold against the committed
+    prediction CSVs; a truncated or stale predictions file shrinks ``n`` without
+    raising, and every floor can still clear on the smaller sample -- this is the
+    only thing standing between a partial snapshot and a silent PASS.
+
+    Args:
+        label: Which check this is (``"baseline"`` or ``"rag"``), for the message.
+        n: Rows actually scored (the merged frame's ``metrics()['n']``).
+        expected: Rows the gold set has (``len(gold)``).
+
+    Returns:
+        True if ``n == expected``. Prints a message to stderr and returns False
+        otherwise.
+    """
+    if n == expected:
+        return True
+    print(
+        f"FAIL -- {label} predictions cover {n} of {expected} gold rows "
+        "(merge dropped ids -- truncated or stale predictions CSV?). Refusing "
+        "to grade a partial snapshot.",
+        file=sys.stderr,
+    )
+    return False
+
+
 def _print_table(title: str, rows: list[tuple[str, float, float]]) -> bool:
     """Print a metric/value/floor/PASS|FAIL table.
 
@@ -175,8 +203,10 @@ def check_baseline(thresholds: dict) -> bool:
     gold = gold_eval.load_gold()
     merged = _baseline_merged(gold)
     m = gold_eval.metrics(merged)
+    if not _check_sample_size("baseline", m["n"], len(gold)):
+        return False
     rows = _rows_for_baseline(m, thresholds["baseline"])
-    return _print_table("baseline (workhorse + judge vs human)", rows)
+    return _print_table(f"baseline (workhorse + judge vs human, n={m['n']})", rows)
 
 
 def check_rag(thresholds: dict) -> bool:
@@ -191,8 +221,10 @@ def check_rag(thresholds: dict) -> bool:
     gold = gold_eval.load_gold()
     merged = _rag_merged(gold)
     m = gold_eval_rag.metrics(merged)
+    if not _check_sample_size("rag", m["n"], len(gold)):
+        return False
     rows = _rows_for_rag(m, thresholds["rag"])
-    return _print_table("rag (grounded vs baseline)", rows)
+    return _print_table(f"rag (grounded vs baseline, n={m['n']})", rows)
 
 
 def main() -> None:

@@ -103,6 +103,28 @@ def test_gold_eval_rag_metrics_returns_expected_keys_and_values():
     }
 
 
+# --- _check_sample_size -------------------------------------------------------
+# Guards the inner joins in _baseline_merged/_rag_merged: if a predictions CSV is
+# truncated or stale, the join silently drops gold ids and every floor can still
+# clear on the smaller sample. This is what stands between that and a silent PASS.
+
+
+def test_check_sample_size_passes_when_n_matches_expected(capsys):
+    result = eval_gate._check_sample_size("baseline", 54, 54)
+
+    assert result is True
+    assert capsys.readouterr().out == ""
+
+
+def test_check_sample_size_fails_when_predictions_are_truncated(capsys):
+    result = eval_gate._check_sample_size("baseline", 40, 54)
+
+    assert result is False
+    err = capsys.readouterr().err
+    assert "FAIL" in err
+    assert "40 of 54" in err
+
+
 # --- _print_table ------------------------------------------------------------
 
 
@@ -266,6 +288,76 @@ def test_check_rag_fails_when_a_delta_breaches_its_floor(monkeypatch):
         }
     }
     assert eval_gate.check_rag(thresholds) is False
+
+
+def test_check_baseline_fails_when_predictions_are_truncated(monkeypatch, capsys):
+    """A partial gold_predictions.csv (40 of 54 ids) must FAIL, not silently grade 40."""
+    monkeypatch.setattr(
+        gold_eval,
+        "load_gold",
+        lambda: pd.DataFrame({"id": [f"g{i:03d}" for i in range(54)]}),
+    )
+    monkeypatch.setattr(
+        eval_gate, "_baseline_merged", lambda gold: gold.iloc[:40]
+    )  # simulates the inner join dropping 14 unpredicted ids
+    monkeypatch.setattr(
+        gold_eval,
+        "metrics",
+        lambda merged: {
+            "n": len(merged),
+            "category_accuracy": 0.95,  # would clear every floor on the smaller sample
+            "category_macro_f1": 0.95,
+            "domain_accuracy": 0.95,
+            "domain_macro_f1": 0.95,
+            "judge_category_agreement": 0.95,
+            "judge_domain_agreement": 0.95,
+        },
+    )
+    thresholds = {
+        "baseline": {
+            "category_accuracy": 0.80,
+            "category_macro_f1": 0.80,
+            "domain_accuracy": 0.80,
+            "domain_macro_f1": 0.80,
+            "judge_category_agreement": 0.80,
+            "judge_domain_agreement": 0.80,
+        }
+    }
+
+    assert eval_gate.check_baseline(thresholds) is False
+    assert "40 of 54" in capsys.readouterr().err
+
+
+def test_check_rag_fails_when_predictions_are_truncated(monkeypatch, capsys):
+    """A partial gold_rag_predictions.csv (40 of 54 ids) must FAIL, not silently grade 40."""
+    monkeypatch.setattr(
+        gold_eval,
+        "load_gold",
+        lambda: pd.DataFrame({"id": [f"g{i:03d}" for i in range(54)]}),
+    )
+    monkeypatch.setattr(eval_gate, "_rag_merged", lambda gold: gold.iloc[:40])
+    monkeypatch.setattr(
+        gold_eval_rag,
+        "metrics",
+        lambda merged: {
+            "n": len(merged),
+            "category_accuracy_grounded": 0.95,
+            "category_macro_f1_grounded": 0.95,
+            "category_accuracy_delta": 0.05,
+            "domain_accuracy_delta": 0.05,
+        },
+    )
+    thresholds = {
+        "rag": {
+            "category_accuracy": 0.80,
+            "category_macro_f1": 0.80,
+            "category_delta_min": -0.03,
+            "domain_delta_min": -0.03,
+        }
+    }
+
+    assert eval_gate.check_rag(thresholds) is False
+    assert "40 of 54" in capsys.readouterr().err
 
 
 # --- main(): CLI dispatch + SystemExit contract ------------------------------

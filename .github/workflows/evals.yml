@@ -32,14 +32,15 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   offline-gate:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # Job-scoped, not workflow-scoped: this job's group must never collide with
+    # live-capability-eval's (see that job's concurrency block for why).
+    concurrency:
+      group: ${{ github.workflow }}-offline-gate-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7
 
@@ -63,6 +64,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # Its own group, distinct from offline-gate's. A shared workflow-level group
+    # (workflow+ref) would put both jobs in "evals-refs/heads/main" together, so a
+    # routine push landing while the Monday schedule is mid-run would
+    # cancel-in-progress this already-paid-for live run -- wasted API spend, and a
+    # cancelled run doesn't show up as a red failure.
+    concurrency:
+      group: ${{ github.workflow }}-live-capability-eval-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7
 
