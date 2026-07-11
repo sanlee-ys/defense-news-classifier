@@ -4,43 +4,43 @@ v2 GOLD-SET EVAL -- real text, human-labeled
 
 Snippets evaluated : 54   (data/gold/gold.csv)
 
-Workhorse : claude-sonnet-4-6
+Workhorse : claude-sonnet-5
 Judge     : claude-opus-4-8
 
 -- Baseline: workhorse vs human labels --------------------
 The classifier's accuracy on REAL news, graded against human
 truth -- the honest number v1's circular eval couldn't give.
 
-Category accuracy           : 88.9%   (macro-F1 0.906)
-Operational domain accuracy : 88.9%   (macro-F1 0.894)
+Category accuracy           : 88.9%   (macro-F1 0.888)
+Operational domain accuracy : 94.4%   (macro-F1 0.947)
 
 Category per-label:
              precision  recall    f1  support
 label                                        
-industry         1.000   1.000 1.000        5
-operations       0.905   0.864 0.884       22
+industry         0.833   1.000 0.909        5
+operations       0.950   0.864 0.905       22
 policy           0.857   1.000 0.923        6
-procurement      0.800   1.000 0.889        8
-technology       0.909   0.769 0.833       13
+procurement      0.778   0.875 0.824        8
+technology       0.917   0.846 0.880       13
 
 Operational domain per-label:
        precision  recall    f1  support
 label                                  
-air        1.000   0.867 0.929       15
-cyber      1.000   0.667 0.800        6
-land       0.900   0.818 0.857       11
-multi      0.714   1.000 0.833       10
-sea        0.900   1.000 0.947        9
+air        1.000   0.933 0.966       15
+cyber      1.000   0.833 0.909        6
+land       0.917   1.000 0.957       11
+multi      0.833   1.000 0.909       10
+sea        1.000   0.889 0.941        9
 space      1.000   1.000 1.000        3
 
 -- Judge validation: judge vs human labels ----------------
 High agreement => the judge tracks human judgment, so it can
 serve as a scalable answer key where hand-labeling doesn't reach.
 
-Category agreement          : 88.9%
-Operational domain agreement : 94.4%
+Category agreement          : 90.7%
+Operational domain agreement : 92.6%
 
 -- Workhorse vs judge (do the two models agree?) ----------
-Category           : 90.7%
+Category           : 96.3%
 Operational domain : 90.7%
 ==============================================================

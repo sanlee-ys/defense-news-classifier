@@ -2,7 +2,7 @@
 
 Each gold snippet is run through the same classify call on two models:
 
-- The **workhorse** (claude-sonnet-4-6) -> the BASELINE, scored against the human
+- The **workhorse** (claude-sonnet-5) -> the BASELINE, scored against the human
   labels. This is the classifier's accuracy on *real* news graded against *human*
   truth -- the honest number v1's circular eval (model grading model) couldn't give.
 - The **judge** (claude-opus-4-8) -> scored against the human labels for AGREEMENT.
@@ -48,7 +48,7 @@ GOLD_PATH = "data/gold/gold.csv"
 PREDS_PATH = "evals/gold_predictions.csv"
 REPORT_PATH = "evals/gold_eval.txt"
 
-WORKHORSE_MODEL = "claude-sonnet-4-6"
+WORKHORSE_MODEL = "claude-sonnet-5"
 JUDGE_MODEL = "claude-opus-4-8"
 SLEEP_BETWEEN_CALLS = 0.3
 
