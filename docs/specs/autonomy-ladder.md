@@ -3,7 +3,7 @@
 **Version:** 0.1 (Living roadmap)
 **Status:** Accepted direction
 **Author:** San Lee
-**Last updated:** 2026-07-04
+**Last updated:** 2026-07-11
 **Decision record:** [ADR-006](../../decisions/006-autonomy-ladder-portfolio-spine.md)
 **Related:** [prompt-optimization-loop spec](prompt-optimization-loop.md) (implements Level 3) · [master PRD](../PRD.md)
 
@@ -25,7 +25,7 @@ This roadmap is the map. The per-level specs and ADRs are the territory.
 | **L1 — Single call** | Prompt + structured `{category, operational_domain}` + eval | Human runs each item | **Shipped** (v1) |
 | **L2 — Augmented** | BM25 retrieval grounds the label in a corpus | Human runs it; the model reaches for a tool | **Shipped** (v2.0.0) |
 | **L3 — Autonomous loop** | Wrapped in a loop that iterates to an explicit done-signal | The system decides when it is done | **Spec'd** — see [ADR-005](../../decisions/005-agentic-prompt-optimization-loop.md) |
-| **L4 — Multi-agent** | Decomposed: triage → classify → critic that can hand work *backward* | Multiple agents coordinate | **To spec** |
+| **L4 — Multi-agent** | Decomposed: triage → classify → critic that can hand work *backward* | Multiple agents coordinate | **To spec** — build-vs-adopt decided, see [§7](#7-l4-build-vs-adopt-decision-2026-07-11) |
 
 ## 3. Vocabulary (avoid the collision)
 
@@ -78,9 +78,61 @@ the critic is what catches the classifier gaming its own metric.
   depends on).
 - **L4 is a new level stacked on two loop rungs that are not built yet.** Per one-concern-per-session,
   L4 gets its own spec + branch **after** L3's rungs land. "Cover all four" is the destination,
-  not a single build. When L4 is picked up, it earns its own feature spec and an ADR.
+  not a single build. When L4 is picked up, it earns its own feature spec and an ADR. The one L4
+  decision already settled — *build the multi-agent orchestration by hand vs. adopt a managed-agent
+  framework* — is recorded in [§7](#7-l4-build-vs-adopt-decision-2026-07-11) so the eventual spec
+  inherits it rather than re-litigating it.
 
-## 7. Showcase & cascade
+## 7. L4 build-vs-adopt decision (2026-07-11)
+
+L4 is still "to spec" — no triage/classify/critic prompts or control flow are designed yet. But one
+question that would otherwise get re-argued *during* that spec is already answerable from Anthropic's
+Claude Managed Agents documentation, so it is settled here up front: **do we hand-roll L4's
+multi-agent orchestration against the Messages API (the way L3's `optimize.py` is hand-rolled), or
+adopt a managed-agent framework to get orchestration + persistence "for free"?**
+
+**Decision: hand-roll L4, same as L3.** Build the triage → classify → critic coordination directly
+against the Messages API, with no managed-agent framework. Rationale below.
+
+**Why — Managed Agents solves neither of L4's two open design questions natively:**
+
+- **The backward edge (multi-agent orchestration).** L4's whole honesty test (§4) is a critic that
+  can bounce a label *backward* to triage for reclassification — a peer-to-peer edge, not a linear
+  pipeline. Managed Agents' `multi-agent` primitive is **hub-and-spoke only**: a coordinator
+  delegates to spokes, and depth > 1 is ignored (a spoke cannot call another spoke directly). A true
+  backward handoff is not a first-class pattern. You'd simulate it via the coordinator's own prompt
+  logic deciding whether to re-invoke an earlier spoke's thread — which is the *same* design problem
+  hand-rolled anywhere, just relocated into a coordinator system prompt instead of our own
+  orchestration code. Adopting the framework doesn't answer the hard question; it moves where we
+  write the answer.
+
+- **The persistence model (memory).** Managed Agents' memory stores do give genuine cross-run
+  persistence, but they are a **mutable document store** — create/update/delete by path, versioned —
+  not an append-only ledger. That is the wrong shape for "replay every run in order, forever," and
+  better suited to "curated running state the pipeline reads and updates each invocation." L4's
+  persistence model is precisely one of the things its spec still has to decide; the framework's
+  built-in store presupposes an answer we haven't chosen.
+
+**Tradeoff accepted — what we give up by hand-rolling, and why it's worth it:**
+
+- **No pricing is published anywhere** across the Managed Agents docs, and the product is still
+  **beta**. Adopting it means taking a beta dependency with unknown cost against a solo, single-repo
+  project whose whole guiding principle (§5, and the classifier's own versioning roadmap) is
+  "measure the cost before you spend it." You can't measure what isn't priced.
+- The **self-hosted path** — likely the more natural fit for a solo project wanting cost and data
+  control — is not a shortcut either: it requires standing up and operating your own worker process,
+  rotating keys, and hardening a sandbox image. That is real infra to own, traded for orchestration
+  we'd still have to shape by hand anyway.
+- Against all that, hand-rolling costs us the framework's managed sandbox and turnkey multi-agent
+  plumbing. For L4 that plumbing is hub-and-spoke — the one topology L4 explicitly is *not* — so the
+  thing we forgo is largely a thing we couldn't use.
+
+**Scope guard:** this is a decision about *approach*, recorded so the eventual L4 spec doesn't
+re-open it. It is **not** an implementation. The triage/classify/critic agents, their prompts, and
+their control flow remain unbuilt and unscoped — L4 still earns its own feature spec + ADR when
+L3's rungs land (§6).
+
+## 8. Showcase & cascade
 
 The ladder is the organizing story for the outward surfaces. Each level, as it lands, cascades
 (one body of work, transformed per surface):
