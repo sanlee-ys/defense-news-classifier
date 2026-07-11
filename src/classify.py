@@ -98,7 +98,7 @@ def classify(
     structured JSON — never free text. The tool-use ``enum`` biases the model
     toward valid labels but does not hard-enforce them, so the result is
     validated against the allowed sets; on the rare out-of-enum response the
-    call is re-sampled once before raising.
+    call is re-sampled up to three times before raising.
 
     Args:
         client: Authenticated Anthropic client.
@@ -118,13 +118,15 @@ def classify(
         Dict with keys ``category`` and ``operational_domain``, both str.
 
     Raises:
-        InvalidLabelError: If two successive responses both fall outside the
+        InvalidLabelError: If all four successive responses fall outside the
             allowed label sets.
     """
     # Pass the SDK's `omit` sentinel when no temperature is requested, so the
     # API uses its own default rather than us forcing a value.
     last_exc: InvalidLabelError | None = None
-    for _ in range(2):  # one normal call, plus one re-sample on an invalid label
+    for _ in range(
+        4
+    ):  # one normal call, plus up to three re-samples on an invalid label
         response = client.messages.create(
             model=model,
             max_tokens=256,

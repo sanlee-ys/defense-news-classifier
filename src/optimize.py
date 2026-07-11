@@ -42,7 +42,7 @@ import hashlib
 import json
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Protocol, cast
 
@@ -50,12 +50,31 @@ import anthropic
 import pandas as pd
 from anthropic.types import ToolParam, ToolUseBlock
 
-from classify import CATEGORIES, MODEL, SYSTEM_PROMPT, classify, make_client
+from classify import (
+    CATEGORIES,
+    MODEL,
+    SYSTEM_PROMPT,
+    InvalidLabelError,
+    classify,
+    make_client,
+)
 from eval import compute_metrics, macro_average
 from gold_eval import GOLD_PATH, load_gold
 
 DATA_PATH = "data/synthetic_articles.csv"
 RUN_LOG_DIR = "evals/optimize"
+
+# Sentinel prediction recorded for a row that classify() still cannot get a
+# valid label for after exhausting its own re-sample budget (classify.py's
+# `for _ in range(4)`). Set on BOTH the category and domain prediction
+# columns so the row scores as wrong on both axes -- San's explicit choice
+# to count an unclassifiable row as a miss rather than drop it, since
+# dropping would silently shrink the split and change what macro-F1 is being
+# averaged over mid-run. The value can never collide with a real label: it
+# is not a member of CATEGORIES or DOMAINS, so eval.py's compute_metrics /
+# macro_average / confusion_matrix (which key off the ground-truth label
+# set) treat it as simply an incorrect prediction, never crash on it.
+UNCLASSIFIED = "__unclassified__"
 
 # --- tunable defaults (all overridable via CLI flags; see main()) ----------
 DEFAULT_SPLIT_RATIO = 0.7  # spec's proposed ~210/90 split of the 300 synthetic rows
@@ -130,10 +149,16 @@ class OptimizationConfig:
 
 @dataclass(frozen=True)
 class ScoreOutcome:
-    """What a backend's `score()` returns: predictions plus tokens spent."""
+    """What a backend's `score()` returns: predictions plus tokens spent.
+
+    `unclassified_ids` lists the row ids (if any) that classify() could not
+    get a valid label for after exhausting its retries -- always `[]` for
+    `DryRunBackend`, which never produces an invalid label.
+    """
 
     merged: pd.DataFrame
     tokens: int
+    unclassified_ids: list = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -162,6 +187,7 @@ class SplitScore:
     domain_accuracy: float
     per_class_f1: dict
     tokens: int
+    unclassified_ids: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
         """JSON-serializable view for the run log (drops the predictions DataFrame)."""
@@ -293,6 +319,7 @@ def score_split(prompt: str, backend: OptimizerBackend, df: pd.DataFrame) -> Spl
         domain_accuracy=round(dom_acc, 4),
         per_class_f1=per_class_f1,
         tokens=int(outcome.tokens),
+        unclassified_ids=list(outcome.unclassified_ids),
     )
 
 
@@ -567,6 +594,7 @@ def make_iteration_record(
     edit_summary: str | None,
     tokens_spent: int,
     done_signal: str | None,
+    unclassified: dict | None = None,
 ) -> dict:
     """Build one run-log iteration record (spec section 8 schema).
 
@@ -588,6 +616,12 @@ def make_iteration_record(
         tokens_spent: Cumulative tokens spent through this iteration.
         done_signal: Name of the fired stop condition, or `None` if the
             loop continues past this iteration.
+        unclassified: Per-split count of rows that never got a valid label
+            from `classify()` even after its own retries, e.g.
+            `{"A": 1, "B": 0, "C": 0}`. Additive/optional: defaults to all
+            zeros when not passed, so a record with no unclassified rows is
+            still schema-valid and existing readers (the portfolio viewer,
+            older run logs) are unaffected.
 
     Returns:
         A `type: "iteration"` dict, JSON-serializable.
@@ -604,6 +638,7 @@ def make_iteration_record(
         "edit_summary": edit_summary,
         "tokens_spent": int(tokens_spent),
         "done_signal": done_signal,
+        "unclassified": unclassified or {"A": 0, "B": 0, "C": 0},
     }
 
 
@@ -826,12 +861,21 @@ def _classify_retry(
         system_prompt: The (iteration-specific) prompt being scored.
         max_retries: Maximum number of attempts before re-raising.
 
+    Only retries the transient API errors below -- `classify.InvalidLabelError`
+    (the model persistently returning an out-of-enum label) is a different
+    failure mode with its own retry budget already spent inside `classify()`
+    itself, so it is deliberately NOT caught here; it propagates to the
+    caller, which is `AnthropicBackend.score()`'s job to handle (record the
+    `UNCLASSIFIED` sentinel and keep going, rather than aborting the run).
+
     Returns:
         Dict with keys ``category`` and ``operational_domain``.
 
     Raises:
         anthropic.InternalServerError: If all retries are exhausted on a 500.
         anthropic.RateLimitError: If all retries are exhausted on a 429.
+        classify.InvalidLabelError: If classify() itself exhausts its own
+            re-sample budget on an out-of-enum label. Not retried here.
     """
     for attempt in range(max_retries):
         try:
@@ -870,33 +914,59 @@ class AnthropicBackend:
         `_classify_retry` so a transient 429/500 backs off and retries
         instead of aborting the whole unattended run.
 
+        A row that is STILL unclassifiable after classify()'s own retries
+        (an `InvalidLabelError`, e.g. the model returning a domain value
+        like "cyber" in the category field) is not allowed to abort the
+        run either: it is recorded with the `UNCLASSIFIED` sentinel on both
+        prediction columns -- guaranteed wrong on both axes, San's chosen
+        "count it as a miss" semantics -- and scoring continues. This is
+        never silent: a warning line prints per occurrence, and the caller
+        surfaces the count via `ScoreOutcome.unclassified_ids` into the run
+        log's `unclassified` field.
+
         Args:
             prompt: System prompt to score.
             df: Ground-truth DataFrame with `id` and `text` columns.
 
         Returns:
-            `ScoreOutcome` with the merged predictions DataFrame and an
-            estimated token count (see `_estimate_tokens`).
+            `ScoreOutcome` with the merged predictions DataFrame, an
+            estimated token count (see `_estimate_tokens`), and the ids of
+            any rows that fell back to the unclassified sentinel.
         """
         rows = []
         tokens = 0
+        unclassified_ids: list = []
         total = len(df)
         for i, (_, row) in enumerate(df.iterrows()):
-            pred = _classify_retry(
-                self.client, row["text"], model=self.model, system_prompt=prompt
-            )
+            try:
+                pred = _classify_retry(
+                    self.client, row["text"], model=self.model, system_prompt=prompt
+                )
+                pred_category = pred["category"]
+                pred_domain = pred["operational_domain"]
+            except InvalidLabelError:
+                pred_category = UNCLASSIFIED
+                pred_domain = UNCLASSIFIED
+                unclassified_ids.append(row["id"])
+                print(
+                    f"    row {row['id']}: unclassified after retries, "
+                    "counting as a miss",
+                    flush=True,
+                )
             rows.append(
                 {
                     "id": row["id"],
-                    "pred_category": pred["category"],
-                    "pred_operational_domain": pred["operational_domain"],
+                    "pred_category": pred_category,
+                    "pred_operational_domain": pred_domain,
                 }
             )
             tokens += _estimate_tokens(prompt, row["text"])
             if (i + 1) % 25 == 0 or i + 1 == total:
                 print(f"    scored {i + 1:3d}/{total}", flush=True)
         merged = df.merge(pd.DataFrame(rows), on="id")
-        return ScoreOutcome(merged=merged, tokens=tokens)
+        return ScoreOutcome(
+            merged=merged, tokens=tokens, unclassified_ids=unclassified_ids
+        )
 
     def propose(self, current_prompt: str, feedback: str) -> ProposeOutcome:
         """Ask the optimizer model for a revised prompt, with exact token usage.
@@ -1157,6 +1227,11 @@ def run_optimization(
         edit_summary=None,
         tokens_spent=tokens_spent,
         done_signal=signal,
+        unclassified={
+            "A": len(score_a.unclassified_ids),
+            "B": len(score_b.unclassified_ids),
+            "C": len(score_c.unclassified_ids),
+        },
     )
     append_run_log(run_log_path, record)
     records.append(record)
@@ -1216,6 +1291,11 @@ def run_optimization(
             edit_summary=proposal.edit_summary,
             tokens_spent=tokens_spent,
             done_signal=signal,
+            unclassified={
+                "A": len(score_a.unclassified_ids),
+                "B": len(score_b.unclassified_ids),
+                "C": len(score_c.unclassified_ids),
+            },
         )
         append_run_log(run_log_path, record)
         records.append(record)

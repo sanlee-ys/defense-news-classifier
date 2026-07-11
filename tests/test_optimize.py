@@ -368,6 +368,59 @@ def test_score_split_output_is_json_serializable():
     json.dumps(result.as_dict())  # must not raise
 
 
+def test_score_split_treats_unclassified_sentinel_as_a_miss_not_a_crash():
+    # A row predicted with the UNCLASSIFIED sentinel (out-of-enum on both
+    # axes by construction) must not crash compute_metrics / macro_average --
+    # eval.py keys its label set off ground truth, so an out-of-enum
+    # predicted value is invisible to `labels` and simply never matches,
+    # scoring the row wrong on both category and domain. Prove it lowers
+    # accuracy/macro-F1 versus an all-correct baseline, rather than raising.
+    df = pd.DataFrame(
+        [
+            {"id": 1, "text": "a", "category": "policy", "operational_domain": "air"},
+            {"id": 2, "text": "b", "category": "policy", "operational_domain": "air"},
+            {"id": 3, "text": "c", "category": "policy", "operational_domain": "air"},
+        ]
+    )
+    all_correct_preds = pd.DataFrame(
+        [
+            {"id": 1, "pred_category": "policy", "pred_operational_domain": "air"},
+            {"id": 2, "pred_category": "policy", "pred_operational_domain": "air"},
+            {"id": 3, "pred_category": "policy", "pred_operational_domain": "air"},
+        ]
+    )
+    one_sentinel_preds = pd.DataFrame(
+        [
+            {"id": 1, "pred_category": "policy", "pred_operational_domain": "air"},
+            {"id": 2, "pred_category": "policy", "pred_operational_domain": "air"},
+            {
+                "id": 3,
+                "pred_category": optimize.UNCLASSIFIED,
+                "pred_operational_domain": optimize.UNCLASSIFIED,
+            },
+        ]
+    )
+
+    baseline = optimize.score_split("p", _FixedBackend(all_correct_preds, tokens=0), df)
+    with_sentinel = optimize.score_split(
+        "p", _FixedBackend(one_sentinel_preds, tokens=0), df
+    )
+
+    assert with_sentinel.accuracy < baseline.accuracy
+    assert with_sentinel.macro_f1 < baseline.macro_f1
+    assert with_sentinel.domain_accuracy < baseline.domain_accuracy
+    assert with_sentinel.domain_macro_f1 < baseline.domain_macro_f1
+    json.dumps(
+        with_sentinel.as_dict()
+    )  # confusion_matrix-adjacent path stays serializable
+
+    # confusion_matrix() (used by eval.py's report) must also tolerate the
+    # sentinel without raising -- it reindexes to the true-label set, so the
+    # sentinel column is simply dropped rather than blowing up crosstab.
+    merged = df.merge(one_sentinel_preds, on="id")
+    evalmod.confusion_matrix(merged, "category")  # must not raise
+
+
 # ---------------------------------------------------------------------------
 # build_feedback / _confusion_stats
 # ---------------------------------------------------------------------------
@@ -666,10 +719,15 @@ def test_make_iteration_record_has_full_section8_schema():
         "edit_summary",
         "tokens_spent",
         "done_signal",
+        "unclassified",
     }
     assert set(rec.keys()) == expected_keys
     assert rec["type"] == "iteration"
     assert rec["done_signal"] is None
+    # Additive/optional: a record built without passing `unclassified`
+    # still has the key, defaulted to all-zero counts, so older callers and
+    # the portfolio viewer never see a missing field.
+    assert rec["unclassified"] == {"A": 0, "B": 0, "C": 0}
 
 
 def test_iteration_zero_record_has_null_diff_rationale_edit_summary():
@@ -832,6 +890,112 @@ def test_anthropic_backend_score_calls_classify_with_prompt_and_model(monkeypatc
     assert outcome.tokens > 0
     assert len(outcome.merged) == 2
     assert (outcome.merged["pred_category"] == "policy").all()
+
+
+def test_anthropic_backend_score_survives_persistent_invalid_label(monkeypatch, capsys):
+    # classify() persistently raises InvalidLabelError for row id=2 only (as if
+    # the model kept returning an out-of-enum label through all of classify()'s
+    # own retries). score() must not propagate it: the row gets the
+    # UNCLASSIFIED sentinel on both prediction columns, scoring continues for
+    # every other row, and a visible warning is printed -- never a silent drop.
+    def flaky_classify(client, text, model=None, system_prompt=None):
+        if text == "bad row":
+            raise optimize.InvalidLabelError("category 'cyber' is not one of [...]")
+        return {"category": "policy", "operational_domain": "air"}
+
+    monkeypatch.setattr(optimize, "classify", flaky_classify)
+
+    df = pd.DataFrame(
+        [
+            {"id": 1, "text": "t1", "category": "policy", "operational_domain": "air"},
+            {
+                "id": 2,
+                "text": "bad row",
+                "category": "policy",
+                "operational_domain": "air",
+            },
+            {"id": 3, "text": "t3", "category": "policy", "operational_domain": "air"},
+        ]
+    )
+    backend = optimize.AnthropicBackend(client=object(), model="claude-sonnet-4-6")
+    outcome = backend.score("MY PROMPT", df)
+
+    assert len(outcome.merged) == 3  # the row is kept, not dropped
+    assert outcome.unclassified_ids == [2]
+    bad_row = outcome.merged[outcome.merged["id"] == 2].iloc[0]
+    assert bad_row["pred_category"] == optimize.UNCLASSIFIED
+    assert bad_row["pred_operational_domain"] == optimize.UNCLASSIFIED
+    good_rows = outcome.merged[outcome.merged["id"] != 2]
+    assert (good_rows["pred_category"] == "policy").all()  # everyone else unaffected
+
+    out = capsys.readouterr().out
+    assert "row 2" in out
+    assert "unclassified after retries, counting as a miss" in out
+
+
+def test_run_optimization_surfaces_unclassified_count_in_iteration_record(tmp_path):
+    # End-to-end through run_optimization (not just AnthropicBackend.score in
+    # isolation): a backend that raises InvalidLabelError for one row must
+    # not abort the run, and the resulting iteration record's `unclassified`
+    # field must reflect it.
+    a_df = _marker_df("A", 4)
+    b_df = _marker_df("B", 4, start_id=100)
+    c_df = _marker_df("C", 2, start_id=200)
+    split = optimize.Split(
+        a=a_df, b=b_df, c=c_df, hashes={"A": "ha", "B": "hb", "C": "hc"}
+    )
+
+    class _OneBadRowBackend:
+        """Raises InvalidLabelError for split A's first row; scores everything else."""
+
+        def score(self, prompt, df):
+            rows, unclassified = [], []
+            for _, row in df.iterrows():
+                if df is a_df and row["id"] == a_df.iloc[0]["id"]:
+                    rows.append(
+                        {
+                            "id": row["id"],
+                            "pred_category": optimize.UNCLASSIFIED,
+                            "pred_operational_domain": optimize.UNCLASSIFIED,
+                        }
+                    )
+                    unclassified.append(row["id"])
+                else:
+                    rows.append(
+                        {
+                            "id": row["id"],
+                            "pred_category": row["category"],
+                            "pred_operational_domain": row["operational_domain"],
+                        }
+                    )
+            merged = df.merge(pd.DataFrame(rows), on="id")
+            return optimize.ScoreOutcome(
+                merged=merged, tokens=0, unclassified_ids=unclassified
+            )
+
+        def propose(self, current_prompt, feedback):
+            return optimize.ProposeOutcome(
+                revised_prompt=current_prompt,
+                rationale="r",
+                edit_summary="e",
+                tokens=0,
+            )
+
+    config = optimize.OptimizationConfig(
+        start_prompt="P", max_iterations=0, target_f1=1.1
+    )
+    log_path = str(tmp_path / "run.jsonl")
+    optimize.run_optimization(_OneBadRowBackend(), split, config, run_log_path=log_path)
+
+    records = optimize.read_run_log(log_path)
+    iteration_0 = optimize.iteration_records(records)[0]
+    assert iteration_0["unclassified"]["A"] == 1
+    assert iteration_0["unclassified"]["B"] == 0
+    assert iteration_0["unclassified"]["C"] == 0
+    # The sentinel-scored row still counts as a miss, not a crash: A's
+    # accuracy/F1 reflect one fewer correct row than a run with no
+    # unclassified rows would.
+    assert iteration_0["scores"]["A"]["accuracy"] < 1.0
 
 
 def test_anthropic_backend_propose_sends_expected_request_and_exact_tokens():
