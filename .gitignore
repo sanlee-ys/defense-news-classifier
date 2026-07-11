@@ -19,4 +19,9 @@ Thumbs.db
 # deliverable. The summary (evals/stability.txt) is what gets committed.
 evals/runs/
 
+# Live prompt-optimization run logs (src/optimize.py writes one per run). The
+# tracked sample_dryrun_run.jsonl is the committed reference; real runs are
+# transient local artifacts, not deliverables.
+evals/optimize/run_*.jsonl
+
 graphify-out/
