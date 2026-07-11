@@ -82,7 +82,8 @@ def test_classify_sends_custom_system_prompt(tool_client):
 #
 # The tool-use enum biases the model toward valid labels but does not
 # hard-enforce them (one real run returned category="cyber", which is not a
-# category at all). classify() validates the result and re-samples once.
+# category at all). classify() validates the result and re-samples up to
+# three times (four total attempts) before giving up.
 
 
 def test_validate_accepts_in_range_labels():
@@ -114,16 +115,34 @@ def test_classify_resamples_once_then_returns_valid(tool_client_seq):
     assert client.messages.calls == 2  # it did re-sample exactly once
 
 
-def test_classify_raises_after_two_invalid(tool_client_seq):
+def test_classify_resamples_up_to_three_times_then_returns_valid(tool_client_seq):
+    # Three invalid responses in a row, then a valid fourth -- proves the
+    # re-sample budget is now three (four total attempts), not one.
     client = tool_client_seq(
         [
+            {"category": "cyber", "operational_domain": "cyber"},  # invalid
+            {"category": "cyber", "operational_domain": "cyber"},  # invalid
+            {"category": "cyber", "operational_domain": "cyber"},  # invalid
+            {"category": "operations", "operational_domain": "cyber"},  # valid
+        ]
+    )
+    result = classify.classify(client, "Cyber intrusion disrupted.")
+    assert result == {"category": "operations", "operational_domain": "cyber"}
+    assert client.messages.calls == 4
+
+
+def test_classify_raises_after_four_invalid(tool_client_seq):
+    client = tool_client_seq(
+        [
+            {"category": "cyber", "operational_domain": "cyber"},
+            {"category": "cyber", "operational_domain": "cyber"},
             {"category": "cyber", "operational_domain": "cyber"},
             {"category": "cyber", "operational_domain": "cyber"},
         ]
     )
     with pytest.raises(classify.InvalidLabelError):
         classify.classify(client, "Cyber intrusion disrupted.")
-    assert client.messages.calls == 2  # one retry, then give up
+    assert client.messages.calls == 4  # three retries, then give up
 
 
 # --- make_client() -------------------------------------------------------
