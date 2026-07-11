@@ -39,3 +39,10 @@ tool_choice={"type": "tool", "name": "classify_article"}
 ---
 
 > **Amended 2026-06-29:** corrected the "validation is at the API layer" and "no enum checking" claims — tool use enforces the response *shape*, while enum membership is validated in client code (`classify.py`). Matches the code and the v1.1.0 doc sweep (see `CHANGELOG.md`).
+
+> **Superseded in part 2026-07-11:** [ADR-008](008-strict-structured-outputs.md) adds `strict: true`
+> to both `CLASSIFY_TOOL` and `GENERATE_TOOL`, which *does* hard-enforce enum membership
+> server-side via constrained decoding — a guarantee that didn't exist when this ADR was written.
+> The client-side re-sample-on-invalid-label loop this ADR's Consequences described is retired;
+> `_validate()`/`InvalidLabelError` remain only as a defensive backstop. See ADR-008 for the full
+> rationale.

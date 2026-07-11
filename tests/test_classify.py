@@ -94,12 +94,28 @@ def test_classify_system_prompt_is_cache_marked(tool_client):
     assert kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
 
 
+# --- strict tool definition -----------------------------------------------
+
+
+def test_classify_tool_is_strict():
+    # strict:true is what now guarantees schema/enum validity server-side
+    # (see decisions/008) -- prove the flag is actually on the wire.
+    assert classify.CLASSIFY_TOOL["strict"] is True
+
+
+def test_classify_tool_schema_forbids_additional_properties():
+    # Required by the API alongside strict:true.
+    schema = cast(dict, classify.CLASSIFY_TOOL["input_schema"])
+    assert schema["additionalProperties"] is False
+
+
 # --- enum validation guard -----------------------------------------------
 #
-# The tool-use enum biases the model toward valid labels but does not
-# hard-enforce them (one real run returned category="cyber", which is not a
-# category at all). classify() validates the result and re-samples up to
-# three times (four total attempts) before giving up.
+# strict:true on CLASSIFY_TOOL now makes the API enforce enum membership via
+# server-side constrained decoding, so an out-of-enum tool_use.input should no
+# longer occur in practice. _validate() remains a defensive backstop in case
+# that guarantee is ever violated; these tests exercise the backstop directly
+# rather than simulating a live out-of-enum response.
 
 
 def test_validate_accepts_in_range_labels():
@@ -108,7 +124,8 @@ def test_validate_accepts_in_range_labels():
 
 
 def test_validate_rejects_out_of_enum_category():
-    # "cyber" is a valid domain but not a valid category — the exact id-95 bug.
+    # "cyber" is a valid domain but not a valid category — the exact id-95 bug
+    # that predates strict mode.
     with pytest.raises(classify.InvalidLabelError):
         classify._validate({"category": "cyber", "operational_domain": "cyber"})
 
@@ -118,47 +135,104 @@ def test_validate_rejects_out_of_enum_domain():
         classify._validate({"category": "operations", "operational_domain": "naval"})
 
 
-def test_classify_resamples_once_then_returns_valid(tool_client_seq):
-    # First response is out-of-enum; the re-sample lands in range and is returned.
+def test_classify_raises_immediately_on_invalid_label_no_resample(tool_client_seq):
+    # There is no re-sample loop any more (see decisions/008): a single
+    # out-of-enum response raises on the first and only call.
     client = tool_client_seq(
         [
             {"category": "cyber", "operational_domain": "cyber"},  # invalid
-            {"category": "operations", "operational_domain": "cyber"},  # valid
-        ]
-    )
-    result = classify.classify(client, "Cyber intrusion disrupted.")
-    assert result == {"category": "operations", "operational_domain": "cyber"}
-    assert client.messages.calls == 2  # it did re-sample exactly once
-
-
-def test_classify_resamples_up_to_three_times_then_returns_valid(tool_client_seq):
-    # Three invalid responses in a row, then a valid fourth -- proves the
-    # re-sample budget is now three (four total attempts), not one.
-    client = tool_client_seq(
-        [
-            {"category": "cyber", "operational_domain": "cyber"},  # invalid
-            {"category": "cyber", "operational_domain": "cyber"},  # invalid
-            {"category": "cyber", "operational_domain": "cyber"},  # invalid
-            {"category": "operations", "operational_domain": "cyber"},  # valid
-        ]
-    )
-    result = classify.classify(client, "Cyber intrusion disrupted.")
-    assert result == {"category": "operations", "operational_domain": "cyber"}
-    assert client.messages.calls == 4
-
-
-def test_classify_raises_after_four_invalid(tool_client_seq):
-    client = tool_client_seq(
-        [
-            {"category": "cyber", "operational_domain": "cyber"},
-            {"category": "cyber", "operational_domain": "cyber"},
-            {"category": "cyber", "operational_domain": "cyber"},
-            {"category": "cyber", "operational_domain": "cyber"},
+            {"category": "operations", "operational_domain": "cyber"},  # would be valid
         ]
     )
     with pytest.raises(classify.InvalidLabelError):
         classify.classify(client, "Cyber intrusion disrupted.")
-    assert client.messages.calls == 4  # three retries, then give up
+    assert client.messages.calls == 1  # no re-sample attempted
+
+
+# --- Message Batches API path ---------------------------------------------
+
+
+def test_build_batch_request_matches_classify_call_shape():
+    req = classify.build_batch_request("row-1", "Some article text.")
+    assert req["custom_id"] == "row-1"
+    params = req["params"]
+    assert params["model"] == classify.MODEL
+    assert params["tools"] == [classify.CLASSIFY_TOOL]
+    assert params["tool_choice"] == {"type": "tool", "name": "classify_article"}
+    assert params["messages"] == [{"role": "user", "content": "Some article text."}]
+    # Reuses the same cache_control marker as the synchronous path.
+    assert params["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert params["system"][0]["text"] == classify.SYSTEM_PROMPT
+    assert "temperature" not in params
+
+
+def test_build_batch_request_honors_model_prompt_and_temperature_overrides():
+    req = classify.build_batch_request(
+        "row-2",
+        "Some article text.",
+        model="claude-opus-4-8",
+        system_prompt="REVISED prompt",
+        temperature=0.0,
+    )
+    params = req["params"]
+    assert params["model"] == "claude-opus-4-8"
+    assert params["system"][0]["text"] == "REVISED prompt"
+    assert params["temperature"] == 0.0
+
+
+def test_parse_batch_result_returns_validated_labels():
+    from conftest import make_tool_block
+
+    result = types_namespace(
+        custom_id="row-1",
+        result=types_namespace(
+            type="succeeded",
+            message=types_namespace(
+                content=[
+                    make_tool_block(
+                        {"category": "policy", "operational_domain": "multi"}
+                    )
+                ]
+            ),
+        ),
+    )
+    assert classify.parse_batch_result(result) == {
+        "category": "policy",
+        "operational_domain": "multi",
+    }
+
+
+def test_parse_batch_result_raises_on_non_succeeded_item():
+    result = types_namespace(custom_id="row-2", result=types_namespace(type="errored"))
+    with pytest.raises(classify.BatchItemError):
+        classify.parse_batch_result(result)
+
+
+def test_parse_batch_result_raises_invalid_label_error_on_bad_labels():
+    from conftest import make_tool_block
+
+    result = types_namespace(
+        custom_id="row-3",
+        result=types_namespace(
+            type="succeeded",
+            message=types_namespace(
+                content=[
+                    make_tool_block(
+                        {"category": "cyber", "operational_domain": "cyber"}
+                    )
+                ]
+            ),
+        ),
+    )
+    with pytest.raises(classify.InvalidLabelError):
+        classify.parse_batch_result(result)
+
+
+def types_namespace(**kwargs):
+    """Tiny stand-in for the SDK's batch result objects (attribute access only)."""
+    import types
+
+    return types.SimpleNamespace(**kwargs)
 
 
 # --- make_client() -------------------------------------------------------

@@ -24,9 +24,16 @@ OUTPUT_PATH = "data/synthetic_articles.csv"
 
 # Tool schema — defines the exact shape Claude must return.
 # Enums lock the labels so Claude can't drift to synonyms like "aerial" or "navy".
+# strict=true (same rationale as classify.py's CLASSIFY_TOOL -- see
+# decisions/008-strict-structured-outputs.md) makes the API enforce this schema,
+# including both enums, via server-side constrained decoding rather than
+# relying on the enum alone to bias the model. additionalProperties: false is
+# required on every object level for strict mode, so it's set on both the
+# outer object and the nested item schema.
 GENERATE_TOOL: ToolParam = {
     "name": "generate_articles",
     "description": "Return a list of synthetic defense-news article snippets.",
+    "strict": True,
     "input_schema": {
         "type": "object",
         "properties": {
@@ -46,10 +53,12 @@ GENERATE_TOOL: ToolParam = {
                         },
                     },
                     "required": ["text", "category", "operational_domain"],
+                    "additionalProperties": False,
                 },
             }
         },
         "required": ["articles"],
+        "additionalProperties": False,
     },
 }
 
