@@ -55,7 +55,11 @@ def test_classify_sends_expected_request(tool_client):
 
     kwargs = client.messages.last_kwargs
     assert kwargs["model"] == classify.MODEL
-    assert kwargs["system"] == classify.SYSTEM_PROMPT
+    # system is a single cacheable text block, not a bare string -- see
+    # test_classify_system_prompt_is_cache_marked below for the cache_control
+    # assertion; this test is just the plain content check.
+    assert len(kwargs["system"]) == 1
+    assert kwargs["system"][0]["text"] == classify.SYSTEM_PROMPT
     # Tool use is forced so the model can't return free text instead.
     assert kwargs["tool_choice"] == {"type": "tool", "name": "classify_article"}
     assert kwargs["messages"] == [
@@ -73,9 +77,21 @@ def test_classify_sends_custom_system_prompt(tool_client):
     )
 
     kwargs = client.messages.last_kwargs
-    assert kwargs["system"] == custom_prompt
+    assert kwargs["system"][0]["text"] == custom_prompt
     # Guard: prove the override *displaced* the default, not merely matched it.
-    assert kwargs["system"] != classify.SYSTEM_PROMPT
+    assert kwargs["system"][0]["text"] != classify.SYSTEM_PROMPT
+
+
+def test_classify_system_prompt_is_cache_marked(tool_client):
+    # The optimize.py loop calls classify() ~354 times per iteration with the
+    # SAME system_prompt (only the per-row article text varies) -- the
+    # textbook repeated-prefix caching case. Prove the cache_control marker
+    # is actually on the wire, not just documented as intended.
+    client = tool_client({"category": "policy", "operational_domain": "multi"})
+    classify.classify(client, "New defense strategy published.")
+
+    kwargs = client.messages.last_kwargs
+    assert kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
 
 
 # --- enum validation guard -----------------------------------------------
