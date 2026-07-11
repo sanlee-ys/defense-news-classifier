@@ -1,0 +1,19 @@
+==============================================================
+HAIKU EVAL ARM -- claude-haiku-4-5 vs the Sonnet workhorse
+==============================================================
+
+Snippets : 54   (evals/gold_predictions.csv baseline)
+Baseline (workhorse) : claude-sonnet-4-6
+New arm              : claude-haiku-4-5
+Both un-grounded classify(), graded against human labels.
+
+                      baseline     haiku     delta
+Category accuracy        88.9%     88.9%     +0.0%
+Category macro-F1        0.906     0.891    -0.015
+Domain accuracy          88.9%     77.8%    -11.1%
+Domain macro-F1          0.894     0.804    -0.090
+
+-- Does escalating from Haiku to Sonnet pay? --------------
+Category: Haiku disagreed with Sonnet on 5 calls -> 2 Haiku-better (Sonnet wrong->Haiku right), 2 Haiku-worse (Sonnet right->Haiku wrong), 1 lateral
+Domain: Haiku disagreed with Sonnet on 8 calls -> 1 Haiku-better (Sonnet wrong->Haiku right), 7 Haiku-worse (Sonnet right->Haiku wrong), 0 lateral
+==============================================================
