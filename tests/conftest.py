@@ -124,3 +124,91 @@ def tool_client_seq():
         return FakeSequenceClient(payloads)
 
     return _make
+
+
+# ---------------------------------------------------------------------------
+# Fakes for the Message Batches API (client.messages.batches.*).
+#
+# A real batch takes time to reach processing_status "ended"; these fakes
+# resolve instantly and yield one result per submitted request, so
+# run_predictions_batch()-style code can be exercised without polling or
+# network access.
+# ---------------------------------------------------------------------------
+
+
+class FakeBatchResultItem:
+    """Stands in for one item yielded by client.messages.batches.results().
+
+    `spec` is either a payload dict (-> a "succeeded" item wrapping that
+    tool_use input) or a bare result-type string like "errored" / "canceled" /
+    "expired" (-> an item with no `.message`, matching the real SDK shape for
+    a non-succeeded result).
+    """
+
+    def __init__(self, custom_id: str, spec):
+        self.custom_id = custom_id
+        if isinstance(spec, dict):
+            message = types.SimpleNamespace(content=[make_tool_block(spec)])
+            self.result = types.SimpleNamespace(type="succeeded", message=message)
+        else:
+            self.result = types.SimpleNamespace(type=spec)
+
+
+class FakeBatch:
+    """Stands in for the Batch object returned by create()/retrieve()."""
+
+    def __init__(self, batch_id: str, processing_status: str, processing: int = 0):
+        self.id = batch_id
+        self.processing_status = processing_status
+        self.request_counts = types.SimpleNamespace(processing=processing)
+
+
+class FakeBatches:
+    """Stands in for client.messages.batches.
+
+    Every batch "ends" on the very first retrieve() (no polling needed in
+    tests). results() looks up each submitted request's custom_id in the
+    caller-supplied `results_by_custom_id` map and yields the matching
+    FakeBatchResultItem -- so results are produced from whatever custom_ids
+    the code under test actually generated, not a hardcoded order.
+    """
+
+    def __init__(self, results_by_custom_id: dict, batch_id: str = "msgbatch_fake"):
+        self.results_by_custom_id = results_by_custom_id
+        self.batch_id = batch_id
+        self.created_requests = None
+
+    def create(self, requests):
+        self.created_requests = requests
+        return FakeBatch(self.batch_id, processing_status="ended")
+
+    def retrieve(self, batch_id):
+        return FakeBatch(batch_id, processing_status="ended")
+
+    def results(self, batch_id):
+        for req in self.created_requests:
+            custom_id = req["custom_id"]
+            yield FakeBatchResultItem(custom_id, self.results_by_custom_id[custom_id])
+
+
+class FakeBatchClient:
+    """Stands in for anthropic.Anthropic for the Message Batches API path."""
+
+    def __init__(self, results_by_custom_id: dict):
+        self.messages = types.SimpleNamespace(batches=FakeBatches(results_by_custom_id))
+
+
+@pytest.fixture
+def batch_client():
+    """Factory: build a FakeBatchClient keyed by custom_id -> payload dict | result-type str.
+
+    The map is looked up by whatever custom_id the code under test builds
+    (e.g. str(article id), or "g001::workhorse") -- it does not need to be
+    populated until after you know that scheme, so tests typically build it
+    inline per case.
+    """
+
+    def _make(results_by_custom_id):
+        return FakeBatchClient(results_by_custom_id)
+
+    return _make

@@ -17,17 +17,31 @@ Run:
     uv run --env-file .env python src/gold_eval.py
 
 Needs ANTHROPIC_API_KEY and a fully labeled data/gold/gold.csv.
+
+Pass --batch to classify both the workhorse and judge passes via the Message
+Batches API in a single submission instead of 2*N synchronous calls -- see
+decisions/009 for when that tradeoff (cheaper, non-interactive) is worth it.
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import time
 
 import anthropic
 import pandas as pd
 
-from classify import CATEGORIES, DOMAINS, classify, make_client
+from classify import (
+    CATEGORIES,
+    DOMAINS,
+    BatchItemError,
+    InvalidLabelError,
+    build_batch_request,
+    classify,
+    make_client,
+    parse_batch_result,
+)
 from eval import compute_metrics, macro_average
 
 GOLD_PATH = "data/gold/gold.csv"
@@ -129,6 +143,107 @@ def run_predictions(
         )
         write_header = False
         time.sleep(SLEEP_BETWEEN_CALLS)
+
+
+# custom_id separator for the batch path -- joins the gold row id and which
+# model produced that request, so a single batch can carry both the workhorse
+# and judge passes and still be regrouped back into one row per gold id.
+_BATCH_ID_SEP = "::"
+
+
+def run_predictions_batch(
+    client: anthropic.Anthropic,
+    df: pd.DataFrame,
+    done_ids: set,
+    poll_interval: float = 30.0,
+) -> None:
+    """Classify every not-yet-done snippet with both models via the Message Batches API.
+
+    An alternative to run_predictions() for the gold-eval workhorse + judge
+    pass: submits both models' requests for every not-yet-done row as ONE
+    batch (2*N requests) instead of 2*N synchronous calls, at ~50% of the
+    per-token cost. See decisions/009 for the full tradeoff -- in particular,
+    results only land once the whole batch ends (usually within an hour), so
+    this suits an unattended/cron run rather than an interactive one.
+
+    Args:
+        client: Authenticated Anthropic client.
+        df: Gold DataFrame with at least columns ``id`` and ``text``.
+        done_ids: Set of article IDs that already have predictions and can
+            be skipped.
+        poll_interval: Seconds to sleep between polling the batch's status.
+    """
+    todo = df[~df["id"].isin(done_ids)].reset_index(drop=True)
+    if todo.empty:
+        return
+
+    requests = []
+    for _, row in todo.iterrows():
+        requests.append(
+            build_batch_request(
+                f"{row['id']}{_BATCH_ID_SEP}workhorse",
+                row["text"],
+                model=WORKHORSE_MODEL,
+            )
+        )
+        requests.append(
+            build_batch_request(
+                f"{row['id']}{_BATCH_ID_SEP}judge", row["text"], model=JUDGE_MODEL
+            )
+        )
+    print(
+        f"Submitting a batch of {len(requests)} requests ({len(todo)} rows x 2 models)...",
+        flush=True,
+    )
+    batch = client.messages.batches.create(requests=requests)
+    print(
+        f"Batch {batch.id} submitted; polling every {poll_interval:.0f}s...", flush=True
+    )
+
+    while True:
+        batch = client.messages.batches.retrieve(batch.id)
+        if batch.processing_status == "ended":
+            break
+        print(
+            f"  status={batch.processing_status}  "
+            f"processing={batch.request_counts.processing}",
+            flush=True,
+        )
+        time.sleep(poll_interval)
+
+    print("Batch ended; retrieving results...", flush=True)
+    by_row: dict[str, dict] = {}
+    for result in client.messages.batches.results(batch.id):
+        row_id, _, which = result.custom_id.rpartition(_BATCH_ID_SEP)
+        try:
+            pred = parse_batch_result(result)
+        except (BatchItemError, InvalidLabelError) as exc:
+            # Skip this row entirely (both models) rather than write a
+            # half-filled record -- it stays out of done_ids, so a later run
+            # (sync or batch) picks it back up.
+            print(f"  [skip] id={row_id} ({which}): {exc}", flush=True)
+            by_row.pop(row_id, None)
+            by_row[row_id] = {"_incomplete": True}
+            continue
+        entry = by_row.setdefault(row_id, {})
+        if entry.get("_incomplete"):
+            continue
+        if which == "workhorse":
+            entry["pred_category"] = pred["category"]
+            entry["pred_operational_domain"] = pred["operational_domain"]
+        else:
+            entry["judge_category"] = pred["category"]
+            entry["judge_operational_domain"] = pred["operational_domain"]
+
+    write_header = not os.path.exists(PREDS_PATH)
+    for row_id, entry in by_row.items():
+        if entry.get("_incomplete") or len(entry) < 4:
+            continue  # missing a model's result for this row -- leave it todo
+        out = {"id": row_id, **entry}
+        pd.DataFrame([out]).to_csv(
+            PREDS_PATH, mode="a", header=write_header, index=False
+        )
+        write_header = False
 
 
 def _accuracy(a: pd.Series, b: pd.Series) -> float:
@@ -237,6 +352,19 @@ def main() -> None:
     Raises:
         EnvironmentError: If ``ANTHROPIC_API_KEY`` is not set (via make_client).
     """
+    parser = argparse.ArgumentParser(description="v2 gold-set eval + judge validation.")
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help=(
+            "classify both the workhorse and judge passes via the Message "
+            "Batches API in one submission instead of 2*N synchronous calls "
+            "-- ~50%% cheaper, non-interactive (results land once the whole "
+            "batch ends, usually within an hour)"
+        ),
+    )
+    args = parser.parse_args()
+
     os.makedirs("evals", exist_ok=True)
     gold = load_gold()
     print(f"Loaded {len(gold)} labeled gold snippets from {GOLD_PATH}\n")
@@ -249,7 +377,10 @@ def main() -> None:
 
     if set(gold["id"]) - done_ids:
         client = make_client()
-        run_predictions(client, gold, done_ids)
+        if args.batch:
+            run_predictions_batch(client, gold, done_ids)
+        else:
+            run_predictions(client, gold, done_ids)
     else:
         print("All predictions already present -- skipping API calls.\n")
 
