@@ -358,6 +358,38 @@ Both v2 eval scripts checkpoint their predictions and resume if interrupted, sam
 The eval script saves predictions as it goes and supports resuming: if interrupted, rerun
 `uv run python src/eval.py` and it will pick up from where it left off.
 
+### Rung-1: the prompt-optimization loop
+
+An agent iterates the classifier's system prompt against the eval until an explicit
+done-signal fires — Level 3 of the [autonomy ladder](docs/specs/autonomy-ladder.md), spec'd in
+[docs/specs/prompt-optimization-loop.md](docs/specs/prompt-optimization-loop.md) and decided in
+[ADR-005](decisions/005-agentic-prompt-optimization-loop.md). Each iteration: read misclassified
+examples + confusion stats from set **A** only, propose a revised prompt, re-score **A/B/C**, and
+check the done-signal. **Feedback signal** = set-A failures (never B or C — that is the Goodhart
+guard: B drives the stop condition and C is the honest held-out number, so neither can leak into
+the thing being optimized). **Done-condition** = the first of threshold (category macro-F1 on B
+reaches target), plateau (no B-improvement for 3 iterations), or budget (iteration/token cap —
+the fail-safe backstop). **Overfitting guard** = the A-vs-B and B-vs-C gaps reported every
+iteration, plus the A-vs-C delta across the whole run as the headline number.
+
+```bash
+# Dry run: zero API calls, deterministic mock backend — safe to run anytime, no key needed.
+uv run python src/optimize.py --dry-run
+
+# A real optimization run (spends real tokens against your Anthropic key). Each iteration
+# re-scores all of A+B+C (~354 classify calls with the default split) plus one proposer call,
+# so 8 iterations is on the order of 2,800+ calls and ~1.7M estimated tokens (~$5-8 at current
+# Sonnet pricing). The default token budget (2M) is sized so the ITERATION cap is what stops a
+# full default run and the token budget stays the runaway backstop — if you lower it, know that
+# one scoring pass estimates at ~185k tokens, so e.g. --token-budget 200000 stops after a
+# single edit.
+uv run --env-file .env python src/optimize.py --max-iterations 8
+```
+
+Either command writes an append-only JSONL run log to `evals/optimize/run_<UTC-timestamp>.jsonl` —
+schema documented in [`evals/optimize/README.md`](evals/optimize/README.md), which also explains
+why the committed `sample_dryrun_run.jsonl` there is a mock, not a result.
+
 ---
 
 ## Tests
