@@ -10,7 +10,7 @@ import sys
 from typing import cast
 
 import anthropic
-from anthropic.types import ToolParam, ToolUseBlock
+from anthropic.types import TextBlockParam, ToolParam, ToolUseBlock
 
 CATEGORIES = ["procurement", "operations", "policy", "technology", "industry"]
 DOMAINS = ["air", "land", "sea", "cyber", "space", "multi"]
@@ -121,6 +121,22 @@ def classify(
         InvalidLabelError: If all four successive responses fall outside the
             allowed label sets.
     """
+    # cache_control on the system block caches it AND the tool schema (tools
+    # render before system in the API's prefix, so a breakpoint on the last
+    # system block covers both). Every caller here reuses one system_prompt
+    # across many calls in a row -- eval.py/gold_eval.py across every row of
+    # their dataset, the optimize.py loop across ~354 scoring calls per
+    # iteration -- so this is the textbook repeated-prefix caching case.
+    # Below Sonnet 4.6's ~2048-token minimum cacheable prefix the marker is a
+    # harmless no-op (cache_creation_input_tokens stays 0, no error); it
+    # starts paying off once a prompt grows past that, which happens in
+    # practice as optimize.py's loop revises and lengthens the prompt.
+    system_block: TextBlockParam = {
+        "type": "text",
+        "text": system_prompt,
+        "cache_control": {"type": "ephemeral"},
+    }
+
     # Pass the SDK's `omit` sentinel when no temperature is requested, so the
     # API uses its own default rather than us forcing a value.
     last_exc: InvalidLabelError | None = None
@@ -130,7 +146,7 @@ def classify(
         response = client.messages.create(
             model=model,
             max_tokens=256,
-            system=system_prompt,
+            system=[system_block],
             tools=[CLASSIFY_TOOL],
             tool_choice={"type": "tool", "name": "classify_article"},
             messages=[{"role": "user", "content": text}],
