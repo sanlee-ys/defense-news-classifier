@@ -86,6 +86,67 @@ class InvalidLabelError(ValueError):
     """
 
 
+class ClassificationRefusalError(RuntimeError):
+    """Raised when the model declines to classify (``stop_reason == "refusal"``).
+
+    A safety-classifier refusal comes back as a *successful* HTTP 200 with
+    ``stop_reason == "refusal"`` and an empty (or tool_use-less) ``content``
+    list -- not as an SDK exception. So nothing upstream raises, and the
+    forced-tool-use contract this classifier relies on is silently broken: the
+    ``next(... ToolUseBlock ...)`` extraction in ``classify()`` /
+    ``parse_batch_result`` would otherwise blow up with a bare, contextless
+    ``StopIteration``. This turns that into a clear, named error that says a
+    refusal happened and (when present) why.
+
+    Distinct from both ``InvalidLabelError`` (the model answered, but with an
+    out-of-enum label -- a validation problem) and ``BatchItemError`` (the
+    batch transport failed the item). A refusal is the model's safety layer
+    declining the request itself, an operational outcome neither of those
+    covers, hence a separate ``RuntimeError`` subclass callers can catch on its
+    own.
+
+    Today's workhorse (``claude-sonnet-4-6``) essentially never refuses this
+    benign public-defense-news content, so this branch is a harmless no-op now.
+    It is added defensively ahead of a possible migration to Sonnet 5 -- the
+    first Sonnet-tier model with real-time cyber safeguards -- where a
+    false-positive decline on defense-domain text becomes a real (if rare)
+    possibility, and this is the guard that keeps such a decline legible instead
+    of surfacing as a confusing ``StopIteration`` deep in result parsing.
+    """
+
+
+def _raise_if_refusal(payload, *, context: str = "") -> None:
+    """Raise ``ClassificationRefusalError`` if ``payload`` is a refusal response.
+
+    ``payload`` is either a ``Message`` (synchronous path) or a batch item's
+    ``.result.message`` -- both carry ``stop_reason`` and, on a refusal, a
+    ``stop_details`` object with ``category`` / ``explanation``. ``getattr`` is
+    used throughout so this is a safe no-op against response shapes that don't
+    set these fields (e.g. test doubles): only an explicit
+    ``stop_reason == "refusal"`` triggers it.
+
+    Args:
+        payload: The API ``Message`` (or batch ``result.message``) to inspect.
+        context: Optional label (e.g. a batch ``custom_id``) folded into the
+            error message so a refusal in a bulk run points at the offending row.
+    """
+    if getattr(payload, "stop_reason", None) != "refusal":
+        return
+    details = getattr(payload, "stop_details", None)
+    category = getattr(details, "category", None)
+    explanation = getattr(details, "explanation", None)
+    where = f" ({context})" if context else ""
+    extra = []
+    if category:
+        extra.append(f"category={category!r}")
+    if explanation:
+        extra.append(f"explanation={explanation!r}")
+    suffix = " -- " + ", ".join(extra) if extra else ""
+    raise ClassificationRefusalError(
+        f"model declined to classify{where} (stop_reason='refusal'){suffix}"
+    )
+
+
 def _validate(result: dict) -> dict:
     """Return ``result`` unchanged if both labels are valid; raise InvalidLabelError otherwise."""
     category = result.get("category")
@@ -134,6 +195,8 @@ def classify(
         Dict with keys ``category`` and ``operational_domain``, both str.
 
     Raises:
+        ClassificationRefusalError: If the model declined the request
+            (``stop_reason == "refusal"``) -- see that exception's docstring.
         InvalidLabelError: If the response falls outside the allowed label
             sets despite ``strict: true`` -- see ``InvalidLabelError``'s
             docstring for why this should no longer occur in practice.
@@ -165,6 +228,10 @@ def classify(
         messages=[{"role": "user", "content": text}],
         temperature=anthropic.omit if temperature is None else temperature,
     )
+    # Guard the refusal case before extracting the tool block: a refusal is an
+    # HTTP 200 with stop_reason == "refusal" and no tool_use block, so the next()
+    # below would otherwise raise a bare StopIteration. See ClassificationRefusalError.
+    _raise_if_refusal(response)
     tool_block = next(b for b in response.content if isinstance(b, ToolUseBlock))
     return _validate(cast(dict, tool_block.input))
 
@@ -252,6 +319,8 @@ def parse_batch_result(result) -> dict:
 
     Raises:
         BatchItemError: If the item's result type is not ``"succeeded"``.
+        ClassificationRefusalError: If a succeeded item is a refusal
+            (``stop_reason == "refusal"``) -- see that exception's docstring.
         InvalidLabelError: If a succeeded item's labels are somehow still out
             of range -- the same defensive backstop classify() applies.
     """
@@ -260,8 +329,95 @@ def parse_batch_result(result) -> dict:
             f"batch item {result.custom_id!r} did not succeed: {result.result.type}"
         )
     message = result.result.message
+    # A "succeeded" batch item can still be a refusal (the item transport
+    # worked; the model declined) -- guard it the same way classify() does.
+    _raise_if_refusal(message, context=f"batch item {result.custom_id!r}")
     tool_block = next(b for b in message.content if isinstance(b, ToolUseBlock))
     return _validate(cast(dict, tool_block.input))
+
+
+# ---------------------------------------------------------------------------
+# Cache-diagnostics instrumentation -- visibility into WHEN classify()'s prompt
+# cache actually engages, without touching classify()'s hot path.
+#
+# classify() marks its system block with cache_control, but on claude-sonnet-4-6
+# the cache silently does nothing until the cached prefix (tool schema + system
+# prompt) crosses the model's ~2048-token minimum cacheable-prefix floor. The
+# current prefix sits well under that, so the marker is a no-op today. These
+# helpers measure exactly how far under, using the free /v1/messages/count_tokens
+# endpoint -- so the prompt-optimization loop (which lengthens the system prompt
+# over iterations) can see when caching will start paying off. The live
+# cache_miss_reason beta reporting that pairs with this lives in
+# scripts/cache_diagnostics.py, which drives these functions.
+# ---------------------------------------------------------------------------
+
+# Minimum cacheable prefix (tokens) per model: below this, the cache_control
+# marker on classify()'s system block is a silent no-op (cache_creation stays 0,
+# no error). Values from Anthropic's prompt-caching docs; only the models this
+# project actually calls are listed (workhorse + Opus judge). Unknown models
+# return None from cacheable_prefix_gap().
+MIN_CACHEABLE_PREFIX_TOKENS = {
+    "claude-sonnet-4-6": 2048,  # current workhorse
+    "claude-opus-4-8": 4096,  # gold-eval judge
+}
+
+
+def count_prefix_tokens(
+    client: anthropic.Anthropic,
+    model: str = MODEL,
+    system_prompt: str = SYSTEM_PROMPT,
+) -> int:
+    """Count the tokens in classify()'s cacheable prefix (tool schema + system prompt).
+
+    Uses the free ``/v1/messages/count_tokens`` endpoint (never ``tiktoken`` --
+    that is OpenAI's tokenizer and undercounts Claude tokens). ``count_tokens``
+    has no "prefix only" mode, so this counts a request carrying a
+    one-character user turn and returns its ``input_tokens``: that user turn
+    adds only ~1 token of message-envelope overhead, and -- crucially -- it is
+    NOT part of classify()'s cached prefix anyway (the cache breakpoint sits on
+    the system block, which the API renders before any message), so the number
+    returned is exactly what must clear the cacheable-prefix floor. Pair with
+    ``cacheable_prefix_gap`` to see how far off that floor the prefix currently is.
+
+    Args:
+        client: Authenticated Anthropic client.
+        model: Model whose tokenizer to count against (token counts are
+            model-specific). Defaults to the workhorse.
+        system_prompt: The system prompt whose prefix size to measure. Defaults
+            to the module ``SYSTEM_PROMPT``.
+
+    Returns:
+        The token count of the tool schema + system prompt prefix.
+    """
+    count = client.messages.count_tokens(
+        model=model,
+        system=[{"type": "text", "text": system_prompt}],
+        tools=[CLASSIFY_TOOL],
+        messages=[{"role": "user", "content": "x"}],
+    )
+    return count.input_tokens
+
+
+def cacheable_prefix_gap(prefix_tokens: int, model: str = MODEL) -> int | None:
+    """Tokens the prefix must still gain before ``model``'s prompt cache engages.
+
+    Returns ``floor - prefix_tokens``: a positive value means the prefix is
+    still below the floor and the ``cache_control`` marker is currently a no-op;
+    ``<= 0`` means the prefix clears the floor and caching is active. Returns
+    ``None`` when the floor for ``model`` isn't known (see
+    ``MIN_CACHEABLE_PREFIX_TOKENS``).
+
+    Args:
+        prefix_tokens: The measured prefix size (see ``count_prefix_tokens``).
+        model: Model whose floor to compare against. Defaults to the workhorse.
+
+    Returns:
+        Remaining tokens to the floor, or ``None`` if the floor is unknown.
+    """
+    floor = MIN_CACHEABLE_PREFIX_TOKENS.get(model)
+    if floor is None:
+        return None
+    return floor - prefix_tokens
 
 
 def make_client() -> anthropic.Anthropic:

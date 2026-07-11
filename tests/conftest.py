@@ -89,6 +89,77 @@ def tool_client():
     return _make
 
 
+class FakeRefusalMessages:
+    """client.messages stand-in that returns a refusal (stop_reason=='refusal').
+
+    Mirrors the real SDK shape for a safety-classifier decline: an HTTP 200
+    Message with an empty content list, ``stop_reason == "refusal"``, and a
+    ``stop_details`` object carrying the refusal category/explanation. Records
+    the last create() kwargs like the other fakes.
+    """
+
+    def __init__(self, stop_details):
+        self._stop_details = stop_details
+        self.last_kwargs = None
+
+    def create(self, **kwargs):
+        self.last_kwargs = kwargs
+        return types.SimpleNamespace(
+            content=[], stop_reason="refusal", stop_details=self._stop_details
+        )
+
+
+class FakeRefusalClient:
+    """Stands in for anthropic.Anthropic, returning a refusal on create()."""
+
+    def __init__(self, stop_details):
+        self.messages = FakeRefusalMessages(stop_details)
+
+
+@pytest.fixture
+def refusal_client():
+    """Factory: build a client whose create() returns a stop_reason=='refusal' response."""
+
+    def _make(category=None, explanation=None):
+        stop_details = None
+        if category is not None or explanation is not None:
+            stop_details = types.SimpleNamespace(
+                category=category, explanation=explanation
+            )
+        return FakeRefusalClient(stop_details)
+
+    return _make
+
+
+class FakeCountTokensMessages:
+    """client.messages stand-in exposing count_tokens(); records the last call."""
+
+    def __init__(self, input_tokens):
+        self._input_tokens = input_tokens
+        self.last_kwargs = None
+
+    def count_tokens(self, **kwargs):
+        self.last_kwargs = kwargs
+        return types.SimpleNamespace(input_tokens=self._input_tokens)
+
+
+class FakeCountTokensClient:
+    """Stands in for anthropic.Anthropic for the count_tokens path."""
+
+    def __init__(self, input_tokens):
+        self.messages = FakeCountTokensMessages(input_tokens)
+
+
+@pytest.fixture
+def count_tokens_client():
+    """Factory: build a client whose messages.count_tokens() returns `input_tokens`."""
+
+    def _make(input_tokens):
+        return FakeCountTokensClient(input_tokens)
+
+    return _make
+
+
 class FakeSequenceMessages:
     """client.messages stand-in that returns a different payload per create() call.
 
