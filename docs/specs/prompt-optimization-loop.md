@@ -150,6 +150,7 @@ fired — it is a hardening measure for a live-observed failure mode (`src/optim
 - **Rung 2** (agent-driven ML loop) reuses the **same run-log schema + replay player**.
 - Optional **live "run it yourself"** button (hybrid showcase).
 - **Scale C with the validated Opus judge** (ties to v2.1.0) to shrink the held-out noise floor.
+- **Keep-best / revert-on-regression proposer policy.** The loop proposes each revision from the *previous* iteration's prompt (`src/optimize.py:1321`, `prompt = proposal.revised_prompt`), with no ratchet back to the best-scoring prompt so far — a regression is carried forward and the next proposal builds on the worse prompt. Adopting a "keep the best-so-far and propose from it, or revert when B drops past a threshold" policy would make extra `--token-budget` productive: more iterations would extend a climb instead of prolonging a random walk. See the matching limitation in §10.
 
 ---
 
@@ -212,6 +213,7 @@ Adapted from the usual leading/lagging frame — this is a portfolio artifact, n
 - **n≈54 noise floor on C.** The CLAUDE.md already frets about this; small C means its deltas are noisy. The done-signal therefore rides **B** (larger, lower-variance); C is read directionally. v2.1.0 (scale the gold set with the validated judge) would later strengthen C.
 - **`classify()` refactor (F1) is the build linchpin.** The current signature does not obviously accept a prompt. First Phase 1 task is confirming and making this change without disturbing the public default behavior or the wire contract pinned in the tests.
 - **Synthetic-only optimization.** Optimizing on synthetic and testing on real gold means the loop could learn synthetic-specific phrasing. That is precisely the B-vs-C gap we measure and report.
+- **No ratchet: the loop hill-climbs from the last prompt, not the best.** Each proposal is generated from the previous iteration's prompt with no revert-to-best (`src/optimize.py:1320-1321`), so a bad proposal is compounded rather than discarded. Observed 2026-07-11 (pre-#69, on `claude-sonnet-4-6`): two runs at identical seed/split/config diverged sharply — one climbed B to 0.907 and stopped on `threshold`; the other peaked at 0.858, regressed to 0.841, and stopped on `budget_tokens`. Consequence: raising `--token-budget` buys more iterations, not a better result — it samples the weakly-upward random walk longer, it does not steer it. Candidate fix tracked in §6.3.
 
 ---
 
