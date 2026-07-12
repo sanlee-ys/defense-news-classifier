@@ -9,7 +9,9 @@ An NLP pipeline that classifies public defense-related news snippets into a **ca
 (what the article is about) and an **operational domain** (the warfighting domain involved).
 **v1** is built and graded entirely on synthetic, publicly safe data; **v2** moves to *real*
 public-domain text (DoD news wire + SEC filings), grounds each call with retrieval, and grades
-against a human-labeled answer key. The measured eval numbers are the centerpiece.
+against a human-labeled answer key. The workhorse now runs on **Claude Sonnet 5** (migrated
+July 2026, [ADR-010](decisions/010-rag-path-model-pin.md)). The measured eval numbers are the
+centerpiece.
 
 ---
 
@@ -17,7 +19,9 @@ against a human-labeled answer key. The measured eval numbers are the centerpiec
 
 The project ran in two iterations, and the arc between them *is* the story. v1 proved the
 pipeline on synthetic data the model graded itself. v2 swapped in real text and a human answer
-key to find out what that self-grading was hiding.
+key to find out what that self-grading was hiding. A third chapter kept the v2 methodology and
+swapped the model: in July 2026 the workhorse moved from Sonnet 4.6 to Sonnet 5 and was
+re-measured on the same gold set. Those are the current numbers, directly below.
 
 | | v1 | v2 |
 |---|---|---|
@@ -26,10 +30,54 @@ key to find out what that self-grading was hiding.
 | **Retrieval** | none | BM25 over a 62-doc corpus; each call grounded + cited |
 | **Honest read** | in-distribution *consistency* | real-world *accuracy* |
 
-### v2 — real text, human-graded (the honest number)
+### Current state — Sonnet 5 on the v2 gold set
+
+The migration went through the same gate as every other change here: run the v2 gold eval
+before and after, on the same 54 human-labeled snippets
+([ADR-010](decisions/010-rag-path-model-pin.md), `evals/gold_eval.txt`).
+
+| Field | Sonnet 4.6 (v2 as shipped) | Sonnet 5 (current) |
+|---|---|---|
+| Category accuracy | 88.9% | **88.9%** |
+| Category macro-F1 | 0.906 | **0.888** |
+| Domain accuracy | 88.9% | **94.4%** |
+| Domain macro-F1 | 0.894 | **0.947** |
+
+Operational domain rose 88.9% → 94.4% and category held at 88.9% — consistent with the
+category ceiling being label ambiguity in borderline snippets, which a stronger model can't
+un-blur.
+
+#### Category: per-label precision / recall / F1 (Sonnet 5, current)
+
+| Label | Precision | Recall | F1 | n |
+|---|---|---|---|---|
+| industry | 0.833 | 1.000 | 0.909 | 5 |
+| operations | 0.950 | 0.864 | 0.905 | 22 |
+| policy | 0.857 | 1.000 | 0.923 | 6 |
+| procurement | 0.778 | 0.875 | 0.824 | 8 |
+| technology | 0.917 | 0.846 | 0.880 | 13 |
+
+The v1 `industry` fix holds: recall stays at 1.000 on the real SEC snippets (v1 caught 1 in 5).
+On the refreshed run the Opus judge agrees with the human labels on 90.7% of category calls and
+92.6% of domain calls.
+
+**The migration's negative result matters as much as the lift.** Re-running the grounding eval
+against the stronger Sonnet 5 baseline showed BM25 grounding *regressing* domain accuracy by
+9.3 points (94.4% ungrounded → 85.2% grounded, reproduced 3×): the retrieved neighbors now pull
+a confident, correct call sideways more often than they help. The grounded RAG path is
+therefore **pinned to `claude-sonnet-4-6`** while the feature's future against the new baseline
+is decided — a deliberate, transitional split, not a quiet fork, recorded with full reasoning in
+[ADR-010](decisions/010-rag-path-model-pin.md). The grounding comparison further down runs both
+arms on Sonnet 4.6 per that pin, so its deltas still measure grounding alone.
+
+---
+
+### v2 — real text, human-graded (the v2 ship, on Sonnet 4.6)
 
 This is the number v1's circular eval could not produce: the classifier run on real defense
-news and graded against labels a **human** assigned, not labels the model invented.
+news and graded against labels a **human** assigned, not labels the model invented. The numbers
+in this section are the v2.0 ship on `claude-sonnet-4-6`, kept as the record of that iteration;
+the current Sonnet 5 numbers are above.
 
 | Field | Accuracy | Macro-F1 |
 |---|---|---|
@@ -43,7 +91,7 @@ acquisition) gives the model the signal the synthetic snippets never did. The ho
 that's `n=5` clear-cut filings, so read it as "the failure mode is gone on unambiguous cases,"
 not "solved at scale."
 
-#### Category: per-label precision / recall / F1 (v2 gold set)
+#### Category: per-label precision / recall / F1 (v2 gold set, Sonnet 4.6)
 
 | Label | Precision | Recall | F1 | n |
 |---|---|---|---|---|
@@ -56,7 +104,8 @@ not "solved at scale."
 #### Can the judge stand in for the human?
 
 Hand-labeling doesn't scale, so v2 tests whether an **Opus judge** can serve as a cheaper
-answer key. It's validated the only honest way — against the human labels:
+answer key. It's validated the only honest way — against the human labels (v2 run; the
+refreshed post-migration agreement numbers are in the current-state section above):
 
 | | Judge vs human |
 |---|---|
@@ -70,7 +119,8 @@ hand-labeling can't reach — the basis for scaling the eval past 54 snippets la
 
 v2 grounds each classification in the top-3 BM25-retrieved corpus neighbors (label-tagged) and
 returns citations. Whether that *helps* is a measured question, not an assumption — and the
-answer is **marginal**:
+answer is **marginal**. Both arms of this comparison run on `claude-sonnet-4-6` (the RAG pin,
+[ADR-010](decisions/010-rag-path-model-pin.md)), so the deltas measure grounding alone:
 
 | | Baseline | Grounded | Δ |
 |---|---|---|---|
@@ -83,7 +133,10 @@ The flip analysis keeps that honest: on category, grounding changed 3 calls (2 w
 right→wrong) — a real but tiny net gain; on domain it changed 6 calls and *broke as many as it
 fixed* (3→3), which is why accuracy is flat. **Conclusion: lexical BM25 grounding does not earn
 the cost of upgrading to embeddings here.** That's the "measure first, escalate only if the eval
-says it pays" principle doing its job — the negative result is the finding.
+says it pays" principle doing its job — the negative result is the finding. The Sonnet 5
+migration sharpened that verdict: against the stronger 94.4% ungrounded domain baseline the
+same grounding turned actively negative (−9.3 points, reproduced 3×), which is why the RAG path
+stays pinned to Sonnet 4.6 (see the current-state section above and ADR-010).
 
 Full v2 reports: [`evals/gold_eval.txt`](evals/gold_eval.txt) (baseline + judge) and
 [`evals/gold_rag_eval.txt`](evals/gold_rag_eval.txt) (grounding lift).
@@ -174,7 +227,8 @@ Given a plain-text defense-news snippet, assign two labels:
 
 ### Approach (v1 core)
 
-A single LLM call per article using the **Anthropic API** (`claude-sonnet-4-6`) with
+A single LLM call per article using the **Anthropic API** (`claude-sonnet-5` since the
+July 2026 migration; v1 and v2 shipped on `claude-sonnet-4-6`) with
 [tool use](https://docs.anthropic.com/en/docs/tool-use) to force structured JSON output.
 No fine-tuning, no retrieval, no embeddings: just a well-specified prompt and a JSON schema
 that biases the output toward the valid label set. v2 keeps this call exactly and only changes
@@ -193,7 +247,8 @@ isn't hypothetical: in one 300-article run exactly one prediction came back out-
 
 ### Dataset
 
-300 synthetic defense-news snippets generated by the same model (`claude-sonnet-4-6`),
+300 synthetic defense-news snippets generated by `claude-sonnet-4-6` — the workhorse at the
+time, i.e. the same model that classified them in v1 —
 uniformly distributed across all 30 category × domain combinations (10 articles each).
 The generator uses the same tool-use approach to force correctly labeled output.
 
@@ -227,6 +282,8 @@ v2 keeps the v1 classifier call untouched and adds three pieces around it, each 
    `src/classify_rag.py` retrieves the top-3 label-tagged neighbors for a target article,
    prepends them as reference context, and returns the labels **plus citations**. Because the
    gold set is disjoint from the corpus, grounding a gold snippet never retrieves itself.
+   Since the Sonnet 5 migration this grounded path is pinned to `claude-sonnet-4-6`
+   ([ADR-010](decisions/010-rag-path-model-pin.md)); the ungrounded workhorse call is not.
 
 3. **An honest eval.** The v1 self-grading is gone. `data/gold/gold.csv` is 54 snippets a human
    labeled by hand against a written [labeling guide](data/gold/README.md). `src/gold_eval.py`
@@ -527,7 +584,9 @@ uv run python src/eval_gate.py                                     # no key need
 - [`anthropic`](https://github.com/anthropics/anthropic-sdk-python) for the LLM calls
 - [`pandas`](https://pandas.pydata.org/) for eval tables and CSV I/O
 - [`rank-bm25`](https://github.com/dorianbrown/rank_bm25) for v2 lexical retrieval
-- Models: `claude-sonnet-4-6` (workhorse classifier), `claude-opus-4-8` (v2 eval judge)
+- Models: `claude-sonnet-5` (workhorse classifier, since July 2026; v1/v2 shipped on
+  `claude-sonnet-4-6`), `claude-sonnet-4-6` (RAG-grounded path, pinned per
+  [ADR-010](decisions/010-rag-path-model-pin.md)), `claude-opus-4-8` (v2 eval judge)
 - Data sources: [DVIDS](https://www.dvidshub.net/) public-domain DoD news wire,
   [SEC EDGAR](https://www.sec.gov/edgar) filings (v2 corpus)
 - `fastapi` + `uvicorn` for the live `src/api.py` service (`POST /classify`), `httpx`
