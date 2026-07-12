@@ -109,7 +109,7 @@ A worked progression from `v2.0.0` (the concrete plan, not just the theory):
 | Version | Bump | What it would ship | Why that bump |
 |---|---|---|---|
 | **v2.0.1** | patch | Backfill the v2 eval modules' missing tests (`gold_eval_rag.py` is at 0% coverage, `gold_eval.py` 55%, `retrieve.py` 76%) and fix any edge cases they expose | Pure correctness/hardening — no feature, contract untouched — **shipped** |
-| **v2.1.0** | minor | **Scale the eval with the validated judge** — grade 300+ real snippets with the Opus judge (validated at 88.9% / 94.4%) and report confidence intervals, so n=54's noise floor shrinks | New capability, same output contract → MINOR; PATCH resets to 0 |
+| **v2.1.0** | minor | **Scale the eval with the validated judge** — grade 300+ real snippets with the Opus judge (validated against the human labels: 90.7% category / 92.6% domain agreement on the current Sonnet-5-era run, `evals/gold_eval.txt`) and report confidence intervals, so n=54's noise floor shrinks | New capability, same output contract → MINOR; PATCH resets to 0 |
 | **v2.1.1** | patch | Fix whatever the scaled run exposes — e.g. a resume/batching bug in the judge harness or a larger-data CI timeout | A fix *on top of* v2.1.0 → third digit increments |
 | **v2.2.0** | minor | **Tiered model routing** — escalate only low-confidence `industry`-vs-`procurement` cases to Opus, measure the cost/quality trade | Additive, callers unaffected → MINOR again; PATCH back to 0 |
 | **v3.0.0** | major | **Add a `region` field** — output becomes `{category, operational_domain, region}` (`indo-pacific`, `europe`, …), needs a fresh gold-labeling pass | Breaks the output contract → MAJOR; MINOR + PATCH reset to 0 |
