@@ -160,7 +160,15 @@ def _report_live_diagnosis(client, model: str) -> None:
         )
     diagnostics = result["diagnostics"]
     if diagnostics is None:
-        print("diagnostics: (not surfaced by this SDK version)")
+        # Per the cache-diagnostics docs, a *null* diagnostics field is the
+        # API's positive answer: a comparison ran and found no divergence --
+        # exactly what identical back-to-back probe calls should produce. (An
+        # SDK too old to model the field also lands here via getattr's default;
+        # distinguish by whether cache_read moved on call 2.)
+        print(
+            "diagnostics: null -- no divergence found between the two calls "
+            "(expected for identical probes)"
+        )
     else:
         # diagnostics carries cache_miss_reason when the prefix did not cache.
         dump = getattr(diagnostics, "to_dict", None)

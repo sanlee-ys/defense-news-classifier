@@ -14,6 +14,21 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 - **Evals-as-CI capability gate** (`.github/workflows/evals.yml`, `src/eval_gate.py`, `evals/thresholds.toml`) — wires the v2 gold-set evals (`gold_eval.py`, `gold_eval_rag.py`) into CI as two gates split by API cost: a free offline gate on every push/PR that grades the prediction CSVs already committed against threshold floors, and a paid live gate on `workflow_dispatch` + a weekly schedule only (never `pull_request`, and never `pull_request_target`) that re-runs the real models first and never commits the refreshed numbers back. `build_report()` in both eval scripts now reads from an extracted `metrics()` function — same printed output, now also machine-readable. `Jenkinsfile` gets a matching parity-only offline stage. See [ADR-007](decisions/007-evals-as-ci-gate.md).
 - **Rung-1 prompt-optimization loop** (`src/optimize.py`, autonomy ladder L3) — an agent-driven loop that reads the classifier's eval failures on a held-out A split, proposes a revised system prompt, re-scores A/B/C, and repeats until an explicit done-signal fires (threshold, then plateau, then budget). The orchestrator (`run_optimization`) talks to an injected `OptimizerBackend` (`score`, `propose`) rather than the Anthropic client directly, which makes the Goodhart guard structural — B/C never reach the code path that builds the proposer's feedback — and gives a zero-API `--dry-run` mode for free via `DryRunBackend`. Run log is append-only JSONL for resume-safety. See [ADR-005](decisions/005-agentic-prompt-optimization-loop.md) and [the loop spec](docs/specs/prompt-optimization-loop.md). **Per the spec's §11 sequencing, this capability is a MINOR bump but is deliberately not versioned yet** — it stays under `[Unreleased]` until `v2.1.0` ("scale the eval") lands, since v2.1.0 is what shrinks the n≈54 noise floor this loop's honest C-number depends on. The build is not blocked on that; only the version bump is.
 
+### Changed
+- **`SYSTEM_PROMPT` gains an extended rubric, making prompt caching real** — the prompt now
+  encodes the gold set's own labeling conventions (contract award = the buyer's story →
+  `procurement`; policy = the rule, not the doing; cyber-vs-host-platform; uncrewed systems
+  by operating medium) plus 16 worked examples and an explicit tie-break order, targeting the
+  `industry`/`procurement`/`technology` triangle where 90% of the v1 category misses lived
+  (`evals/error_audit.md`). Sizing is deliberate: the cacheable prefix (tool schema + system
+  prompt) grows from ~876 to ~2425 tokens, clearing claude-sonnet-5's 2048-token minimum
+  cacheable-prefix floor — verified live via `scripts/cache_diagnostics.py --live` (call 1:
+  `cache_creation=2350`, call 2: `cache_read=2350`), where before the change both calls
+  showed the `cache_control` marker as a silent no-op. Bulk paths (eval runs, batches, the
+  optimize loop) now re-read the prefix at the 90%-discounted cache rate. The script's
+  misleading "not surfaced by this SDK version" message for a null diagnostics field is also
+  fixed (null is the API's "no divergence found" answer, per the cache-diagnostics docs).
+
 The `{category, operational_domain}` output contract is unchanged throughout. The
 classifier's live surface remains the `/classify` HTTP provider.
 
