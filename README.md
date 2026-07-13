@@ -38,24 +38,27 @@ before and after, on the same 54 human-labeled snippets
 
 | Field | Sonnet 4.6 (v2 as shipped) | Sonnet 5 (current) |
 |---|---|---|
-| Category accuracy | 88.9% | **88.9%** |
-| Category macro-F1 | 0.906 | **0.888** |
-| Domain accuracy | 88.9% | **94.4%** |
-| Domain macro-F1 | 0.894 | **0.947** |
+| Category accuracy | 88.9% | **90.7%** |
+| Category macro-F1 | 0.906 | **0.902** |
+| Domain accuracy | 88.9% | **90.7%** |
+| Domain macro-F1 | 0.894 | **0.919** |
 
-Operational domain rose 88.9% → 94.4% and category held at 88.9% — consistent with the
-category ceiling being label ambiguity in borderline snippets, which a stronger model can't
-un-blur.
+The current snapshot follows the extended-rubric prompt change (PR #73, which also made the
+prompt cache real): category edged up to 90.7% and domain sits at 90.7%. The post-migration
+refresh before the rubric had domain at 94.4% — at n=54 a two-flip swing, inside the eval's
+own run-to-run noise (see the stability note below), so read the pair as "low 90s," not as a
+regression or a lift. The category ceiling remains label ambiguity in borderline snippets,
+which neither a stronger model nor a sharper rubric can un-blur.
 
 #### Category: per-label precision / recall / F1 (Sonnet 5, current)
 
 | Label | Precision | Recall | F1 | n |
 |---|---|---|---|---|
 | industry | 0.833 | 1.000 | 0.909 | 5 |
-| operations | 0.950 | 0.864 | 0.905 | 22 |
+| operations | 0.913 | 0.955 | 0.933 | 22 |
 | policy | 0.857 | 1.000 | 0.923 | 6 |
-| procurement | 0.778 | 0.875 | 0.824 | 8 |
-| technology | 0.917 | 0.846 | 0.880 | 13 |
+| procurement | 0.875 | 0.875 | 0.875 | 8 |
+| technology | 1.000 | 0.769 | 0.870 | 13 |
 
 The v1 `industry` fix holds: recall stays at 1.000 on the real SEC snippets (v1 caught 1 in 5).
 On the refreshed run the Opus judge agrees with the human labels on 90.7% of category calls and
@@ -124,19 +127,22 @@ answer is **marginal**. Both arms of this comparison run on `claude-sonnet-4-6` 
 
 | | Baseline | Grounded | Δ |
 |---|---|---|---|
-| Category accuracy | 88.9% | 90.7% | +1.9% |
-| Category macro-F1 | 0.906 | 0.914 | +0.008 |
-| Domain accuracy | 88.9% | 88.9% | +0.0% |
-| Domain macro-F1 | 0.894 | 0.907 | +0.013 |
+| Category accuracy | 88.9% | 94.4% | +5.6% |
+| Category macro-F1 | 0.906 | 0.950 | +0.044 |
+| Domain accuracy | 88.9% | 96.3% | +7.4% |
+| Domain macro-F1 | 0.894 | 0.964 | +0.070 |
 
-The flip analysis keeps that honest: on category, grounding changed 3 calls (2 wrong→right, 1
-right→wrong) — a real but tiny net gain; on domain it changed 6 calls and *broke as many as it
-fixed* (3→3), which is why accuracy is flat. **Conclusion: lexical BM25 grounding does not earn
-the cost of upgrading to embeddings here.** That's the "measure first, escalate only if the eval
-says it pays" principle doing its job — the negative result is the finding. The Sonnet 5
-migration sharpened that verdict: against the stronger 94.4% ungrounded domain baseline the
-same grounding turned actively negative (−9.3 points, reproduced 3×), which is why the RAG path
-stays pinned to Sonnet 4.6 (see the current-state section above and ADR-010).
+The flip analysis keeps that honest: on category, grounding changed 5 calls (4 wrong→right, 1
+right→wrong); on domain it changed 4 and fixed all 4 (4→0). That is a real shift from the v2
+ship, where grounding was marginal (+1.9% category, domain flat, breaking as many domain calls
+as it fixed) — the extended-rubric prompt (PR #73) and grounding now reinforce each other
+instead of fighting. **The conclusion stands, stronger: lexical BM25 grounding does not earn
+the cost of upgrading to embeddings here** — not because grounding barely helps, as at the v2
+ship, but because BM25 grounding now clearly works. Same "measure first" principle, new
+evidence. One caveat the numbers reopen rather than settle: the Sonnet 5 regression that
+motivated the pin (−9.3 domain points, reproduced 3×) was measured with the pre-rubric prompt
+and has not been re-run since — whether the pin is still needed under the new prompt is an
+open, measurable question (see ADR-010).
 
 Full v2 reports: [`evals/gold_eval.txt`](evals/gold_eval.txt) (baseline + judge) and
 [`evals/gold_rag_eval.txt`](evals/gold_rag_eval.txt) (grounding lift).
