@@ -66,7 +66,73 @@ Operational domains:
 - multi: joint/combined operations spanning more than one domain
 
 Pick the single best label for each field. If the article spans two categories or domains, \
-choose the one that is most prominent."""
+choose the one that is most prominent.
+
+Extended rubric -- apply these conventions when labels overlap:
+
+Category boundaries:
+- procurement vs industry: a purchase, contract award, or program decision is the BUYER'S \
+story -- label it procurement, even when the winning company is named in the headline. Label \
+industry only when the story is the company's own business (earnings, mergers and \
+acquisitions, stock moves, workforce or corporate strategy) with no government purchase at \
+its center.
+- procurement vs technology: a contract to buy, develop, or field a system is procurement; \
+the system itself -- its capabilities, tests, demonstrations, R&D milestones -- is \
+technology. If the money event is the story, choose procurement; if the machine is the \
+story, choose technology.
+- policy is the rule, not the doing: label policy only when the story is about a policy, \
+strategy, treaty, piece of legislation, doctrine, or formal rule ITSELF (its creation, \
+change, review, or articulation). A unit or official implementing, exercising, or merely \
+name-dropping a policy or strategy document is doing an action -- usually operations. A \
+snippet can mention a strategy review and still be operations if it is really about \
+carrying it out.
+- operations vs technology: the first combat or exercise use of a new system is operations \
+when the story is the engagement or deployment, technology when the story is what the \
+system proved it can do.
+- industry vs technology: a company unveiling or developing a system is technology when the \
+capability is the point, industry when the business result (revenue, market position, a \
+merger) is the point.
+- budget boundary: debate over or passage of budget legislation is policy (the rule being \
+made); an executed award or program decision spending an existing budget is procurement.
+
+Domain boundaries:
+- cyber vs the host platform: electronic warfare, network attack or defense, and \
+information-warfare capabilities are cyber even when mounted on a tank, ship, or aircraft. \
+If the cyber/EW capability is the subject, label cyber; if the platform is the subject and \
+the EW kit is a supporting detail, label the platform's domain.
+- air vs space: aircraft, UAVs, helicopters, and missiles operating inside the atmosphere \
+are air; satellites, launch vehicles, ground-based space-surveillance, and orbital systems \
+are space.
+- uncrewed systems go by operating medium: aerial drones/UAVs are air, uncrewed surface or \
+undersea vessels are sea, ground robots are land.
+- carrier and amphibious stories: the ship or fleet as subject is sea; the embarked air \
+wing's flying operations as subject is air.
+- multi is for genuinely joint stories: use multi only when the story itself spans domains \
+(a joint exercise, a cross-domain program, a service-wide strategy). Do not use multi just \
+because a second domain gets a passing mention -- pick the dominant one.
+
+Worked examples:
+- "Army awards $1.2B contract for next-generation ground vehicles" -> procurement / land
+- "Contractor reports quarterly earnings up 8 percent on strong missile demand" -> industry / air
+- "Destroyers conduct freedom-of-navigation transit through contested strait" -> operations / sea
+- "New national defense strategy elevates deterrence across theaters" -> policy / multi
+- "Startup demonstrates autonomous drone swarm for contested resupply" -> technology / air
+- "Two defense primes announce merger to consolidate satellite manufacturing" -> industry / space
+- "Air Force awards development contract for counter-drone electronic-warfare pod" -> procurement / cyber
+- "Cyber command runs defensive operations against intrusions into logistics networks" -> operations / cyber
+- "Congress passes authorization act setting shipbuilding budget levels" -> policy / sea
+- "Soldiers field-test powered exoskeleton during live-fire exercise" -> technology / land
+- "Navy commissions new attack submarine after sea trials" -> operations / sea
+- "Pentagon budget request prioritizes munitions restocking over platform buys" -> policy / multi
+- "Prime contractor selected to build next missile-warning satellite constellation" -> procurement / space
+- "Battalion completes rotation at combat training center under new doctrine" -> operations / land
+- "Lab unveils jam-resistant navigation system for GPS-denied environments" -> technology / cyber
+- "Shipbuilder stock surges after analysts raise defense-spending outlook" -> industry / sea
+
+Tie-breaking, in order: (1) weigh the headline and lead sentence most heavily; (2) identify \
+the story's center of gravity -- the money event (procurement), the action (operations), \
+the rule (policy), the machine (technology), or the business result (industry) -- and label \
+that; (3) if two domains genuinely share the center of gravity, only then use multi."""
 
 CLASSIFY_TOOL: ToolParam = {
     "name": "classify_article",
@@ -242,10 +308,12 @@ def classify(
     # across many calls in a row -- eval.py/gold_eval.py across every row of
     # their dataset, the optimize.py loop across ~354 scoring calls per
     # iteration -- so this is the textbook repeated-prefix caching case.
-    # Below Sonnet 5's ~2048-token minimum cacheable prefix the marker is a
-    # harmless no-op (cache_creation_input_tokens stays 0, no error); it
-    # starts paying off once a prompt grows past that, which happens in
-    # practice as optimize.py's loop revises and lengthens the prompt.
+    # SYSTEM_PROMPT's extended rubric deliberately carries the prefix past
+    # Sonnet 5's 2048-token minimum cacheable floor (~2425 measured; verified
+    # live with scripts/cache_diagnostics.py --live: call 2 reads the full
+    # prefix from cache). If a future edit shrinks the prompt back under the
+    # floor, the marker silently reverts to a no-op -- re-run that script
+    # after any prompt change.
     system_block: TextBlockParam = {
         "type": "text",
         "text": system_prompt,
@@ -381,11 +449,12 @@ def parse_batch_result(result) -> dict:
 # classify() marks its system block with cache_control, but on claude-sonnet-5
 # the cache silently does nothing until the cached prefix (tool schema + system
 # prompt) crosses the model's ~2048-token minimum cacheable-prefix floor. The
-# current prefix (~876 tokens on Sonnet 5) sits well under that, so the marker
-# is a no-op today. These
-# helpers measure exactly how far under, using the free /v1/messages/count_tokens
-# endpoint -- so the prompt-optimization loop (which lengthens the system prompt
-# over iterations) can see when caching will start paying off. The live
+# prefix deliberately clears that floor today (~2425 tokens, via SYSTEM_PROMPT's
+# extended rubric), so the marker is live -- and these helpers are the guard
+# that a future prompt edit doesn't silently slip back under it, using the free
+# /v1/messages/count_tokens
+# endpoint -- so the prompt-optimization loop (which revises the system prompt
+# over iterations) can see whether caching still pays off. The live
 # cache_miss_reason beta reporting that pairs with this lives in
 # scripts/cache_diagnostics.py, which drives these functions.
 # ---------------------------------------------------------------------------
