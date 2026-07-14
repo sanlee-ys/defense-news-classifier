@@ -87,6 +87,27 @@ file for the RAG baseline instead of `gold_eval.PREDS_PATH`.
 - **This is transitional debt, recorded as such.** The pin buys time to decide the RAG feature's
   real future against the Sonnet-5 baseline; it is not the end state.
 
+## Re-measurement (2026-07-14): the pin's premise holds under the extended-rubric prompt
+
+The original −9.3 regression was measured with the pre-rubric prompt. After the
+extended-rubric prompt change (PR #73) flipped grounding from break-even to clearly positive
+on the 4.6 pin, the Sonnet-5 experiment was re-run rather than assumed in either direction
+(`scripts/adr010_remeasure.py`; it writes its report under `evals/runs/`, which is
+gitignored run-log territory, so the full numbers are inlined here): three independent
+grounded Sonnet-5 passes over the gold set against the same-model ungrounded snapshot
+(domain 90.7%).
+
+| Pass | Grounded domain | Delta | Domain flips (fix/break) |
+|---|---|---|---|
+| 1 | 87.0% | −3.7 | 3 / 5 |
+| 2 | 87.0% | −3.7 | 2 / 4 |
+| 3 | 85.2% | −5.6 | 2 / 5 |
+
+Category stayed flat within noise (90.7 / 88.9 / 90.7 vs 90.7 ungrounded). The rubric
+shrank the domain regression (−9.3 → roughly −4) but did not cure it: every pass still
+breaches the −3.0 `domain_delta_min` floor and breaks more domain calls than it fixes.
+**The pin stands.** The follow-up options below remain the live paths to retiring it.
+
 ## Follow-up (the next decision to make — NOT decided here)
 
 The leading candidate, verbatim from the verdict:
