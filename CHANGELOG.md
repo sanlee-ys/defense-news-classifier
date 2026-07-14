@@ -23,8 +23,10 @@ Versions are tagged by milestone; individual commits are noted where relevant.
   from break-even at the v2 ship to 8 fixed / 1 broken, strengthening the no-embeddings verdict.
   Every gated metric clears its `thresholds.toml` floor. Noted honestly in the README: the
   pre-rubric refresh had Sonnet 5 domain at 94.4% vs 90.7% now (a two-flip swing inside n=54
-  noise), and ADR-010's Sonnet-5 grounding regression predates the rubric — re-measuring the pin
-  is an open question.
+  noise). ADR-010's Sonnet-5 grounding regression was then re-measured under the new rubric
+  (`scripts/adr010_remeasure.py`, 3 passes): it persists at −3.7/−3.7/−5.6 domain, each pass
+  breaching the −3.0 floor — smaller than the original −9.3 but not cured, so the RAG pin
+  stands (recorded in ADR-010's re-measurement section).
 - **`SYSTEM_PROMPT` gains an extended rubric, making prompt caching real** — the prompt now
   encodes the gold set's own labeling conventions (contract award = the buyer's story →
   `procurement`; policy = the rule, not the doing; cyber-vs-host-platform; uncrewed systems

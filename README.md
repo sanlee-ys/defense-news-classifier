@@ -139,10 +139,11 @@ as it fixed) — the extended-rubric prompt (PR #73) and grounding now reinforce
 instead of fighting. **The conclusion stands, stronger: lexical BM25 grounding does not earn
 the cost of upgrading to embeddings here** — not because grounding barely helps, as at the v2
 ship, but because BM25 grounding now clearly works. Same "measure first" principle, new
-evidence. One caveat the numbers reopen rather than settle: the Sonnet 5 regression that
-motivated the pin (−9.3 domain points, reproduced 3×) was measured with the pre-rubric prompt
-and has not been re-run since — whether the pin is still needed under the new prompt is an
-open, measurable question (see ADR-010).
+evidence. The Sonnet 5 regression that motivated the pin (−9.3 domain points, pre-rubric) was
+then re-measured under the new prompt rather than assumed: it persists — three grounded
+Sonnet-5 passes landed at −3.7/−3.7/−5.6 domain, each breaching the −3.0 gate floor and
+breaking more domain calls than it fixed. Smaller, not cured; the pin stands
+(full table in ADR-010's re-measurement section; rerun with `scripts/adr010_remeasure.py`).
 
 Full v2 reports: [`evals/gold_eval.txt`](evals/gold_eval.txt) (baseline + judge) and
 [`evals/gold_rag_eval.txt`](evals/gold_rag_eval.txt) (grounding lift).
