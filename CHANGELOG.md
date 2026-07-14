@@ -15,6 +15,16 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 - **Rung-1 prompt-optimization loop** (`src/optimize.py`, autonomy ladder L3) — an agent-driven loop that reads the classifier's eval failures on a held-out A split, proposes a revised system prompt, re-scores A/B/C, and repeats until an explicit done-signal fires (threshold, then plateau, then budget). The orchestrator (`run_optimization`) talks to an injected `OptimizerBackend` (`score`, `propose`) rather than the Anthropic client directly, which makes the Goodhart guard structural — B/C never reach the code path that builds the proposer's feedback — and gives a zero-API `--dry-run` mode for free via `DryRunBackend`. Run log is append-only JSONL for resume-safety. See [ADR-005](decisions/005-agentic-prompt-optimization-loop.md) and [the loop spec](docs/specs/prompt-optimization-loop.md). **Per the spec's §11 sequencing, this capability is a MINOR bump but is deliberately not versioned yet** — it stays under `[Unreleased]` until `v2.1.0` ("scale the eval") lands, since v2.1.0 is what shrinks the n≈54 noise floor this loop's honest C-number depends on. The build is not blocked on that; only the version bump is.
 
 ### Changed
+- **Eval snapshot refreshed post-rubric** — `evals/gold_predictions.csv`, `gold_rag_predictions.csv`,
+  and both report files re-run fresh under the extended-rubric prompt, with README numbers swept to
+  match (one self-consistent run, mirroring the live CI gate's procedure). Baseline (Sonnet 5):
+  category 90.7% (macro-F1 0.902), domain 90.7% (0.919); judge agreement 90.7% / 92.6%. Grounded
+  (Sonnet 4.6 pin): category 94.4% (0.950), domain 96.3% (0.964) — grounding's flip ratio improved
+  from break-even at the v2 ship to 8 fixed / 1 broken, strengthening the no-embeddings verdict.
+  Every gated metric clears its `thresholds.toml` floor. Noted honestly in the README: the
+  pre-rubric refresh had Sonnet 5 domain at 94.4% vs 90.7% now (a two-flip swing inside n=54
+  noise), and ADR-010's Sonnet-5 grounding regression predates the rubric — re-measuring the pin
+  is an open question.
 - **`SYSTEM_PROMPT` gains an extended rubric, making prompt caching real** — the prompt now
   encodes the gold set's own labeling conventions (contract award = the buyer's story →
   `procurement`; policy = the rule, not the doing; cyber-vs-host-platform; uncrewed systems
