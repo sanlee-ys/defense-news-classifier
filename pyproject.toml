@@ -11,7 +11,19 @@ dependencies = [
     # httpx is pulled in transitively by anthropic anyway; kept as a direct dep
     # because it also backs FastAPI's TestClient (see the dev group below).
     "httpx",
+    # Observability: the classify() LLM call is instrumented against the OTel API
+    # always; the SDK only records/exports when CLASSIFIER_TRACING is set (see
+    # src/telemetry.py), mirroring the kb-agent tracing. API + SDK are core so the
+    # no-op-when-disabled path works out of the box; the OTLP wire exporter is the
+    # optional `otlp` extra below.
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
 ]
+
+[project.optional-dependencies]
+# Export spans to an OpenTelemetry collector over OTLP/HTTP. The console exporter
+# (stderr) needs no infrastructure and is always available without this extra.
+otlp = ["opentelemetry-exporter-otlp-proto-http>=1.20.0"]
 
 [dependency-groups]
 dev = [
