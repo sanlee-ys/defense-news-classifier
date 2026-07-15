@@ -20,6 +20,8 @@ from anthropic.types import (
 from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
 from anthropic.types.messages.batch_create_params import Request
 
+from telemetry import get_tracer, set_usage_attributes, setup_tracing
+
 # The user-message content classify() accepts: either a plain article string, or a
 # list of content blocks (used by the RAG layer to present retrieved passages as
 # first-class ``search_result`` blocks so the API attaches source/title citations).
@@ -320,24 +322,43 @@ def classify(
         "cache_control": {"type": "ephemeral"},
     }
 
-    # Pass the SDK's `omit` sentinel when no temperature is requested, so the
-    # API uses its own default rather than us forcing a value.
-    response = client.messages.create(
-        model=model,
-        max_tokens=256,
-        system=[system_block],
-        tools=[CLASSIFY_TOOL],
-        tool_choice={"type": "tool", "name": "classify_article"},
-        messages=[{"role": "user", "content": text}],
-        output_config=OUTPUT_CONFIG,
-        temperature=anthropic.omit if temperature is None else temperature,
-    )
-    # Guard the refusal case before extracting the tool block: a refusal is an
-    # HTTP 200 with stop_reason == "refusal" and no tool_use block, so the next()
-    # below would otherwise raise a bare StopIteration. See ClassificationRefusalError.
-    _raise_if_refusal(response)
-    tool_block = next(b for b in response.content if isinstance(b, ToolUseBlock))
-    return _validate(cast(dict, tool_block.input))
+    # One span per classification wraps the LLM call so its cost and outcome are
+    # legible when tracing is on (CLASSIFIER_TRACING); a no-op otherwise, so the
+    # eval hot path pays nothing. Same GenAI-semconv shape as the kb-agent loop.
+    tracer = get_tracer()
+    with tracer.start_as_current_span(f"chat {model}") as span:
+        span.set_attribute("gen_ai.operation.name", "chat")
+        span.set_attribute("gen_ai.request.model", model)
+        # Pass the SDK's `omit` sentinel when no temperature is requested, so the
+        # API uses its own default rather than us forcing a value.
+        response = client.messages.create(
+            model=model,
+            max_tokens=256,
+            system=[system_block],
+            tools=[CLASSIFY_TOOL],
+            tool_choice={"type": "tool", "name": "classify_article"},
+            messages=[{"role": "user", "content": text}],
+            output_config=OUTPUT_CONFIG,
+            temperature=anthropic.omit if temperature is None else temperature,
+        )
+        if span.is_recording():
+            set_usage_attributes(span, getattr(response, "usage", None))
+            stop_reason = getattr(response, "stop_reason", None)
+            if stop_reason:
+                span.set_attribute("gen_ai.response.finish_reasons", [stop_reason])
+        # Guard the refusal case before extracting the tool block: a refusal is an
+        # HTTP 200 with stop_reason == "refusal" and no tool_use block, so the
+        # next() below would otherwise raise a bare StopIteration. See
+        # ClassificationRefusalError.
+        _raise_if_refusal(response)
+        tool_block = next(b for b in response.content if isinstance(b, ToolUseBlock))
+        result = _validate(cast(dict, tool_block.input))
+        if span.is_recording():
+            span.set_attribute("classifier.category", result["category"])
+            span.set_attribute(
+                "classifier.operational_domain", result["operational_domain"]
+            )
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -544,6 +565,8 @@ def make_client() -> anthropic.Anthropic:
             "ANTHROPIC_API_KEY is not set. "
             "Export it before running: export ANTHROPIC_API_KEY=sk-ant-..."
         )
+    # Activate the tracing SDK if CLASSIFIER_TRACING is set; a no-op otherwise.
+    setup_tracing()
     return anthropic.Anthropic(api_key=api_key)
 
 
