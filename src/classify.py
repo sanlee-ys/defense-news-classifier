@@ -90,7 +90,11 @@ snippet can mention a strategy review and still be operations if it is really ab
 carrying it out.
 - operations vs technology: the first combat or exercise use of a new system is operations \
 when the story is the engagement or deployment, technology when the story is what the \
-system proved it can do.
+system proved it can do. A system being built, tested, prototyped, or demonstrated is \
+technology even when an operational unit does the work or it happens during an exercise -- \
+the operational setting does not override that the system or capability is the subject. \
+Reserve operations for when the unit's activity itself (a deployment, a drill, an \
+engagement) is the story, with no new system at its center.
 - industry vs technology: a company unveiling or developing a system is technology when the \
 capability is the point, industry when the business result (revenue, market position, a \
 merger) is the point.
@@ -112,6 +116,11 @@ wing's flying operations as subject is air.
 - multi is for genuinely joint stories: use multi only when the story itself spans domains \
 (a joint exercise, a cross-domain program, a service-wide strategy). Do not use multi just \
 because a second domain gets a passing mention -- pick the dominant one.
+- air action over a ground setting is still air: an airstrike, close-air-support mission, or \
+air-and-missile-defense story is air (the aircraft or missile is the actor), even when \
+ground forces or ground targets are present. Do not default to land just because the \
+setting is on the ground; use multi only when a ground engagement genuinely shares the \
+story's center of gravity with the air action.
 
 Worked examples:
 - "Army awards $1.2B contract for next-generation ground vehicles" -> procurement / land
@@ -130,6 +139,9 @@ Worked examples:
 - "Battalion completes rotation at combat training center under new doctrine" -> operations / land
 - "Lab unveils jam-resistant navigation system for GPS-denied environments" -> technology / cyber
 - "Shipbuilder stock surges after analysts raise defense-spending outlook" -> industry / sea
+- "Squadron stands up test track to put a new hypersonic sled through its paces" -> technology / air
+- "Prototype uncrewed surface vessels join a fleet exercise to prove autonomous resupply" -> technology / sea
+- "Coalition aircraft conduct airstrike on insurgent position during ground firefight" -> operations / multi
 
 Tie-breaking, in order: (1) weigh the headline and lead sentence most heavily; (2) identify \
 the story's center of gravity -- the money event (procurement), the action (operations), \
