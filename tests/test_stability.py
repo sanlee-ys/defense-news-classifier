@@ -5,6 +5,8 @@ API-calling runner (run_one_pass / main) is not exercised here — it's a thin
 loop over the already-tested classify_with_retry.
 """
 
+import sys
+
 import pandas as pd
 import pytest
 
@@ -176,3 +178,67 @@ def test_report_includes_runs_noise_guidance_and_consistency():
     assert "Label consistency" in report
     assert "0.9800" in report and "0.9900" in report  # the consistency numbers
     assert "run 1:" in report and "run 2:" in report
+
+
+# --- run_one_pass (the API-driving loop) ---------------------------------
+
+
+def test_run_one_pass_classifies_each_row_once_in_order(monkeypatch):
+    df = pd.DataFrame(
+        [{"id": "a1", "text": "first snippet"}, {"id": "a2", "text": "second snippet"}]
+    )
+
+    seen = []
+
+    def fake_classify(_client, text):
+        seen.append(text)
+        return {"category": "policy", "operational_domain": "air"}
+
+    monkeypatch.setattr(stability, "classify_with_retry", fake_classify)
+    preds = stability.run_one_pass(object(), df)
+
+    assert list(preds["id"]) == ["a1", "a2"]
+    assert list(preds.columns) == ["id", "pred_category", "pred_operational_domain"]
+    assert (preds["pred_category"] == "policy").all()
+    assert seen == ["first snippet", "second snippet"]  # one call per row, in order
+
+
+# --- main() end-to-end on a tiny synthetic dataset -----------------------
+
+
+def test_main_runs_passes_and_writes_report_and_run_files(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["stability.py", "--runs", "2"])
+    (tmp_path / "data").mkdir()
+    pd.DataFrame(
+        [
+            {
+                "id": "a1",
+                "text": "t1",
+                "category": "policy",
+                "operational_domain": "air",
+            },
+            {
+                "id": "a2",
+                "text": "t2",
+                "category": "operations",
+                "operational_domain": "sea",
+            },
+        ]
+    ).to_csv(tmp_path / "data" / "synthetic_articles.csv", index=False)
+
+    monkeypatch.setattr(stability, "make_client", lambda: object())
+    monkeypatch.setattr(
+        stability,
+        "classify_with_retry",
+        lambda _client, _text: {"category": "policy", "operational_domain": "air"},
+    )
+
+    stability.main()
+
+    # one raw predictions file per run, plus the aggregated report
+    assert (tmp_path / "evals" / "runs" / "predictions_run1.csv").exists()
+    assert (tmp_path / "evals" / "runs" / "predictions_run2.csv").exists()
+    report_path = tmp_path / "evals" / "stability.txt"
+    assert report_path.exists()
+    assert "Runs     : 2" in report_path.read_text(encoding="utf-8")

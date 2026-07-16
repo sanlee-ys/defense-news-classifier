@@ -7,6 +7,7 @@ gold_eval.py's run_predictions.
 
 import os
 import sys
+import types
 
 import pandas as pd
 
@@ -232,4 +233,171 @@ def test_main_skips_api_when_predictions_complete(monkeypatch, tmp_path):
     monkeypatch.setattr(gold_eval_haiku, "make_client", boom)
 
     gold_eval_haiku.main()  # should not raise
+    assert (tmp_path / "evals" / "gold_haiku_eval.txt").exists()
+
+
+# --- run_predictions (the synchronous loop) ------------------------------
+
+
+def test_run_predictions_writes_todo_rows_on_the_haiku_model(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    os.makedirs("evals", exist_ok=True)
+    monkeypatch.setattr(gold_eval_haiku.time, "sleep", lambda *_: None)
+
+    calls = []
+
+    def fake_classify_retry(_client, text, model):
+        calls.append((text, model))
+        return {"category": "operations", "operational_domain": "sea"}
+
+    monkeypatch.setattr(gold_eval_haiku, "classify_retry", fake_classify_retry)
+    gold_eval_haiku.run_predictions(object(), _gold_df(), done_ids={"g001"})
+
+    preds = pd.read_csv(gold_eval_haiku.HAIKU_PREDS_PATH)
+    assert set(preds["id"]) == {"g002"}  # g001 skipped
+    assert calls == [("b", gold_eval_haiku.HAIKU_MODEL)]  # only g002, on the Haiku tier
+    assert preds.iloc[0]["haiku_category"] == "operations"
+
+
+# --- batch polling: wait for a not-yet-ended batch -----------------------
+
+
+def test_run_predictions_batch_polls_until_batch_ends(
+    monkeypatch, batch_client, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    os.makedirs("evals", exist_ok=True)
+    monkeypatch.setattr(gold_eval_haiku.time, "sleep", lambda *_: None)
+
+    client = batch_client(
+        {
+            "g001": {"category": "procurement", "operational_domain": "air"},
+            "g002": {"category": "operations", "operational_domain": "sea"},
+        }
+    )
+    # First retrieve() reports still-processing (exercises the poll+sleep branch);
+    # the second reports ended so the loop can break.
+    retrieves = {"n": 0}
+
+    def flaky_retrieve(batch_id):
+        retrieves["n"] += 1
+        status = "ended" if retrieves["n"] >= 2 else "in_progress"
+        return types.SimpleNamespace(
+            id=batch_id,
+            processing_status=status,
+            request_counts=types.SimpleNamespace(processing=1),
+        )
+
+    monkeypatch.setattr(client.messages.batches, "retrieve", flaky_retrieve)
+    gold_eval_haiku.run_predictions_batch(
+        client, _gold_df(), done_ids=set(), poll_interval=0.0
+    )
+
+    preds = pd.read_csv(gold_eval_haiku.HAIKU_PREDS_PATH)
+    assert set(preds["id"]) == {"g001", "g002"}
+    assert retrieves["n"] >= 2  # polled at least once before the batch ended
+
+
+# --- main() run branches (sync dispatch vs --batch dispatch) -------------
+
+
+def _seed_gold_and_baseline(tmp_path):
+    (tmp_path / "data" / "gold").mkdir(parents=True)
+    pd.DataFrame(
+        [
+            {
+                "id": "g001",
+                "dvids_id": "news:1",
+                "source_url": "http://x/1",
+                "text": "t1",
+                "category": "procurement",
+                "domain": "air",
+            },
+            {
+                "id": "g002",
+                "dvids_id": "news:2",
+                "source_url": "http://x/2",
+                "text": "t2",
+                "category": "operations",
+                "domain": "sea",
+            },
+        ]
+    ).to_csv(tmp_path / "data" / "gold" / "gold.csv", index=False)
+    (tmp_path / "evals").mkdir()
+    pd.DataFrame(
+        [
+            {
+                "id": "g001",
+                "pred_category": "procurement",
+                "pred_operational_domain": "air",
+            },
+            {
+                "id": "g002",
+                "pred_category": "operations",
+                "pred_operational_domain": "sea",
+            },
+        ]
+    ).to_csv(tmp_path / "evals" / "gold_predictions.csv", index=False)
+
+
+def _write_haiku_preds():
+    pd.DataFrame(
+        [
+            {
+                "id": "g001",
+                "haiku_category": "procurement",
+                "haiku_operational_domain": "air",
+            },
+            {
+                "id": "g002",
+                "haiku_category": "policy",
+                "haiku_operational_domain": "sea",
+            },
+        ]
+    ).to_csv(gold_eval_haiku.HAIKU_PREDS_PATH, index=False)
+
+
+def test_main_default_uses_synchronous_predictions(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["gold_eval_haiku.py"])
+    _seed_gold_and_baseline(tmp_path)
+    monkeypatch.setattr(gold_eval_haiku, "make_client", lambda: object())
+
+    called = {}
+
+    def fake_sync(_client, _df, _done_ids):
+        called["sync"] = True
+        _write_haiku_preds()
+
+    def boom_batch(*_a, **_kw):
+        raise AssertionError("the default run must not use the batch path")
+
+    monkeypatch.setattr(gold_eval_haiku, "run_predictions", fake_sync)
+    monkeypatch.setattr(gold_eval_haiku, "run_predictions_batch", boom_batch)
+
+    gold_eval_haiku.main()
+    assert called == {"sync": True}
+    assert (tmp_path / "evals" / "gold_haiku_eval.txt").exists()
+
+
+def test_main_batch_flag_uses_batch_predictions(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["gold_eval_haiku.py", "--batch"])
+    _seed_gold_and_baseline(tmp_path)
+    monkeypatch.setattr(gold_eval_haiku, "make_client", lambda: object())
+
+    called = {}
+
+    def fake_batch(_client, _df, _done_ids):
+        called["batch"] = True
+        _write_haiku_preds()
+
+    def boom_sync(*_a, **_kw):
+        raise AssertionError("--batch must not fall through to run_predictions")
+
+    monkeypatch.setattr(gold_eval_haiku, "run_predictions_batch", fake_batch)
+    monkeypatch.setattr(gold_eval_haiku, "run_predictions", boom_sync)
+
+    gold_eval_haiku.main()
+    assert called == {"batch": True}
     assert (tmp_path / "evals" / "gold_haiku_eval.txt").exists()
