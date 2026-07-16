@@ -14,6 +14,7 @@ Decisions are recorded here as they are made. Each ADR captures the context, the
 | [008](008-strict-structured-outputs.md) | Enforce enum validity server-side with `strict: true`, retire the client-side re-sample | Accepted |
 | [009](009-message-batches-for-bulk-runs.md) | Add a Message Batches API path for non-latency-sensitive bulk classification | Accepted |
 | [010](010-rag-path-model-pin.md) | Pin the RAG-grounded path to claude-sonnet-4-6 after the Sonnet-5 workhorse migration | Accepted |
+| [011](011-reaim-tiered-routing-technology-operations.md) | Re-aim v2.2.0 tiered routing at technology-vs-operations, not industry-vs-procurement | Accepted |
 
 ## Format
 
