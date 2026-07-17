@@ -151,10 +151,13 @@ def run_predictions(
         time.sleep(SLEEP_BETWEEN_CALLS)
 
 
-# custom_id separator for the batch path -- joins the gold row id and which
-# model produced that request, so a single batch can carry both the workhorse
-# and judge passes and still be regrouped back into one row per gold id.
-_BATCH_ID_SEP = "::"
+# custom_id separator for the batch path -- joins the row id and which model
+# produced that request, so a single batch can carry both the workhorse and judge
+# passes and still be regrouped back into one row per id. Must use only characters
+# allowed in a Batches API custom_id (^[a-zA-Z0-9_-]{1,64}$) -- "::" was rejected
+# with a 400 the first time a real (non-faked) batch was submitted, so "__": the
+# row ids (g001/s001) and the model tags never contain a double underscore.
+_BATCH_ID_SEP = "__"
 
 
 def run_predictions_batch(
