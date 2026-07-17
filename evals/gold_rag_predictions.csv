@@ -10,7 +10,7 @@ g009,technology,space,050-secretary-of-defense-official-commends-cannon-main;028
 g010,operations,space,018-space-development-agency-nd-congressional-leaders;019-caoc-combat-ops-space-cell-defending-centcom-criti;021-army-space-support-team-5-last-in-afghanistan
 g011,technology,cyber,040-army-accelerates-advances-manufacturing-with-contr;016-bringing-space-to-the-fight;019-caoc-combat-ops-space-cell-defending-centcom-criti
 g012,operations,cyber,022-261st-cos-ready-cyber-crew-conducts-threat-hunting;049-policy-official-notes-cybersecurity-challenges;048-policy-official-notes-cybersecurity-challenges
-g013,operations,cyber,021-army-space-support-team-5-last-in-afghanistan;049-policy-official-notes-cybersecurity-challenges;048-policy-official-notes-cybersecurity-challenges
+g013,policy,cyber,021-army-space-support-team-5-last-in-afghanistan;049-policy-official-notes-cybersecurity-challenges;048-policy-official-notes-cybersecurity-challenges
 g014,operations,cyber,044-defense-pow-mia-accounting-agency-discusses-missio;007-nimitz-carrier-strike-group-arrives-in-hawaii;023-cyberspace-reservists-lead-the-way-in-improving-pa
 g016,operations,cyber,049-policy-official-notes-cybersecurity-challenges;018-space-development-agency-nd-congressional-leaders;023-cyberspace-reservists-lead-the-way-in-improving-pa
 g017,procurement,land,037-army-announces-contract-award-for-tow-weapon-syste;036-lrip-and-frp-contracts-awarded-for-the-integrated;029-army-awards-contracts-to-accelerate-javelin-and-st
@@ -29,15 +29,15 @@ g029,operations,air,047-under-secretary-of-defense-visits-village-of-hope;051-us
 g030,operations,land,021-army-space-support-team-5-last-in-afghanistan;016-bringing-space-to-the-fight;007-nimitz-carrier-strike-group-arrives-in-hawaii
 g031,operations,land,007-nimitz-carrier-strike-group-arrives-in-hawaii;014-florida-returns-from-historic-submarine-deployment;035-multiple-river-dredging-contracts-awarded
 g032,operations,air,029-army-awards-contracts-to-accelerate-javelin-and-st;048-policy-official-notes-cybersecurity-challenges;049-policy-official-notes-cybersecurity-challenges
-g033,operations,air,047-under-secretary-of-defense-visits-village-of-hope;024-arf-test-is-a-hypersonic-success;017-space-capabilities-vital-to-army-mdo
+g033,operations,multi,047-under-secretary-of-defense-visits-village-of-hope;024-arf-test-is-a-hypersonic-success;017-space-capabilities-vital-to-army-mdo
 g034,operations,multi,002-theodore-roosevelt-strike-group-operates-with-nimi;021-army-space-support-team-5-last-in-afghanistan;018-space-development-agency-nd-congressional-leaders
 g035,technology,air,028-b-52-continues-mothership-role-during-hypersonic-t;052-secretary-discusses-iran-with-israeli-defense-mini;036-lrip-and-frp-contracts-awarded-for-the-integrated
 g036,technology,air,028-b-52-continues-mothership-role-during-hypersonic-t;027-cadets-test-for-hypersonic-speeds-in-aero-wind-tun;025-reagan-test-site-successfully-supports-hypersonic
 g037,technology,air,027-cadets-test-for-hypersonic-speeds-in-aero-wind-tun;024-arf-test-is-a-hypersonic-success;028-b-52-continues-mothership-role-during-hypersonic-t
 g038,technology,air,032-pm-uas-awards-production-contract-for-long-range-r;033-pm-uas-awards-production-contract-for-joint-autono;040-army-accelerates-advances-manufacturing-with-contr
 g039,technology,air,032-pm-uas-awards-production-contract-for-long-range-r;033-pm-uas-awards-production-contract-for-joint-autono;056-fairchild-updates-drone-policy-and-procedures
-g040,operations,sea,009-ronald-reagan-carrier-strike-group-operates-in-the;028-b-52-continues-mothership-role-during-hypersonic-t;056-fairchild-updates-drone-policy-and-procedures
-g041,technology,land,019-caoc-combat-ops-space-cell-defending-centcom-criti;056-fairchild-updates-drone-policy-and-procedures;020-smdc-leader-gives-command-update-during-virtual-sy
+g040,technology,sea,009-ronald-reagan-carrier-strike-group-operates-in-the;028-b-52-continues-mothership-role-during-hypersonic-t;056-fairchild-updates-drone-policy-and-procedures
+g041,technology,multi,019-caoc-combat-ops-space-cell-defending-centcom-criti;056-fairchild-updates-drone-policy-and-procedures;020-smdc-leader-gives-command-update-during-virtual-sy
 g042,technology,sea,040-army-accelerates-advances-manufacturing-with-contr;009-ronald-reagan-carrier-strike-group-operates-in-the;027-cadets-test-for-hypersonic-speeds-in-aero-wind-tun
 g043,technology,sea,017-space-capabilities-vital-to-army-mdo;020-smdc-leader-gives-command-update-during-virtual-sy;025-reagan-test-site-successfully-supports-hypersonic
 g044,policy,multi,044-defense-pow-mia-accounting-agency-discusses-missio;034-dod-awards-navsup-wss-for-contracting-excellence;033-pm-uas-awards-production-contract-for-joint-autono
@@ -49,7 +49,7 @@ g050,policy,multi,053-pentagon-s-top-policy-chief-to-step-down;055-officials-exp
 g051,policy,multi,053-pentagon-s-top-policy-chief-to-step-down;054-hagel-supports-changes-to-u-s-policy-on-landmines;052-secretary-discusses-iran-with-israeli-defense-mini
 g053,policy,multi,030-contract-awarded-for-production-building-removal-a;049-policy-official-notes-cybersecurity-challenges;048-policy-official-notes-cybersecurity-challenges
 g054,industry,sea,903-northrop-grumman-q4-fy2025-results;904-general-dynamics-q3-2025-results;902-rtx-q3-2025-results
-g055,industry,air,903-northrop-grumman-q4-fy2025-results;902-rtx-q3-2025-results;901-lockheed-q3-2025-results
+g055,industry,multi,903-northrop-grumman-q4-fy2025-results;902-rtx-q3-2025-results;901-lockheed-q3-2025-results
 g056,industry,multi,905-l3harris-q1-2026-results;903-northrop-grumman-q4-fy2025-results;904-general-dynamics-q3-2025-results
 g057,industry,multi,901-lockheed-q3-2025-results;903-northrop-grumman-q4-fy2025-results;904-general-dynamics-q3-2025-results
 g058,industry,multi,903-northrop-grumman-q4-fy2025-results;901-lockheed-q3-2025-results;904-general-dynamics-q3-2025-results
