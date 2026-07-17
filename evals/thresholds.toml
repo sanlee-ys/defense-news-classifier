@@ -11,10 +11,13 @@
 # every floor here comfortably.
 
 [baseline]
-# vs src/gold_eval.py -- the workhorse (claude-sonnet-4-6) scored against human labels,
-# and the Opus judge scored against human labels for agreement.
-# Committed today (evals/gold_eval.txt): category_accuracy 0.889 (macro-F1 0.906),
-# domain_accuracy 0.889 (macro-F1 0.894), judge_category_agreement 0.889,
+# vs src/gold_eval.py -- the workhorse (claude-sonnet-5) scored against human labels,
+# and the Opus judge scored against human labels for agreement. This is the only gated
+# check: BM25 retrieval grounding was retired in ADR-012 (it stopped paying under the
+# improved prompt), so there is no [rag] table any more -- the gate grades the
+# ungrounded classifier that actually ships.
+# Committed today (evals/gold_eval.txt): category_accuracy 0.944 (macro-F1 0.950),
+# domain_accuracy 0.926 (macro-F1 0.932), judge_category_agreement 0.944,
 # judge_domain_agreement 0.944.
 category_accuracy = 0.83
 category_macro_f1 = 0.85
@@ -22,19 +25,3 @@ domain_accuracy = 0.83
 domain_macro_f1 = 0.83
 judge_category_agreement = 0.83
 judge_domain_agreement = 0.88
-
-[rag]
-# vs src/gold_eval_rag.py -- retrieval-grounded classification scored against human
-# labels. category_accuracy/category_macro_f1 are absolute floors on the GROUNDED
-# numbers; category_delta_min/domain_delta_min are "grounding must not regress the
-# ungrounded baseline by more than this" floors (grounded minus baseline). Domain gets
-# only a delta floor -- category is the primary tracked metric (see ADR-007), so domain
-# is protected from a grounding-makes-it-worse regression without a separate absolute
-# floor on its own noisier grounded number.
-# Committed today (evals/gold_rag_eval.txt): category_accuracy 0.907 grounded (delta
-# +0.019 vs baseline), category_macro_f1 0.914 grounded (delta +0.008), domain_accuracy
-# delta +0.000, domain_macro_f1 delta +0.013.
-category_accuracy = 0.85
-category_macro_f1 = 0.85
-category_delta_min = -0.03
-domain_delta_min = -0.03

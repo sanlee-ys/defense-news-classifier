@@ -12,9 +12,11 @@ dataset, a single-call classifier with **structured (JSON) output** mapping
 article text → `{category, operational_domain}`, and a rigorous eval harness
 (overall accuracy, per-label precision/recall, confusion matrices, a
 misclassification log) fronted by a README that **leads with the numbers**.
-`v2.0.0` added BM25 RAG grounding over real public text; the `region` field is
-the planned `v3.0.0` breaking change. Version specifics — what ships when and
-why — live in **Versioning roadmap** below, not here.
+`v2.0.0` added BM25 RAG grounding over real public text, which was later **measured and
+retired** ([ADR-012](decisions/012-retire-bm25-grounding.md)) once it stopped beating the
+ungrounded classifier — the shipped classifier is ungrounded. The `region` field is the
+planned `v3.0.0` breaking change. Version specifics — what ships when and why — live in
+**Versioning roadmap** below, not here.
 
 Still out of scope unless a version deliberately picks it up: a web UI, scraping
 pipelines, databases, auth / multi-user, and model fine-tuning. If something
@@ -90,7 +92,8 @@ Each web session runs in its own fresh container and can't see another session's
 
 ## Versioning roadmap
 
-v1 (synthetic, self-graded) and v2 (real text + human gold + BM25 retrieval) have shipped;
+v1 (synthetic, self-graded) and v2 (real text + human gold + BM25 retrieval, since retired —
+[ADR-012](decisions/012-retire-bm25-grounding.md)) have shipped;
 **`v2.0.1` is the current release.** Releases follow **semver** (`MAJOR.MINOR.PATCH`) and
 [Keep a Changelog](https://keepachangelog.com/) — every milestone gets a git tag + a CHANGELOG
 entry. The line to internalize:
@@ -140,10 +143,13 @@ it pays. That's why "scale the eval" (v2.1.0) comes *before* "route to a premium
 **Parking lot (unversioned until picked):**
 - A thin **Streamlit demo UI** — turns the eval harness into a usable product; arguably its own
   major surface (changes what the project *is*), so it'd likely force a major bump if added.
-- **Semantic / embedding retrieval** — only if a larger eval overturns v2's measured verdict
-  that "BM25 grounding doesn't justify embeddings." Borderline minor-vs-major depending on
-  whether it reshapes the grounding story.
-- RAG over real public text — **done in `v2.0.0`.**
+- **Semantic / embedding retrieval** — v2's "BM25 grounding doesn't justify embeddings"
+  verdict has only hardened: [ADR-012](decisions/012-retire-bm25-grounding.md) retired
+  grounding entirely after it stopped paying under the improved prompt. This stays parked
+  unless a future eval shows semantic retrieval beating the 94%+ ungrounded baseline — a high
+  bar. Borderline minor-vs-major if ever picked up.
+- RAG over real public text — shipped in `v2.0.0`, then **retired** (ADR-012); the grounding
+  code is kept dormant as the record.
 
 <!-- shared:links-verify v1 -->
 ## Links — verify before sending (hard rule)

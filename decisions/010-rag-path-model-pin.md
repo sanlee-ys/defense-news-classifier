@@ -1,8 +1,14 @@
 # ADR-010: Pin the RAG-grounded path to claude-sonnet-4-6 after the Sonnet-5 workhorse migration
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-012](012-retire-bm25-grounding.md)
 **Date:** 2026-07-11
 **Deciders:** San Lee
+
+> **Superseded 2026-07-17.** ADR-012 retires BM25 grounding entirely after a fair
+> (same-prompt) re-measure showed it no longer pays under the #79 prompt — neutral on
+> category, a domain regression, 0 domain fixes across 162 grounded classifications. With
+> grounding retired, the 4.6 pin and the frozen RAG baseline this ADR introduced are moot.
+> The analysis below is retained as the historical record.
 
 ---
 

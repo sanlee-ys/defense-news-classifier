@@ -1,11 +1,10 @@
 """Evals-as-CI capability gate: grade committed prediction CSVs against evals/thresholds.toml.
 
 Pure and offline: this module never calls the Anthropic API and needs no
-ANTHROPIC_API_KEY. It grades whatever prediction CSVs already exist on disk
-(evals/gold_predictions.csv and evals/gold_rag_predictions.csv) using the same
-metrics() functions gold_eval.py and gold_eval_rag.py use to build their human-readable
-reports, so there is one source of truth for every gated number. (It imports gold_eval
-and gold_eval_rag as modules, which transitively pulls in the anthropic package for
+ANTHROPIC_API_KEY. It grades whatever prediction CSV already exists on disk
+(evals/gold_predictions.csv) using the same metrics() function gold_eval.py uses to build
+its human-readable report, so there is one source of truth for every gated number. (It
+imports gold_eval as a module, which transitively pulls in the anthropic package for
 exception-type references -- that is a library import, not an API call; no key is read
 or required.)
 
@@ -17,30 +16,29 @@ Two callers wrap this same script around the same floors (see
   the scoring code itself still computes them correctly. It is not a live capability
   check.
 - The live capability gate (workflow_dispatch + a weekly schedule only) deletes the
-  cached prediction CSVs and re-runs gold_eval.py / gold_eval_rag.py against the real
-  models first, then runs this exact script -- the "did the model/prompt/retrieval
-  actually get worse" check.
+  cached prediction CSV and re-runs gold_eval.py against the real models first, then
+  runs this exact script -- the "did the model or prompt actually get worse" check.
+
+BM25 retrieval grounding was retired in decisions/012-retire-bm25-grounding.md (it
+stopped paying under the improved prompt), so the gate grades only the ungrounded
+baseline -- the classifier that actually ships.
 
 Run:
-    uv run python src/eval_gate.py                    # grade both baseline and rag
-    uv run python src/eval_gate.py --check baseline    # grade baseline only
-    uv run python src/eval_gate.py --check rag         # grade rag only
+    uv run python src/eval_gate.py
 
-Needs a fully labeled data/gold/gold.csv and both prediction CSVs already on disk. Exits
-0 if every gated metric clears its floor, 1 if any metric in evals/thresholds.toml is
-breached.
+Needs a fully labeled data/gold/gold.csv and evals/gold_predictions.csv already on disk.
+Exits 0 if every gated metric clears its floor, 1 if any metric in evals/thresholds.toml
+is breached.
 """
 
 from __future__ import annotations
 
-import argparse
 import sys
 import tomllib
 
 import pandas as pd
 
 import gold_eval
-import gold_eval_rag
 
 THRESHOLDS_PATH = "evals/thresholds.toml"
 
@@ -52,7 +50,7 @@ def load_thresholds(path: str = THRESHOLDS_PATH) -> dict:
         path: Path to the thresholds TOML file. Defaults to ``THRESHOLDS_PATH``.
 
     Returns:
-        Parsed TOML as a nested dict, one table per check (``baseline``, ``rag``).
+        Parsed TOML as a nested dict (the ``baseline`` table).
     """
     with open(path, "rb") as handle:
         return tomllib.load(handle)
@@ -69,32 +67,6 @@ def _baseline_merged(gold: pd.DataFrame) -> pd.DataFrame:
     """
     preds = pd.read_csv(gold_eval.PREDS_PATH)
     return gold.rename(columns={"domain": "operational_domain"}).merge(preds, on="id")
-
-
-def _rag_merged(gold: pd.DataFrame) -> pd.DataFrame:
-    """Build the same merged frame gold_eval_rag.main() scores, from committed CSVs only.
-
-    Args:
-        gold: Loaded, validated gold DataFrame (see ``gold_eval.load_gold``).
-
-    Returns:
-        Gold merged with both baseline (``pred_*``) and grounded (``rag_*``) predictions.
-
-    The RAG baseline is ``gold_eval_rag.RAG_BASELINE_PREDS_PATH`` (the RAG path's own
-    frozen claude-sonnet-4-6 ungrounded snapshot), NOT ``gold_eval.PREDS_PATH`` (the
-    workhorse baseline, now claude-sonnet-5). Both RAG arms must be the same model for
-    the grounding deltas to mean anything -- see gold_eval_rag.RAG_BASELINE_PREDS_PATH
-    and ADR-010.
-    """
-    base = pd.read_csv(gold_eval_rag.RAG_BASELINE_PREDS_PATH)[
-        ["id", "pred_category", "pred_operational_domain"]
-    ]
-    rag = pd.read_csv(gold_eval_rag.RAG_PREDS_PATH)
-    return (
-        gold.rename(columns={"domain": "operational_domain"})
-        .merge(base, on="id")
-        .merge(rag, on="id")
-    )
 
 
 def _rows_for_baseline(m: dict, floors: dict) -> list[tuple[str, float, float]]:
@@ -118,47 +90,16 @@ def _rows_for_baseline(m: dict, floors: dict) -> list[tuple[str, float, float]]:
     return [(key, m[key], floors[key]) for key in keys]
 
 
-def _rows_for_rag(m: dict, floors: dict) -> list[tuple[str, float, float]]:
-    """Pair each rag metric/delta with its floor.
-
-    Args:
-        m: Output of ``gold_eval_rag.metrics()``.
-        floors: The ``[rag]`` table from thresholds.toml.
-
-    Returns:
-        List of ``(name, value, floor)`` tuples: absolute floors on the grounded
-        category numbers, plus the two grounding-must-not-regress delta floors.
-    """
-    return [
-        (
-            "category_accuracy",
-            m["category_accuracy_grounded"],
-            floors["category_accuracy"],
-        ),
-        (
-            "category_macro_f1",
-            m["category_macro_f1_grounded"],
-            floors["category_macro_f1"],
-        ),
-        (
-            "category_delta_min",
-            m["category_accuracy_delta"],
-            floors["category_delta_min"],
-        ),
-        ("domain_delta_min", m["domain_accuracy_delta"], floors["domain_delta_min"]),
-    ]
-
-
 def _check_sample_size(label: str, n: int, expected: int) -> bool:
     """Fail loudly if a merge silently dropped gold rows.
 
-    ``_baseline_merged``/``_rag_merged`` inner-join gold against the committed
-    prediction CSVs; a truncated or stale predictions file shrinks ``n`` without
-    raising, and every floor can still clear on the smaller sample -- this is the
-    only thing standing between a partial snapshot and a silent PASS.
+    ``_baseline_merged`` inner-joins gold against the committed prediction CSV; a
+    truncated or stale predictions file shrinks ``n`` without raising, and every floor
+    can still clear on the smaller sample -- this is the only thing standing between a
+    partial snapshot and a silent PASS.
 
     Args:
-        label: Which check this is (``"baseline"`` or ``"rag"``), for the message.
+        label: Which check this is (``"baseline"``), for the message.
         n: Rows actually scored (the merged frame's ``metrics()['n']``).
         expected: Rows the gold set has (``len(gold)``).
 
@@ -215,45 +156,10 @@ def check_baseline(thresholds: dict) -> bool:
     return _print_table(f"baseline (workhorse + judge vs human, n={m['n']})", rows)
 
 
-def check_rag(thresholds: dict) -> bool:
-    """Grade the committed grounded predictions against the ``[rag]`` floors.
-
-    Args:
-        thresholds: Parsed evals/thresholds.toml (see ``load_thresholds``).
-
-    Returns:
-        True if every rag metric/delta clears its floor.
-    """
-    gold = gold_eval.load_gold()
-    merged = _rag_merged(gold)
-    m = gold_eval_rag.metrics(merged)
-    if not _check_sample_size("rag", m["n"], len(gold)):
-        return False
-    rows = _rows_for_rag(m, thresholds["rag"])
-    return _print_table(f"rag (grounded vs baseline, n={m['n']})", rows)
-
-
 def main() -> None:
-    """Grade committed prediction CSVs against evals/thresholds.toml; exit 1 on breach."""
-    parser = argparse.ArgumentParser(
-        description="Grade committed gold-eval prediction CSVs against evals/thresholds.toml."
-    )
-    parser.add_argument(
-        "--check",
-        choices=["baseline", "rag", "all"],
-        default="all",
-        help="Which gate(s) to run (default: all).",
-    )
-    args = parser.parse_args()
-
+    """Grade committed predictions against evals/thresholds.toml; exit 1 on breach."""
     thresholds = load_thresholds()
-    results = []
-    if args.check in ("baseline", "all"):
-        results.append(check_baseline(thresholds))
-    if args.check in ("rag", "all"):
-        results.append(check_rag(thresholds))
-
-    if all(results):
+    if check_baseline(thresholds):
         print("\nPASS -- every gated metric cleared its floor.")
     else:
         print(
