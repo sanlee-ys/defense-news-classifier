@@ -87,6 +87,34 @@ def test_macro_average_penalizes_collapsed_class_below_accuracy():
     assert macro["f1"] < 0.9
 
 
+# --- wilson_interval -----------------------------------------------------
+
+
+def test_wilson_interval_brackets_the_point_estimate():
+    lo, hi = evalmod.wilson_interval(51, 54)
+    assert lo < 51 / 54 < hi
+    assert 0.0 <= lo <= hi <= 1.0
+
+
+def test_wilson_interval_narrows_as_n_grows_at_fixed_accuracy():
+    # The whole point of v2.1.0: same accuracy, bigger n, tighter interval.
+    lo54, hi54 = evalmod.wilson_interval(51, 54)
+    lo300, hi300 = evalmod.wilson_interval(283, 300)  # ~same 94.x% accuracy
+    assert (hi300 - lo300) < (hi54 - lo54)
+
+
+def test_wilson_interval_stays_in_unit_range_at_the_boundaries():
+    # Wald would give a zero-width (or out-of-range) interval at p=0 and p=1.
+    lo0, hi0 = evalmod.wilson_interval(0, 20)
+    lo1, hi1 = evalmod.wilson_interval(20, 20)
+    assert lo0 == 0.0 and 0.0 < hi0 < 1.0
+    assert hi1 == 1.0 and 0.0 < lo1 < 1.0
+
+
+def test_wilson_interval_handles_zero_n_as_max_uncertainty():
+    assert evalmod.wilson_interval(0, 0) == (0.0, 1.0)
+
+
 # --- confusion_matrix ----------------------------------------------------
 
 

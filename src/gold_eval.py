@@ -115,7 +115,10 @@ def classify_retry(
 
 
 def run_predictions(
-    client: anthropic.Anthropic, df: pd.DataFrame, done_ids: set
+    client: anthropic.Anthropic,
+    df: pd.DataFrame,
+    done_ids: set,
+    preds_path: str = PREDS_PATH,
 ) -> None:
     """Classify every not-yet-done snippet with both models, appending as we go.
 
@@ -124,9 +127,12 @@ def run_predictions(
         df: Gold DataFrame with at least columns ``id`` and ``text``.
         done_ids: Set of article IDs that already have predictions and can
             be skipped.
+        preds_path: CSV the workhorse+judge predictions are appended to. Defaults
+            to the gold-eval snapshot; the scaled eval (v2.1.0) passes its own path
+            to reuse this exact loop over a larger, unlabeled snippet set.
     """
     todo = df[~df["id"].isin(done_ids)].reset_index(drop=True)
-    write_header = not os.path.exists(PREDS_PATH)
+    write_header = not os.path.exists(preds_path)
     for i, (_, row) in enumerate(todo.iterrows()):
         print(f"[{i + 1:3d}/{len(todo)}] {row['id']}", flush=True)
         base = classify_retry(client, row["text"], WORKHORSE_MODEL)
@@ -139,7 +145,7 @@ def run_predictions(
             "judge_operational_domain": judge["operational_domain"],
         }
         pd.DataFrame([result]).to_csv(
-            PREDS_PATH, mode="a", header=write_header, index=False
+            preds_path, mode="a", header=write_header, index=False
         )
         write_header = False
         time.sleep(SLEEP_BETWEEN_CALLS)
@@ -156,6 +162,7 @@ def run_predictions_batch(
     df: pd.DataFrame,
     done_ids: set,
     poll_interval: float = 30.0,
+    preds_path: str = PREDS_PATH,
 ) -> None:
     """Classify every not-yet-done snippet with both models via the Message Batches API.
 
@@ -172,6 +179,8 @@ def run_predictions_batch(
         done_ids: Set of article IDs that already have predictions and can
             be skipped.
         poll_interval: Seconds to sleep between polling the batch's status.
+        preds_path: CSV the workhorse+judge predictions are appended to. Defaults
+            to the gold-eval snapshot; the scaled eval (v2.1.0) passes its own path.
     """
     todo = df[~df["id"].isin(done_ids)].reset_index(drop=True)
     if todo.empty:
@@ -235,13 +244,13 @@ def run_predictions_batch(
             entry["judge_category"] = pred["category"]
             entry["judge_operational_domain"] = pred["operational_domain"]
 
-    write_header = not os.path.exists(PREDS_PATH)
+    write_header = not os.path.exists(preds_path)
     for row_id, entry in by_row.items():
         if entry.get("_incomplete") or len(entry) < 4:
             continue  # missing a model's result for this row -- leave it todo
         out = {"id": row_id, **entry}
         pd.DataFrame([out]).to_csv(
-            PREDS_PATH, mode="a", header=write_header, index=False
+            preds_path, mode="a", header=write_header, index=False
         )
         write_header = False
 
