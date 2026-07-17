@@ -11,24 +11,24 @@ Judge     : claude-opus-4-8
 The classifier's accuracy on REAL news, graded against human
 truth -- the honest number v1's circular eval couldn't give.
 
-Category accuracy           : 90.7%   (macro-F1 0.902)
-Operational domain accuracy : 90.7%   (macro-F1 0.919)
+Category accuracy           : 94.4%   (macro-F1 0.950)
+Operational domain accuracy : 92.6%   (macro-F1 0.932)
 
 Category per-label:
              precision  recall    f1  support
 label                                        
-industry         0.833   1.000 0.909        5
-operations       0.913   0.955 0.933       22
+industry         1.000   1.000 1.000        5
+operations       0.952   0.909 0.930       22
 policy           0.857   1.000 0.923        6
-procurement      0.875   0.875 0.875        8
-technology       1.000   0.769 0.870       13
+procurement      1.000   0.875 0.933        8
+technology       0.929   1.000 0.963       13
 
 Operational domain per-label:
        precision  recall    f1  support
 label                                  
-air        1.000   0.867 0.929       15
+air        1.000   0.933 0.966       15
 cyber      1.000   0.833 0.909        6
-land       0.786   1.000 0.880       11
+land       0.846   1.000 0.917       11
 multi      0.818   0.900 0.857       10
 sea        1.000   0.889 0.941        9
 space      1.000   1.000 1.000        3
@@ -37,10 +37,10 @@ space      1.000   1.000 1.000        3
 High agreement => the judge tracks human judgment, so it can
 serve as a scalable answer key where hand-labeling doesn't reach.
 
-Category agreement          : 90.7%
-Operational domain agreement : 92.6%
+Category agreement          : 94.4%
+Operational domain agreement : 94.4%
 
 -- Workhorse vs judge (do the two models agree?) ----------
-Category           : 96.3%
+Category           : 94.4%
 Operational domain : 90.7%
 ==============================================================

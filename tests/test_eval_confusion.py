@@ -54,8 +54,10 @@ def test_gold_join_is_complete():
 def test_judge_vs_human_category_cells():
     cells = eval_confusion.disagreement_cells(_merged(), "category", "judge_category")
     as_dict = {(t, p): ids for t, p, ids in cells}
+    # Cells reset after the PR #79 prompt change: the tech-vs-ops clause cleared
+    # g036 and g040 (technology->operations went from x3 to x1), leaving g007.
     assert as_dict == {
-        ("technology", "operations"): ["g007", "g036", "g040"],
+        ("technology", "operations"): ["g007"],
         ("procurement", "industry"): ["g020"],
         ("operations", "policy"): ["g053"],
     }
@@ -66,9 +68,11 @@ def test_judge_vs_human_domain_cells():
         _merged(), "operational_domain", "judge_operational_domain"
     )
     as_dict = {(t, p): sorted(ids) for t, p, ids in cells}
+    # Cells reset after the PR #79 prompt change: the air-over-ground clause cleared
+    # g034 (multi->land) and moved g033 off land (air->land became air->multi).
     assert as_dict == {
-        ("air", "land"): ["g021", "g033"],
-        ("multi", "land"): ["g034"],
+        ("air", "land"): ["g021"],
+        ("air", "multi"): ["g033"],
         ("land", "multi"): ["g041"],
     }
 
