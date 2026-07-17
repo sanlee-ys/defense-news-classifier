@@ -16,6 +16,7 @@ Two prediction paths are available (see decisions/009):
 """
 
 import argparse
+import math
 import os
 import time
 
@@ -104,6 +105,35 @@ def macro_average(metrics: pd.DataFrame) -> dict:
         "recall": round(float(metrics["recall"].mean()), 3),
         "f1": round(float(metrics["f1"].mean()), 3),
     }
+
+
+def wilson_interval(successes: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """Wilson score confidence interval for a binomial proportion.
+
+    Preferred over the normal (Wald) approximation for accuracy on a small eval:
+    it stays inside [0, 1], doesn't collapse to a zero-width interval at p=0 or
+    p=1, and behaves at n=54 where Wald is badly miscalibrated. This is the
+    interval v2.1.0 reports so a "94.4%" headline carries its real uncertainty
+    instead of masquerading as exact.
+
+    Args:
+        successes: Number of correct predictions (0 <= successes <= n).
+        n: Number of graded items. ``n == 0`` returns ``(0.0, 1.0)`` -- no data,
+            maximal uncertainty -- rather than dividing by zero.
+        z: Standard-normal critical value; 1.96 gives a 95% interval (the default).
+
+    Returns:
+        ``(low, high)``, each rounded to 4 decimals and clamped to [0, 1].
+    """
+    if n == 0:
+        return (0.0, 1.0)
+    p = successes / n
+    denom = 1 + z**2 / n
+    center = (p + z**2 / (2 * n)) / denom
+    margin = (z / denom) * math.sqrt(p * (1 - p) / n + z**2 / (4 * n**2))
+    low = max(0.0, center - margin)
+    high = min(1.0, center + margin)
+    return (round(low, 4), round(high, 4))
 
 
 def confusion_matrix(df: pd.DataFrame, field: str) -> pd.DataFrame:

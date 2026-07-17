@@ -1,0 +1,50 @@
+==============================================================
+v2.1.0 SCALED EVAL -- workhorse vs validated Opus judge
+==============================================================
+
+Snippets evaluated : 300   (data/scale/scale_set.csv)
+Workhorse : claude-sonnet-5
+Answer key: claude-opus-4-8 judge -- validated vs human on the n=54 gold set
+            (94.4% category / 94.4% domain agreement).
+
+Hand-labeling doesn't scale, so the judge is the answer key here. Accuracy
+below is the workhorse agreeing with the judge; it inherits the judge's
+~5-6% disagreement-with-human ceiling. Read it ALONGSIDE the human-graded
+gold numbers in evals/gold_eval.txt, not instead of them.
+
+-- Workhorse vs judge, with 95% Wilson CIs ----------------
+Category accuracy : 93.3%   95% CI [89.9%, 95.6%]   (280/300)   macro-F1 0.704
+Domain accuracy   : 90.3%   95% CI [86.5%, 93.2%]   (271/300)   macro-F1 0.886
+
+-- The noise-floor shrink (why this eval exists) ----------
+Same metric, human-graded on n=54 (evals/gold_eval.txt):
+  Category accuracy: 94.4% CI [84.9%, 98.1%] (width 13pts) -> at n=300 width 6pts
+  Domain accuracy: 92.6% CI [82.5%, 97.1%] (width 15pts) -> at n=300 width 7pts
+
+Category per-label (workhorse vs judge):
+             precision  recall     f1  support
+label                                         
+industry         0.000   0.000  0.000        1
+operations       0.974   0.960  0.967      198
+policy           0.647   1.000  0.786       11
+procurement      0.950   0.792  0.864       24
+technology       0.896   0.909  0.902       66
+
+Answer-key label distribution (judge): industry 1, operations 198, policy 11, procurement 24, technology 66
+
+Operational domain per-label (workhorse vs judge):
+       precision  recall     f1  support
+label                                   
+air        0.938   0.893  0.915       84
+cyber      0.962   0.944  0.953       54
+land       0.830   0.917  0.871       48
+multi      0.750   0.700  0.724       30
+sea        0.950   0.983  0.966       58
+space      0.885   0.885  0.885       26
+
+Answer-key label distribution (judge): air 84, cyber 54, land 48, multi 30, sea 58, space 26
+
+-- Known limitation: DVIDS label skew -----------------------
+Category: `operations` is 198/300 (66%); thin classes (support < 10): industry n=1.
+  -> the category macro-F1 (0.704) is dragged down by those thin classes, not by a real quality drop; read overall accuracy + the well-populated per-label rows instead.
+==============================================================

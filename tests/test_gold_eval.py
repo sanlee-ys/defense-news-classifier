@@ -6,6 +6,7 @@ loop hits the network and is exercised manually, like eval.py's run_predictions.
 
 import csv
 import os
+import re
 import sys
 
 import pandas as pd
@@ -253,10 +254,10 @@ def test_run_predictions_batch_writes_one_combined_row_per_gold_id(
 
     client = batch_client(
         {
-            "g001::workhorse": {"category": "procurement", "operational_domain": "air"},
-            "g001::judge": {"category": "procurement", "operational_domain": "air"},
-            "g002::workhorse": {"category": "policy", "operational_domain": "sea"},
-            "g002::judge": {"category": "operations", "operational_domain": "sea"},
+            "g001__workhorse": {"category": "procurement", "operational_domain": "air"},
+            "g001__judge": {"category": "procurement", "operational_domain": "air"},
+            "g002__workhorse": {"category": "policy", "operational_domain": "sea"},
+            "g002__judge": {"category": "operations", "operational_domain": "sea"},
         }
     )
     gold_eval.run_predictions_batch(client, df, done_ids=set())
@@ -280,18 +281,18 @@ def test_run_predictions_batch_submits_both_models_for_each_todo_row(
 
     client = batch_client(
         {
-            "g002::workhorse": {"category": "policy", "operational_domain": "sea"},
-            "g002::judge": {"category": "operations", "operational_domain": "sea"},
+            "g002__workhorse": {"category": "policy", "operational_domain": "sea"},
+            "g002__judge": {"category": "operations", "operational_domain": "sea"},
         }
     )
     gold_eval.run_predictions_batch(client, df, done_ids={"g001"})
 
     submitted = client.messages.batches.created_requests
     submitted_ids = {r["custom_id"] for r in submitted}
-    assert submitted_ids == {"g002::workhorse", "g002::judge"}
+    assert submitted_ids == {"g002__workhorse", "g002__judge"}
     models = {r["custom_id"]: r["params"]["model"] for r in submitted}
-    assert models["g002::workhorse"] == gold_eval.WORKHORSE_MODEL
-    assert models["g002::judge"] == gold_eval.JUDGE_MODEL
+    assert models["g002__workhorse"] == gold_eval.WORKHORSE_MODEL
+    assert models["g002__judge"] == gold_eval.JUDGE_MODEL
 
 
 def test_run_predictions_batch_drops_row_if_either_model_errors(
@@ -303,10 +304,10 @@ def test_run_predictions_batch_drops_row_if_either_model_errors(
 
     client = batch_client(
         {
-            "g001::workhorse": {"category": "procurement", "operational_domain": "air"},
-            "g001::judge": "errored",  # one model failed for g001
-            "g002::workhorse": {"category": "policy", "operational_domain": "sea"},
-            "g002::judge": {"category": "operations", "operational_domain": "sea"},
+            "g001__workhorse": {"category": "procurement", "operational_domain": "air"},
+            "g001__judge": "errored",  # one model failed for g001
+            "g002__workhorse": {"category": "policy", "operational_domain": "sea"},
+            "g002__judge": {"category": "operations", "operational_domain": "sea"},
         }
     )
     gold_eval.run_predictions_batch(client, df, done_ids=set())
@@ -376,3 +377,18 @@ def test_main_batch_flag_calls_run_predictions_batch(monkeypatch, tmp_path):
     gold_eval.main()
     assert called == {"yes": True}
     assert (tmp_path / "evals" / "gold_eval.txt").exists()
+
+
+def test_batch_custom_ids_match_the_anthropic_pattern():
+    """Batch custom_ids must satisfy ^[a-zA-Z0-9_-]{1,64}$ (the "::" separator did not).
+
+    Regression guard: the previous separator produced ids like ``s001::workhorse``,
+    which the Batches API rejects with a 400 -- only surfaced the first time a real
+    (non-faked) batch was submitted. This keeps the separator API-legal and round-trips.
+    """
+    pattern = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+    for which in ("workhorse", "judge"):
+        cid = f"s001{gold_eval._BATCH_ID_SEP}{which}"
+        assert pattern.match(cid), f"illegal custom_id: {cid!r}"
+        row_id, _, parsed = cid.rpartition(gold_eval._BATCH_ID_SEP)
+        assert (row_id, parsed) == ("s001", which)
