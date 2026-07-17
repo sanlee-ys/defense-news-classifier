@@ -1,20 +1,21 @@
 name: evals
 
-# Two gates for the v2 capability evals (src/gold_eval.py, src/gold_eval_rag.py), split by
-# API cost. Full rationale in decisions/007-evals-as-ci-gate.md.
+# Two gates for the v2 capability eval (src/gold_eval.py), split by API cost. Full
+# rationale in decisions/007-evals-as-ci-gate.md. BM25 retrieval grounding was retired in
+# decisions/012-retire-bm25-grounding.md, so neither gate scores the grounded path any more.
 #
-#   offline-gate          -- push + pull_request, no key, free. Grades the prediction CSVs
+#   offline-gate          -- push + pull_request, no key, free. Grades the prediction CSV
 #                             already committed in evals/ against evals/thresholds.toml via
 #                             src/eval_gate.py. Proves the shipped numbers still clear the
 #                             bar and that the scoring code itself still computes them
 #                             correctly. NOT a live capability check -- it never calls the API.
 #   live-capability-eval  -- workflow_dispatch + a weekly schedule ONLY, never pull_request.
-#                             Deletes the cached prediction CSVs, re-runs both eval scripts
-#                             against the real models, then grades the fresh numbers with the
-#                             same gate. This is the "did the model/prompt/retrieval actually
-#                             get worse" check, and the only job that touches
-#                             ANTHROPIC_API_KEY. It never commits refreshed numbers back;
-#                             updating the checked-in snapshot stays a human PR.
+#                             Deletes the cached prediction CSV, re-runs the eval against the
+#                             real models, then grades the fresh numbers with the same gate.
+#                             This is the "did the model or prompt actually get worse" check,
+#                             and the only job that touches ANTHROPIC_API_KEY. It never
+#                             commits refreshed numbers back; updating the checked-in
+#                             snapshot stays a human PR.
 #
 # Deliberately does NOT use pull_request_target: that trigger runs untrusted fork code in
 # the base repo's context WITH secrets, which is exactly the fork-secret-exposure hole a
@@ -96,23 +97,18 @@ jobs:
             exit 1
           fi
 
-      # Force a fresh prediction pass: delete the cached CSVs so both scripts re-run every
-      # gold snippet against the live models rather than resuming/skipping (their normal,
-      # cost-saving default for local use -- see the docstrings in gold_eval.py /
-      # gold_eval_rag.py). This job never commits the refreshed numbers back; updating the
-      # checked-in snapshot stays a deliberate, reviewed human PR.
+      # Force a fresh prediction pass: delete the cached CSV so the eval re-runs every gold
+      # snippet against the live models rather than resuming/skipping (its normal,
+      # cost-saving default for local use -- see the docstring in gold_eval.py). This job
+      # never commits the refreshed numbers back; updating the checked-in snapshot stays a
+      # deliberate, reviewed human PR.
       - name: Delete cached predictions to force a fresh live run
-        run: rm -f evals/gold_predictions.csv evals/gold_rag_predictions.csv
+        run: rm -f evals/gold_predictions.csv
 
       - name: Re-run the baseline + judge eval (~108 API calls)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: uv run python src/gold_eval.py
-
-      - name: Re-run the retrieval-grounded eval (~54 API calls)
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: uv run python src/gold_eval_rag.py
 
       # Same gate, same floors as offline-gate -- graded against the numbers just produced
       # by the live models above, not the committed snapshot.

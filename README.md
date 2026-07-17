@@ -8,10 +8,11 @@
 An NLP pipeline that classifies public defense-related news snippets into a **category**
 (what the article is about) and an **operational domain** (the warfighting domain involved).
 **v1** is built and graded entirely on synthetic, publicly safe data; **v2** moves to *real*
-public-domain text (DoD news wire + SEC filings), grounds each call with retrieval, and grades
-against a human-labeled answer key. The workhorse now runs on **Claude Sonnet 5** (migrated
-July 2026, [ADR-010](decisions/010-rag-path-model-pin.md)). The measured eval numbers are the
-centerpiece.
+public-domain text (DoD news wire + SEC filings) and grades against a human-labeled answer key.
+The workhorse runs on **Claude Sonnet 5**. A BM25 retrieval-grounding layer shipped in v2, was
+measured against the ungrounded classifier, and was **retired** once it stopped paying
+([ADR-012](decisions/012-retire-bm25-grounding.md)) — a measured negative result, kept as such.
+The measured eval numbers are the centerpiece.
 
 ---
 
@@ -27,51 +28,51 @@ re-measured on the same gold set. Those are the current numbers, directly below.
 |---|---|---|
 | **Data** | 300 synthetic snippets the model wrote | 54 real public-domain snippets (DoD news wire + SEC filings) |
 | **Answer key** | the same model that classifies (circular) | hand-labeled by a human, cross-checked by an Opus judge |
-| **Retrieval** | none | BM25 over a 62-doc corpus; each call grounded + cited |
+| **Retrieval** | none | BM25 over a 62-doc corpus, tried and cited — then measured and **retired** ([ADR-012](decisions/012-retire-bm25-grounding.md)) |
 | **Honest read** | in-distribution *consistency* | real-world *accuracy* |
 
 ### Current state — Sonnet 5 on the v2 gold set
 
-The migration went through the same gate as every other change here: run the v2 gold eval
-before and after, on the same 54 human-labeled snippets
-([ADR-010](decisions/010-rag-path-model-pin.md), `evals/gold_eval.txt`).
+Every change here goes through the same gate — run the v2 gold eval before and after, on the
+same 54 human-labeled snippets (`evals/gold_eval.txt`). The current numbers below reflect the
+Sonnet 5 workhorse plus the PR #79 prompt refinement.
 
 | Field | Sonnet 4.6 (v2 as shipped) | Sonnet 5 (current) |
 |---|---|---|
-| Category accuracy | 88.9% | **90.7%** |
-| Category macro-F1 | 0.906 | **0.902** |
-| Domain accuracy | 88.9% | **90.7%** |
-| Domain macro-F1 | 0.894 | **0.919** |
+| Category accuracy | 88.9% | **94.4%** |
+| Category macro-F1 | 0.906 | **0.950** |
+| Domain accuracy | 88.9% | **92.6%** |
+| Domain macro-F1 | 0.894 | **0.932** |
 
-The current snapshot follows the extended-rubric prompt change (PR #73, which also made the
-prompt cache real): category edged up to 90.7% and domain sits at 90.7%. The post-migration
-refresh before the rubric had domain at 94.4% — at n=54 a two-flip swing, inside the eval's
-own run-to-run noise (see the stability note below), so read the pair as "low 90s," not as a
-regression or a lift. The category ceiling remains label ambiguity in borderline snippets,
-which neither a stronger model nor a sharper rubric can un-blur.
+The current snapshot follows the technology-vs-operations prompt refinement (PR #79), measured
+on the same 54 snippets: category rose to **94.4%** and domain to **92.6%** — a +3.7 / +1.9
+point lift, with `technology` recall going to 1.000 (the prompt clause that stopped
+new-system-tested-in-the-field snippets being read as `operations`). At n=54 the domain move is
+a couple of flips, so read it as a real but modest gain, not a leap. The remaining category
+ceiling is label ambiguity in borderline snippets, which neither a stronger model nor a sharper
+prompt can un-blur.
 
 #### Category: per-label precision / recall / F1 (Sonnet 5, current)
 
 | Label | Precision | Recall | F1 | n |
 |---|---|---|---|---|
-| industry | 0.833 | 1.000 | 0.909 | 5 |
-| operations | 0.913 | 0.955 | 0.933 | 22 |
+| industry | 1.000 | 1.000 | 1.000 | 5 |
+| operations | 0.952 | 0.909 | 0.930 | 22 |
 | policy | 0.857 | 1.000 | 0.923 | 6 |
-| procurement | 0.875 | 0.875 | 0.875 | 8 |
-| technology | 1.000 | 0.769 | 0.870 | 13 |
+| procurement | 1.000 | 0.875 | 0.933 | 8 |
+| technology | 0.929 | 1.000 | 0.963 | 13 |
 
 The v1 `industry` fix holds: recall stays at 1.000 on the real SEC snippets (v1 caught 1 in 5).
-On the refreshed run the Opus judge agrees with the human labels on 90.7% of category calls and
-92.6% of domain calls.
+On the refreshed run the Opus judge agrees with the human labels on 94.4% of category calls and
+94.4% of domain calls.
 
-**The migration's negative result matters as much as the lift.** Re-running the grounding eval
-against the stronger Sonnet 5 baseline showed BM25 grounding *regressing* domain accuracy by
-9.3 points (94.4% ungrounded → 85.2% grounded, reproduced 3×): the retrieved neighbors now pull
-a confident, correct call sideways more often than they help. The grounded RAG path is
-therefore **pinned to `claude-sonnet-4-6`** while the feature's future against the new baseline
-is decided — a deliberate, transitional split, not a quiet fork, recorded with full reasoning in
-[ADR-010](decisions/010-rag-path-model-pin.md). The grounding comparison further down runs both
-arms on Sonnet 4.6 per that pin, so its deltas still measure grounding alone.
+**Grounding was measured and retired — a negative result.** The BM25 retrieval-grounding layer
+that shipped in v2.0.0 no longer beats the ungrounded classifier now that the prompt is
+stronger: neutral on category, a domain regression (0 domain calls fixed, 4 broken across a
+3-pass confirm). It was removed from the shipped path and the CI gate — which now scores only
+the ungrounded classifier — and recorded as a measured negative result in
+[ADR-012](decisions/012-retire-bm25-grounding.md). The full measurement is in the grounding
+section below.
 
 ---
 
@@ -118,35 +119,39 @@ refreshed post-migration agreement numbers are in the current-state section abov
 High agreement means the judge tracks human judgment closely enough to grade where
 hand-labeling can't reach — the basis for scaling the eval past 54 snippets later.
 
-#### Did retrieval grounding actually help?
+#### Did retrieval grounding actually help? (No — measured and retired)
 
-v2 grounds each classification in the top-3 BM25-retrieved corpus neighbors (label-tagged) and
-returns citations. Whether that *helps* is a measured question, not an assumption — and the
-answer is **marginal**. Both arms of this comparison run on `claude-sonnet-4-6` (the RAG pin,
-[ADR-010](decisions/010-rag-path-model-pin.md)), so the deltas measure grounding alone:
+v2 grounded each classification in the top-3 BM25-retrieved corpus neighbors (label-tagged,
+with citations). Whether that *helped* was always a measured question — and the honest final
+answer is **no**, so grounding was retired ([ADR-012](decisions/012-retire-bm25-grounding.md)).
 
-| | Baseline | Grounded | Δ |
-|---|---|---|---|
-| Category accuracy | 88.9% | 94.4% | +5.6% |
-| Category macro-F1 | 0.906 | 0.950 | +0.044 |
-| Domain accuracy | 88.9% | 96.3% | +7.4% |
-| Domain macro-F1 | 0.894 | 0.964 | +0.070 |
+Getting there meant fixing the measurement itself. Earlier "grounding lifts" here were scored
+against a *stale* ungrounded baseline — frozen before the prompt improved — so they quietly
+credited grounding with the prompt's own gains (the inflated deltas that used to fill this
+table). Rebuilt with **both arms on the current prompt** (4.6 pin, k=3, n=54, 3-pass confirm):
 
-The flip analysis keeps that honest: on category, grounding changed 5 calls (4 wrong→right, 1
-right→wrong); on domain it changed 4 and fixed all 4 (4→0). That is a real shift from the v2
-ship, where grounding was marginal (+1.9% category, domain flat, breaking as many domain calls
-as it fixed) — the extended-rubric prompt (PR #73) and grounding now reinforce each other
-instead of fighting. **The conclusion stands, stronger: lexical BM25 grounding does not earn
-the cost of upgrading to embeddings here** — not because grounding barely helps, as at the v2
-ship, but because BM25 grounding now clearly works. Same "measure first" principle, new
-evidence. The Sonnet 5 regression that motivated the pin (−9.3 domain points, pre-rubric) was
-then re-measured under the new prompt rather than assumed: it persists — three grounded
-Sonnet-5 passes landed at −3.7/−3.7/−5.6 domain, each breaching the −3.0 gate floor and
-breaking more domain calls than it fixed. Smaller, not cured; the pin stands
-(full table in ADR-010's re-measurement section; rerun with `scripts/adr010_remeasure.py`).
+| | Category | Domain |
+|---|---|---|
+| Grounding Δ (mean of 3 passes) | ≈ +0.6% — a wash | **≈ −2.5%** |
+| Domain calls fixed / broken (3 passes total) | — | **0 fixed / 4 broken** |
 
-Full v2 reports: [`evals/gold_eval.txt`](evals/gold_eval.txt) (baseline + judge) and
-[`evals/gold_rag_eval.txt`](evals/gold_rag_eval.txt) (grounding lift).
+Across 162 grounded classifications, grounding fixed a domain call **zero** times and broke
+four. It's the mechanism [ADR-010](decisions/010-rag-path-model-pin.md) first caught on the
+Sonnet-5 migration, now triggered by the prompt instead of the model: once the ungrounded
+classifier is good enough, lexically-similar neighbors pull confident, correct calls sideways
+more than they help — worst on domain, which a keyword match rarely disambiguates.
+
+**So the negative result is the result.** BM25 grounding doesn't beat a 94%-category /
+93%-domain ungrounded baseline — neutral at best, a domain regression at worst — so it was cut
+from the shipped path and the CI gate, which now scores only the ungrounded classifier. The
+grounding code and corpus stay in the repo, dormant, so anyone can reproduce the verdict
+(`scripts/confirm_rag_grounding.py`). This *reinforces* v2's "BM25 doesn't justify upgrading to
+embeddings" call rather than overturning it: any future retrieval would start from the high bar
+of beating that 94% baseline.
+
+Full v2 reports: [`evals/gold_eval.txt`](evals/gold_eval.txt) (baseline + judge). The retired
+grounding path's last measurement is archived in
+[`evals/gold_rag_eval.txt`](evals/gold_rag_eval.txt).
 
 ---
 
@@ -238,9 +243,9 @@ A single LLM call per article using the **Anthropic API** (`claude-sonnet-5` sin
 July 2026 migration; v1 and v2 shipped on `claude-sonnet-4-6`) with
 [tool use](https://docs.anthropic.com/en/docs/tool-use) to force structured JSON output.
 No fine-tuning, no retrieval, no embeddings: just a well-specified prompt and a JSON schema
-that biases the output toward the valid label set. v2 keeps this call exactly and only changes
-what's *in front of it* (see [v2 architecture](#v2-architecture) below), so the two are
-measured apart by precisely the retrieved context.
+that biases the output toward the valid label set. v2 kept this call exactly and added a
+retrieval-grounding layer *in front of it* (see [v2 architecture](#v2-architecture) below) —
+which was then measured against this same ungrounded call and retired when it stopped paying.
 
 Tool use (rather than asking the model to return raw JSON in the message body) is the key
 reliability mechanism for the response *shape*: you always get the two fields back as
@@ -284,19 +289,22 @@ v2 keeps the v1 classifier call untouched and adds three pieces around it, each 
    `data/corpus/` holds one `.txt` per doc. (The service sites — defense.gov, navy/af.mil —
    hard-block bots, so the DVIDS API and hand-collected SEC text are the clean-room way in.)
 
-2. **Retrieval grounding.** `src/retrieve.py` is a BM25 index (`rank-bm25`, whole-doc, no
-   embeddings) over the corpus — the deliberately cheap "measure first" baseline.
-   `src/classify_rag.py` retrieves the top-3 label-tagged neighbors for a target article,
-   prepends them as reference context, and returns the labels **plus citations**. Because the
-   gold set is disjoint from the corpus, grounding a gold snippet never retrieves itself.
-   Since the Sonnet 5 migration this grounded path is pinned to `claude-sonnet-4-6`
-   ([ADR-010](decisions/010-rag-path-model-pin.md)); the ungrounded workhorse call is not.
+2. **Retrieval grounding (built, measured, retired).** `src/retrieve.py` is a BM25 index
+   (`rank-bm25`, whole-doc, no embeddings) over the corpus — the deliberately cheap
+   "measure first" baseline. `src/classify_rag.py` retrieves the top-3 label-tagged neighbors
+   for a target article, prepends them as reference context, and returns the labels **plus
+   citations** (the gold set is disjoint from the corpus, so grounding a gold snippet never
+   retrieves itself). It was measured honestly against the ungrounded classifier and stopped
+   paying once the prompt improved, so it was **retired** from the shipped path
+   ([ADR-012](decisions/012-retire-bm25-grounding.md)); the code and corpus stay in the repo,
+   dormant and reproducible, as the record of the experiment.
 
 3. **An honest eval.** The v1 self-grading is gone. `data/gold/gold.csv` is 54 snippets a human
    labeled by hand against a written [labeling guide](data/gold/README.md). `src/gold_eval.py`
-   scores the workhorse against those human labels *and* validates an Opus judge against them;
-   `src/gold_eval_rag.py` measures the grounding lift with the flip analysis above. Macro-F1 and
-   the flip counts are what keep a lucky topline from masquerading as a real gain.
+   scores the workhorse against those human labels *and* validates an Opus judge against them.
+   (`src/gold_eval_rag.py` still measures the grounding delta, now dormant — it's how the
+   retirement verdict was reached.) Macro-F1 and the flip counts are what keep a lucky topline
+   from masquerading as a real gain.
 
 ---
 
@@ -316,7 +324,7 @@ src/
   retrieve.py               # v2: BM25 retriever over the real corpus
   classify_rag.py           # v2: retrieval-grounded classify + citations
   gold_eval.py              # v2: workhorse vs human labels + Opus-judge validation
-  gold_eval_rag.py          # v2: grounded vs baseline lift, with flip analysis
+  gold_eval_rag.py          # v2: grounded vs baseline delta (grounding retired, ADR-012)
   api.py                    # FastAPI service wrapping classify() at POST /classify;
                              #   the live HTTP surface notes-api and kb-agent call
 scripts/
@@ -331,7 +339,7 @@ evals/
   error_audit.md            # v1: per-case audit (classifier error vs label ambiguity)
   stability.txt             # v1: multi-run noise floor (std/min/max per metric)
   gold_eval.txt             # v2: real-text baseline + judge agreement
-  gold_rag_eval.txt         # v2: grounding lift vs baseline
+  gold_rag_eval.txt         # v2: grounding delta vs baseline (retired, ADR-012)
 notebooks/
   eval_analysis.ipynb       # Interactive analysis: heatmaps, F1 charts, miss browser
 pyproject.toml              # Project metadata + dependencies (uv)
@@ -407,8 +415,8 @@ DVIDS key; see `.env.example`.)
 # 1. Baseline on real text + Opus-judge validation (~108 calls: Sonnet + Opus per snippet)
 uv run python src/gold_eval.py              # -> evals/gold_eval.txt
 
-# 2. Retrieval-grounded run and the lift vs baseline (~54 calls)
-uv run python src/gold_eval_rag.py          # -> evals/gold_rag_eval.txt
+# 2. (Retired, dormant) grounded run + delta vs baseline — how the retirement was measured (~54 calls)
+uv run python src/gold_eval_rag.py          # -> evals/gold_rag_eval.txt (grounding retired, ADR-012)
 
 # 3. (Optional) Re-pull the DVIDS corpus — needs DVIDS_API_KEY
 uv run python scripts/fetch_corpus.py
@@ -484,9 +492,9 @@ gold-set evals into CI as two gates, split by API cost (full design rationale in
   shipped numbers still clear the bar and that the scoring code itself still computes them
   correctly. It never calls the API.
 - **Live capability gate** (`workflow_dispatch` + a weekly schedule only — **never** on
-  `pull_request`) — deletes the cached predictions, re-runs `gold_eval.py` and
-  `gold_eval_rag.py` against the real models, then runs the same gate against the fresh
-  numbers. This is the actual "did the model/prompt/retrieval get worse" check, and the
+  `pull_request`) — deletes the cached predictions, re-runs `gold_eval.py` against the
+  real models, then runs the same gate against the fresh numbers. This is the actual
+  "did the model or prompt get worse" check, and the
   only job that touches `ANTHROPIC_API_KEY`. Restricting it to dispatch/schedule (never
   PRs, and never `pull_request_target`) means a fork PR on this public repo has no path to
   invoke it.
@@ -537,9 +545,7 @@ it would never report on the PR being merged and there is nothing to require.
 No key needed — it grades whatever is already committed:
 
 ```bash
-uv run python src/eval_gate.py                    # both baseline and rag
-uv run python src/eval_gate.py --check baseline    # baseline only
-uv run python src/eval_gate.py --check rag         # rag only
+uv run python src/eval_gate.py    # grades the ungrounded baseline snapshot
 ```
 
 To exercise the same sequence the live job runs (needs `ANTHROPIC_API_KEY`, costs real
@@ -575,9 +581,10 @@ uv run python src/eval_gate.py                                     # no key need
 - **Small gold set:** 54 hand-labeled snippets buys an *honest* number but a noisy one;
   per-label rates rest on single digits (`industry` is `n=5`, `space` is `n=3`). The validated
   Opus judge is the path to scaling the answer key past what hand-labeling reaches.
-- **Lexical-only retrieval:** BM25 matches words, not meaning, so a paraphrased neighbor is
-  invisible to it. The eval showed grounding's lift didn't justify embeddings *here* — that
-  verdict is specific to this corpus and set size, not a general claim.
+- **Lexical-only retrieval (retired):** BM25 matches words, not meaning, so a paraphrased
+  neighbor is invisible to it. The eval showed grounding stopped paying once the prompt was
+  strong ([ADR-012](decisions/012-retire-bm25-grounding.md)) and didn't justify moving to
+  embeddings *here* — a verdict specific to this corpus and set size, not a general claim.
 - **Corpus skew:** the DVIDS wire is public-affairs copy, so operations/ceremony framing is
   over-represented and `industry` had to be sourced separately from SEC. The corpus is a
   retrieval pool, not a balanced sample of defense news.
@@ -590,10 +597,11 @@ uv run python src/eval_gate.py                                     # no key need
 - [`uv`](https://docs.astral.sh/uv/) for dependency management and reproducible environments
 - [`anthropic`](https://github.com/anthropics/anthropic-sdk-python) for the LLM calls
 - [`pandas`](https://pandas.pydata.org/) for eval tables and CSV I/O
-- [`rank-bm25`](https://github.com/dorianbrown/rank_bm25) for v2 lexical retrieval
+- [`rank-bm25`](https://github.com/dorianbrown/rank_bm25) for the v2 lexical retrieval
+  experiment (now retired from the shipped path; code kept dormant)
 - Models: `claude-sonnet-5` (workhorse classifier, since July 2026; v1/v2 shipped on
-  `claude-sonnet-4-6`), `claude-sonnet-4-6` (RAG-grounded path, pinned per
-  [ADR-010](decisions/010-rag-path-model-pin.md)), `claude-opus-4-8` (v2 eval judge)
+  `claude-sonnet-4-6`), `claude-opus-4-8` (v2 eval judge). The retired grounding path ran on
+  `claude-sonnet-4-6` ([ADR-012](decisions/012-retire-bm25-grounding.md))
 - Data sources: [DVIDS](https://www.dvidshub.net/) public-domain DoD news wire,
   [SEC EDGAR](https://www.sec.gov/edgar) filings (v2 corpus)
 - `fastapi` + `uvicorn` for the live `src/api.py` service (`POST /classify`), `httpx`
