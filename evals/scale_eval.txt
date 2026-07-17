@@ -43,4 +43,8 @@ sea        0.950   0.983  0.966       58
 space      0.885   0.885  0.885       26
 
 Answer-key label distribution (judge): air 84, cyber 54, land 48, multi 30, sea 58, space 26
+
+-- Known limitation: DVIDS label skew -----------------------
+Category: `operations` is 198/300 (66%); thin classes (support < 10): industry n=1.
+  -> the category macro-F1 (0.704) is dragged down by those thin classes, not by a real quality drop; read overall accuracy + the well-populated per-label rows instead.
 ==============================================================

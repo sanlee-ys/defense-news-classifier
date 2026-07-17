@@ -74,6 +74,29 @@ the ungrounded classifier — and recorded as a measured negative result in
 [ADR-012](decisions/012-retire-bm25-grounding.md). The full measurement is in the grounding
 section below.
 
+#### Tighter error bars: the scaled eval (v2.1.0)
+
+The gold numbers above are honest but small — at n=54, a "94.4%" carries a **±13-point** 95%
+confidence interval. v2.1.0 shrinks that noise floor without more hand-labeling: the Opus judge
+(validated against the human labels at 94.4% / 94.4% agreement) grades **300 fresh real DVIDS
+snippets**, disjoint from both the corpus and the gold set, and the workhorse is scored against
+it with Wilson confidence intervals.
+
+| Workhorse vs judge | Accuracy | 95% CI | CI width |
+|---|---|---|---|
+| Category | **93.3%** | [89.9%, 95.6%] | ±6pts (was ±13 at n=54) |
+| Domain | **90.3%** | [86.5%, 93.2%] | ±7pts (was ±15 at n=54) |
+
+The accuracy lands right where the n=54 gold set put it — the scaled run **corroborates** the
+small-sample number with roughly half the uncertainty, it doesn't replace it. Two honest
+caveats, stated plainly: this measures *workhorse-vs-judge* agreement, so it inherits the
+judge's ~5–6% disagreement-with-human ceiling (read it alongside the human-graded gold, not
+instead of it); and the DVIDS wire is operations-heavy, so the 300-set is too — `operations` is
+66% of it and `industry` is a single snippet. That skew makes the category **macro-F1
+uninformative** (one `industry` miss drags the unweighted mean to 0.704), so read the overall
+accuracy and the well-populated per-label rows, not that macro-F1. The domain axis is balanced
+and its macro-F1 (0.886) stands. Full report: [`evals/scale_eval.txt`](evals/scale_eval.txt).
+
 ---
 
 ### v2 — real text, human-graded (the v2 ship, on Sonnet 4.6)

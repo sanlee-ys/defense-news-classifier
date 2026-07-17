@@ -171,6 +171,50 @@ def _gold_reference() -> dict | None:
     return ref
 
 
+# Below this support a per-label F1 (and the macro average that includes it) is too
+# noisy to trust -- e.g. `industry` at n=1 scores F1 0 or 1 on a single snippet.
+MIN_LABEL_SUPPORT = 10
+
+
+def _limitations_block(m: dict) -> list[str]:
+    """Data-driven skew caveat, so the numbers can't be misread.
+
+    Flags any axis dominated by one class (>50%) or carrying classes below
+    ``MIN_LABEL_SUPPORT``, and warns that the macro-F1 there is distorted -- the
+    DVIDS wire is operations-heavy, so the category axis is (deliberately, per the
+    DVIDS-only sourcing choice), and its macro-F1 must not be read as a quality drop.
+
+    Args:
+        m: The metrics dict from :func:`metrics`.
+
+    Returns:
+        Report lines (empty if every axis is balanced enough to need no caveat).
+    """
+    out: list[str] = []
+    n = m["n"]
+    for axis, heading in (("category", "Category"), ("operational_domain", "Domain")):
+        a = m[axis]
+        dist = a["distribution"]
+        top_label, top_n = max(dist.items(), key=lambda kv: kv[1])
+        thin = {k: v for k, v in dist.items() if v < MIN_LABEL_SUPPORT}
+        if top_n / n < 0.5 and not thin:
+            continue  # balanced enough -- no caveat needed
+        if not out:
+            out += ["", "-- Known limitation: DVIDS label skew -----------------------"]
+        thin_str = ", ".join(f"{k} n={v}" for k, v in sorted(thin.items())) or "none"
+        out.append(
+            f"{heading}: `{top_label}` is {top_n}/{n} ({top_n / n:.0%}); "
+            f"thin classes (support < {MIN_LABEL_SUPPORT}): {thin_str}."
+        )
+        if thin:
+            out.append(
+                f"  -> the {heading.lower()} macro-F1 ({a['macro_f1']:.3f}) is dragged "
+                "down by those thin classes, not by a real quality drop; read overall "
+                "accuracy + the well-populated per-label rows instead."
+            )
+    return out
+
+
 def build_report(preds: pd.DataFrame) -> str:
     """Assemble the human-readable scaled-eval report.
 
@@ -238,6 +282,7 @@ def build_report(preds: pd.DataFrame) -> str:
             "Answer-key label distribution (judge): "
             + ", ".join(f"{k} {v}" for k, v in sorted(a["distribution"].items())),
         ]
+    lines += _limitations_block(m)
     lines.append("=" * 62)
     return "\n".join(lines)
 

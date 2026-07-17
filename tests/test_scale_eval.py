@@ -96,3 +96,27 @@ def test_run_predictions_writes_to_the_scale_path(tmp_path, monkeypatch, tool_cl
         "judge_category",
         "judge_operational_domain",
     }
+
+
+def test_limitations_block_flags_a_skewed_axis_with_a_thin_class():
+    rows = [
+        {
+            "id": f"s{i:03d}",
+            "pred_category": "industry" if i == 0 else "operations",
+            "pred_operational_domain": "air",
+            "judge_category": "industry" if i == 0 else "operations",
+            "judge_operational_domain": "air",
+        }
+        for i in range(60)  # 59 operations, 1 industry
+    ]
+    block = "\n".join(
+        scale_eval._limitations_block(scale_eval.metrics(pd.DataFrame(rows)))
+    )
+    assert "Known limitation" in block
+    assert "operations" in block and "industry n=1" in block
+    assert "macro-F1" in block  # the distortion caveat fires on the thin class
+
+
+def test_limitations_block_empty_when_axes_are_balanced():
+    # _preds() spreads labels evenly (>= MIN_LABEL_SUPPORT each, none dominant).
+    assert scale_eval._limitations_block(scale_eval.metrics(_preds())) == []
