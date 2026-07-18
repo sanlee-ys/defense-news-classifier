@@ -11,8 +11,9 @@ An NLP pipeline that classifies public defense-related news snippets into a **ca
 public-domain text (DoD news wire + SEC filings) and grades against a human-labeled answer key.
 The workhorse runs on **Claude Sonnet 5**. A BM25 retrieval-grounding layer shipped in v2, was
 measured against the ungrounded classifier, and was **retired** once it stopped paying
-([ADR-012](decisions/012-retire-bm25-grounding.md)) — a measured negative result, kept as such.
-The measured eval numbers are the centerpiece.
+([ADR-012](decisions/012-retire-bm25-grounding.md)); tiered Opus routing was then built,
+measured, and **declined** the same way ([ADR-013](decisions/013-decline-tiered-routing.md)) —
+two measured negative results, kept as such. The measured eval numbers are the centerpiece.
 
 ---
 
@@ -96,6 +97,30 @@ instead of it); and the DVIDS wire is operations-heavy, so the 300-set is too �
 uninformative** (one `industry` miss drags the unweighted mean to 0.704), so read the overall
 accuracy and the well-populated per-label rows, not that macro-F1. The domain axis is balanced
 and its macro-F1 (0.886) stands. Full report: [`evals/scale_eval.txt`](evals/scale_eval.txt).
+
+#### Tiered routing: measured and declined (v2.2.0)
+
+The second negative result. The obvious next move after a strong single-model baseline is
+tiered routing — keep the cheap workhorse, escalate only the hard cases to Opus. v2.2.0 built
+that and measured it instead of assuming it. The classifier forces tool use and so emits no
+confidence signal; the routing layer manufactures one by requiring the workhorse to also name
+its `runner_up_category`, escalating exactly when the top-two are {technology, operations} —
+the one clustered confusion the gold set ever showed. Escalations replay the stored Opus-judge
+predictions (same model, same call shape), so measuring cost zero new premium calls; quality is
+graded only against the human labels, never against the escalation target itself.
+
+The verdict ([`evals/route_eval.txt`](evals/route_eval.txt),
+[ADR-013](decisions/013-decline-tiered-routing.md)): **routing moved +0 rows on both axes** —
+routed is identical to workhorse-only (94.4% / 92.6%), and the 9 escalated gold rows read
+*fixed 0, broke 1, unchanged 8*, where the one change was Opus overriding a correct workhorse
+answer. Even running **everything** on Opus scores the same 94.4% category, so no category
+router has headroom to capture. Meanwhile the trigger fires on 19.4% of real articles, pricing
+the routed pipeline at **~1.97x** the workhorse for zero measured quality. Routing is declined;
+the harness stays in the repo (`src/route.py`, `src/route_eval.py`) as the reproducible record.
+One incidental finding worth stating: merely adding the runner-up field to the tool schema
+flipped one snippet — a chem-bio *defense* program story the baseline classified cleanly — into
+a safety-layer refusal, a reminder that the measurement instrument is part of the system being
+measured.
 
 ---
 
