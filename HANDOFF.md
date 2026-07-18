@@ -1,87 +1,86 @@
-# HANDOFF — 2026-07-18 — chair: FABLE
+# HANDOFF — 2026-07-18 (refresh) — chair: FABLE
 
 _You are a fresh session. Read `CLAUDE.md` (and the repo's process docs) before
-acting. Escalate on anomaly, not task type._
+acting. Escalate on anomaly, not task type. **Verify PR/file state with
+`gh pr list` + `git log --oneline -5` before trusting anything below** — the
+owner was mid-live-run when this was written._
 
 ## State
 
-- `main` @ `8975b83` — **v2.2.0 released and tagged** (tag `v2.2.0` is on the remote).
-  The v2.2.0 milestone shipped as a measured negative result: tiered routing was built
-  (#84), hardened after a live safety-layer refusal (#85), measured (0 rows moved,
-  ~1.97x cost), and declined ([ADR-013](decisions/013-decline-tiered-routing.md), #86).
-  CHANGELOG, README, roadmap, and version (2.2.0) are all swept and consistent.
-- Working branch convention this cycle: `claude/classifier-app-alternatives-2an4ww`,
-  PR → squash-merge to `main` once CI is green (offline-gate + test + CodeQL), branch
-  auto-deletes on merge.
-- No open PRs, no uncommitted work, all 293 tests green at release.
-- The container has **no API key** — all paid/live steps run on the owner's machine
-  (Windows / PyCharm / PowerShell: no `&&`, use separate lines; `.env` is local-only).
+- The v3.0.0 build order ([ADR-014](decisions/014-region-field-design.md)) is
+  **fully shipped on `main`**: design (#88) → schema + prompt rubric (#90) →
+  gold region labels (#91, #92) → eval plumbing + ratified-convention prompt
+  amendments (#94). Output contract is `{category, operational_domain, region}`.
+- The **54-row gold set is settled and adversarially audited** on all three
+  axes (full source-article verification): category and domain confirmed
+  108/108 — the owner's hand labels and the published 94.4%/92.6% numbers
+  stand untouched; region took two review corrections (g003 → `europe`,
+  g024 → `americas`). Ratified labeling conventions live in
+  `data/gold/README.md` (snippet-decidable/article-confirmable; Afghanistan +
+  Central Asia → middle-east; Hawaii → indo-pacific; Mediterranean → europe).
+- **The owner is running the v3 live pass** (~108 calls: workhorse + judge over
+  the gold 54). Outputs land as NEW files — `evals/gold_predictions_v3.csv`,
+  `evals/gold_eval_v3.txt` — and are committed only via a deliberate human PR.
+  If they're on `main` when you read this, the pass is done; read
+  `gold_eval_v3.txt` before doing anything else.
+- Version files still say 2.2.0 — the bump to 3.0.0 rides the release sweep,
+  not any feature PR. ADR-006 gained L3/L4 governance amendments mid-cycle
+  (#93, separate session) — unrelated to the region work.
 
-## Your job this session
+## Next jobs, in order (each its own branch → PR)
 
-**Line up v3.0.0 — the `region` field** (the roadmap's planned breaking change:
-output becomes `{category, operational_domain, region}`). The owner said "line up
-3.0.0"; the taxonomy questions below were posed but **not yet answered** — getting
-those answers is step 1, not optional.
-
-1. Ask the owner these three design questions (they were surfaced and interrupted;
-   re-ask, don't assume):
-   - **Label set** — proposed: `indo-pacific`, `europe`, `middle-east`, `africa`,
-     `americas`, + `global` as the single catch-all for no-anchor and multi-region
-     stories (mirrors `multi` on the domain axis). Alternatives: separate
-     `none`/`global` (7 labels), or coarser regions. Key data fact: DVIDS is a US
-     wire, so CONUS no-anchor stories dominate — how they're labeled shapes the
-     whole distribution.
-   - **Gold labeling workflow** — recommended: session pre-labels the 54 gold
-     snippets offline, owner reviews/corrects each (fast, corrections reveal the
-     rubric's boundary cases); alternative: owner labels blind (no anchoring).
-   - **Scope** — recommended: v3.0.0 ships gold-graded region only (n=54 human
-     accuracy + judge-vs-human region validation on the same 54); the scaled n=300
-     region eval waits for v3.1.0 and only if the judge validates on region.
-     Mirrors the v2 → v2.1.0 earn-the-right sequencing.
-2. Record the answers in **ADR-014** (region field design: label set, boundary
-   rules, migration/breaking-change notes) before touching code.
-3. Then build in small steps (one concern per PR): schema (`CLASSIFY_TOOL` strict
-   enum + `REGIONS` constant) + prompt rubric with worked examples → gold relabel
-   flow → eval plumbing (`gold_eval`, `eval_confusion`, thresholds **after**
-   measurement, never before) → owner runs the live pass.
-
-## Queued for other tiers
-
-- **Sonnet:** after the v3.0.0 design lands, the mechanical sweeps (tests for the
-  new schema path, README numbers once measured, CHANGELOG entry) are prescribed
-  work.
-- **Owner-decision gate, any tier:** scaled region eval (v3.1.0) is contingent on
-  judge-vs-human region agreement on the 54 — do not schedule it before that number
-  exists.
+1. **Thresholds PR — only after the live numbers exist** (measure-first, house
+   rule): region floors in `evals/thresholds.toml` from the measured run, and
+   re-point `eval_gate`'s default + the offline gate at the v3 snapshot once
+   it's committed. Never write an aspirational floor.
+2. **Release sweep (Sonnet-tier mechanical):** CHANGELOG entry, README numbers
+   from `gold_eval_v3.txt`, version 3.0.0 (MINOR/PATCH reset), roadmap row
+   flipped to shipped. Then the owner pushes the `v3.0.0` tag (tags never work
+   from containers — proxy 403; hand over exact commands).
+3. **v3.1.0 scaled region eval — gated, not scheduled:** proceed only if
+   judge-vs-human REGION agreement on the 54 validates (benchmark: the ~94%
+   the judge shows on category/domain). Below that, the plan dies — surface
+   it, don't patch around it.
+4. **kb-agent's side of SYS-004** (separate repo, separate session): its
+   `classify_snippet` contract must gain `region` before it re-pins.
 
 ## Escalate if
 
-- The region labels force a change to the *existing* category/domain enums or their
-  definitions — that's beyond v3.0.0's stated break; stop and ask.
-- Judge-vs-human region agreement on the gold 54 comes in clearly below the ~94%
-  the judge shows on category/domain — the scaled-region plan dies; surface it.
+- Judge-vs-human region agreement comes in clearly below the ~94% benchmark —
+  the v3.1.0 scaled plan dies; that's an owner decision, not a retry.
+- Anything wants a region threshold before the live numbers exist.
 - Anything wants to modify the dormant retired paths (`src/classify_rag.py`,
-  `src/route.py` and friends) — they are records, not scaffolding (ADR-012/013).
+  `src/route.py`, `src/route_eval.py` and friends) — records, not scaffolding
+  (ADR-012/013). They deliberately track the shipped schema but stay pinned to
+  the frozen v2 prediction snapshot.
+- Anything wants to edit gold labels: the set is adversarially audited — a
+  change needs the same challenge + dual-skeptic bar, and the owner
+  adjudicates every flip.
 
 ## Standing cautions
 
-- **Batch `custom_id`s** must match `^[a-zA-Z0-9_-]{1,64}$` — `::` separators 400
-  (fixed once, regression-tested; keep new batch code to `__` or bare ids).
-- **Safety-layer refusals are an expected per-row outcome** in bulk runs on this
-  content (s151 precedent: a chem-bio *defense* story refused after a mere schema
-  change). Record-and-continue with a sentinel; never let one row kill a batch
-  retrieval (#85 pattern in `route_eval.py`).
-- **Tag pushes are blocked from the container** (proxy 403) — branch pushes and PRs
-  work; tags are always the owner's step, hand over exact commands.
-- **Measure-first is the house rule with two precedents** (ADR-012, ADR-013): no
-  feature enters the shipped path without beating the eval; thresholds are set from
-  measured numbers, never aspirationally.
-- `evals/scale_eval` answer key **is the Opus judge** — never grade a judge-model
-  variant against it (circularity); human gold only for quality verdicts.
+- **The v2 eval outputs are frozen records** (`evals/gold_predictions.csv`,
+  `gold_eval.txt`, `gold_confusion*.{md,csv}`, `scale_eval.txt`,
+  `route_eval.txt`): never delete, overwrite, or regenerate them. All v3
+  outputs use `_v3` names. `eval_gate.py` defaults to the v2 snapshot; the CI
+  live leg grades its fresh v3 run via `--preds` against the six measured v2
+  floors (owner's call 2026-07-18: keep that leg live through the transition).
+- **Batch `custom_id`s** must match `^[a-zA-Z0-9_-]{1,64}$` — `::` 400s; use
+  `__` or bare ids (regression-tested).
+- **Safety-layer refusals are an expected per-row outcome** on this content
+  (s151 precedent). Record-and-continue with a sentinel; never let one row
+  kill a batch retrieval (#85 pattern).
+- **Measure-first has three precedents now** (ADR-012, ADR-013, and the
+  region threshold discipline in #94): nothing ships past the eval, and
+  thresholds come from measured numbers only.
+- `evals/scale_eval` answer key **is the Opus judge** — never grade a
+  judge-model variant against it; human gold only for quality verdicts. The
+  same rule extends to region: the judge must validate against the human 54
+  before it grades anything at scale.
 
 ## Owner-only actions pending
 
-- Answer the three v3.0.0 design questions (above).
-- Hand-label / correct the n=54 gold `region` column when the workflow is agreed.
-- All live API runs (classifier + judge passes) and the eventual `v3.0.0` tag push.
+- Finish the live pass; review `gold_eval_v3.txt` (region accuracy + the
+  judge-region gate number) and `eval_confusion.py`'s per-cell breakdown.
+- Commit the v3 snapshot via PR when satisfied.
+- The eventual `v3.0.0` tag push, after the release sweep.
