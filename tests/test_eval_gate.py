@@ -115,6 +115,8 @@ def test_rows_for_baseline_pairs_every_metric_with_its_floor():
         "domain_macro_f1": 0.9,
         "judge_category_agreement": 0.9,
         "judge_domain_agreement": 0.9,
+        "region_accuracy": 0.9,
+        "judge_region_agreement": 0.9,
         "n": 54,
     }
     floors = {
@@ -124,6 +126,8 @@ def test_rows_for_baseline_pairs_every_metric_with_its_floor():
         "domain_macro_f1": 0.83,
         "judge_category_agreement": 0.83,
         "judge_domain_agreement": 0.88,
+        "region_accuracy": 0.78,
+        "judge_region_agreement": 0.93,
     }
     rows = eval_gate._rows_for_baseline(m, floors)
 
@@ -134,6 +138,8 @@ def test_rows_for_baseline_pairs_every_metric_with_its_floor():
         "domain_macro_f1",
         "judge_category_agreement",
         "judge_domain_agreement",
+        "region_accuracy",
+        "judge_region_agreement",
     ]
 
 
@@ -156,6 +162,8 @@ def test_check_baseline_passes_when_metrics_clear_floors(monkeypatch):
             "domain_macro_f1": 0.90,
             "judge_category_agreement": 0.90,
             "judge_domain_agreement": 0.90,
+            "region_accuracy": 0.90,
+            "judge_region_agreement": 0.90,
         },
     )
     thresholds = {
@@ -166,6 +174,8 @@ def test_check_baseline_passes_when_metrics_clear_floors(monkeypatch):
             "domain_macro_f1": 0.80,
             "judge_category_agreement": 0.80,
             "judge_domain_agreement": 0.80,
+            "region_accuracy": 0.80,
+            "judge_region_agreement": 0.80,
         }
     }
     assert eval_gate.check_baseline(thresholds) is True
@@ -187,6 +197,8 @@ def test_check_baseline_fails_when_a_metric_breaches_its_floor(monkeypatch):
             "domain_macro_f1": 0.90,
             "judge_category_agreement": 0.90,
             "judge_domain_agreement": 0.90,
+            "region_accuracy": 0.90,
+            "judge_region_agreement": 0.90,
         },
     )
     thresholds = {
@@ -197,6 +209,8 @@ def test_check_baseline_fails_when_a_metric_breaches_its_floor(monkeypatch):
             "domain_macro_f1": 0.80,
             "judge_category_agreement": 0.80,
             "judge_domain_agreement": 0.80,
+            "region_accuracy": 0.80,
+            "judge_region_agreement": 0.80,
         }
     }
     assert eval_gate.check_baseline(thresholds) is False
@@ -223,6 +237,8 @@ def test_check_baseline_fails_when_predictions_are_truncated(monkeypatch, capsys
             "domain_macro_f1": 0.95,
             "judge_category_agreement": 0.95,
             "judge_domain_agreement": 0.95,
+            "region_accuracy": 0.95,
+            "judge_region_agreement": 0.95,
         },
     )
     thresholds = {
@@ -233,11 +249,39 @@ def test_check_baseline_fails_when_predictions_are_truncated(monkeypatch, capsys
             "domain_macro_f1": 0.80,
             "judge_category_agreement": 0.80,
             "judge_domain_agreement": 0.80,
+            "region_accuracy": 0.80,
+            "judge_region_agreement": 0.80,
         }
     }
 
     assert eval_gate.check_baseline(thresholds) is False
     assert "40 of 54" in capsys.readouterr().err
+
+
+def test_check_baseline_refuses_a_two_axis_predictions_file(monkeypatch, capsys):
+    """A v2-shaped file (no pred_region) must FAIL loudly, not gate 6 of 8."""
+    monkeypatch.setattr(gold_eval, "load_gold", lambda: pd.DataFrame({"id": ["g001"]}))
+    monkeypatch.setattr(
+        eval_gate, "_baseline_merged", lambda gold, _preds_path=None: gold
+    )
+    # metrics() omits the region keys when the frame carries no pred_region.
+    monkeypatch.setattr(
+        gold_eval,
+        "metrics",
+        lambda merged: {
+            "n": len(merged),
+            "category_accuracy": 0.95,
+            "category_macro_f1": 0.95,
+            "domain_accuracy": 0.95,
+            "domain_macro_f1": 0.95,
+            "judge_category_agreement": 0.95,
+            "judge_domain_agreement": 0.95,
+        },
+    )
+    thresholds = {"baseline": {}}
+
+    assert eval_gate.check_baseline(thresholds) is False
+    assert "two-axis" in capsys.readouterr().err
 
 
 # --- main(): SystemExit contract ---------------------------------------------
@@ -253,7 +297,9 @@ def test_main_exits_nonzero_when_a_floor_is_breached(monkeypatch, tmp_path):
         "domain_accuracy = 0.0\n"
         "domain_macro_f1 = 0.0\n"
         "judge_category_agreement = 0.0\n"
-        "judge_domain_agreement = 0.0\n",
+        "judge_domain_agreement = 0.0\n"
+        "region_accuracy = 0.0\n"
+        "judge_region_agreement = 0.0\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(gold_eval, "load_gold", lambda: pd.DataFrame({"id": ["g001"]}))
@@ -271,6 +317,8 @@ def test_main_exits_nonzero_when_a_floor_is_breached(monkeypatch, tmp_path):
             "domain_macro_f1": 0.90,
             "judge_category_agreement": 0.90,
             "judge_domain_agreement": 0.90,
+            "region_accuracy": 0.90,
+            "judge_region_agreement": 0.90,
         },
     )
     monkeypatch.setattr(sys, "argv", ["eval_gate.py"])
@@ -281,11 +329,10 @@ def test_main_exits_nonzero_when_a_floor_is_breached(monkeypatch, tmp_path):
 
 
 def test_baseline_merged_honors_a_preds_path_override(tmp_path):
-    """The CI live job grades the fresh v3 file via --preds; prove the plumbing.
+    """The CI live job grades its freshly regenerated file via --preds.
 
-    The default stays the frozen v2 snapshot -- this exercises the override the
-    workflow's live leg depends on (a v3-shaped file with region columns, which
-    metrics() picks up without any region floor being graded).
+    The default is the committed v3 snapshot; this exercises the override the
+    workflow's live leg depends on (grading an arbitrary v3-shaped file).
     """
     preds_path = tmp_path / "fresh_v3.csv"
     pd.DataFrame(
@@ -334,6 +381,8 @@ def test_thresholds_toml_has_every_required_key():
         "domain_macro_f1",
         "judge_category_agreement",
         "judge_domain_agreement",
+        "region_accuracy",
+        "judge_region_agreement",
     }
     assert required_baseline <= set(thresholds["baseline"])
     # BM25 grounding was retired (ADR-012); there is no [rag] table any more.

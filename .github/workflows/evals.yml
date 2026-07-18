@@ -111,9 +111,10 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: uv run python src/gold_eval.py
 
-      # Same six measured v2-axis floors as offline-gate, graded against the fresh v3
-      # numbers just produced above -- the shipped axes stay guarded through the v3
-      # transition. Region is reported by gold_eval but NOT gated: no region floor exists
-      # until the owner's live pass measures one (ADR-014).
+      # Same eight measured floors as offline-gate (six v2-era + the two region floors
+      # measured from the 2026-07-18 live pass), graded against the fresh numbers just
+      # produced above, not the committed snapshot. --preds is redundant with the gate's
+      # default since the v3 snapshot became the default target, but stays explicit: this
+      # job must grade the file the step above regenerated, whatever the default becomes.
       - name: Score fresh predictions against evals/thresholds.toml
         run: uv run python src/eval_gate.py --preds evals/gold_predictions_v3.csv
