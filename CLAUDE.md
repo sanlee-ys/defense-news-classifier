@@ -1,7 +1,7 @@
 # CLAUDE.md — Defense News Classifier
 
 ## Project
-A clean-room NLP project that classifies **public defense-related news articles and reports**. Given a piece of defense news (free text), the system assigns a **category** (what the article is about) and an **operational domain** (the warfighting domain it relates to). Built and evaluated on **synthetic and/or public text only** — no proprietary or non-public data is used anywhere in this project.
+A clean-room NLP project that classifies **public defense-related news articles and reports**. Given a piece of defense news (free text), the system assigns a **category** (what the article is about), an **operational domain** (the warfighting domain it relates to), and a **region** (the geographic theater of the story's subject activity — added in v3.0.0, [ADR-014](decisions/014-region-field-design.md)). Built and evaluated on **synthetic and/or public text only** — no proprietary or non-public data is used anywhere in this project.
 
 This is a personal portfolio project with two aims: (a) demonstrate practical, hands-on AI engineering, and (b) measure classification quality rigorously. **The measured eval results are the centerpiece, not just a working demo.** The subject is the open-source analysis side of defense — categorizing public news and reports — nothing operational.
 
@@ -9,14 +9,14 @@ This is a personal portfolio project with two aims: (a) demonstrate practical, h
 
 The project is deliberately small and finishable: a synthetic **and** real-text
 dataset, a single-call classifier with **structured (JSON) output** mapping
-article text → `{category, operational_domain}`, and a rigorous eval harness
+article text → `{category, operational_domain, region}`, and a rigorous eval harness
 (overall accuracy, per-label precision/recall, confusion matrices, a
 misclassification log) fronted by a README that **leads with the numbers**.
 `v2.0.0` added BM25 RAG grounding over real public text, which was later **measured and
 retired** ([ADR-012](decisions/012-retire-bm25-grounding.md)) once it stopped beating the
-ungrounded classifier — the shipped classifier is ungrounded. The `region` field is the
-planned `v3.0.0` breaking change. Version specifics — what ships when and why — live in
-**Versioning roadmap** below, not here.
+ungrounded classifier — the shipped classifier is ungrounded. The `region` field
+**shipped as `v3.0.0`** ([ADR-014](decisions/014-region-field-design.md)). Version
+specifics — what ships when and why — live in **Versioning roadmap** below, not here.
 
 Still out of scope unless a version deliberately picks it up: a web UI, scraping
 pipelines, databases, auth / multi-user, and model fine-tuning. If something
@@ -33,6 +33,13 @@ roadmap's parking lot is where unplanned ideas wait their turn.
 
 **operational_domain** (the warfighting domain involved):
 - `air`, `land`, `sea`, `cyber`, `space`, `multi` (joint / spans more than one)
+
+**region** (the geographic theater of the story's subject activity — v3.0.0, [ADR-014](decisions/014-region-field-design.md)):
+- `indo-pacific`, `europe`, `middle-east`, `africa`, `americas`, `global` (the single
+  catch-all for both no-anchor and multi-region stories, mirroring `multi`). Boundary
+  rules and ratified conventions (snippet-decidable/article-confirmable; Hawaii →
+  indo-pacific; Mediterranean → europe; Afghanistan + Central Asia → middle-east) live
+  in `data/gold/README.md` and the classifier prompt.
 
 These labels are a starting point. If a cleaner set emerges once you see the data, propose the change and confirm before switching.
 
@@ -92,14 +99,14 @@ Each web session runs in its own fresh container and can't see another session's
 
 ## Versioning roadmap
 
-v1 (synthetic, self-graded) and v2 (real text + human gold + BM25 retrieval, since retired —
-[ADR-012](decisions/012-retire-bm25-grounding.md)) have shipped;
-**`v2.2.0` is the current release.** Releases follow **semver** (`MAJOR.MINOR.PATCH`) and
+v1 (synthetic, self-graded), v2 (real text + human gold + BM25 retrieval, since retired —
+[ADR-012](decisions/012-retire-bm25-grounding.md)), and v3 (the `region` axis) have shipped;
+**`v3.0.0` is the current release.** Releases follow **semver** (`MAJOR.MINOR.PATCH`) and
 [Keep a Changelog](https://keepachangelog.com/) — every milestone gets a git tag + a CHANGELOG
 entry. The line to internalize:
 
 - **PATCH** (`x.y.Z`) — a *fix*. No new capability, no change to the `{category,
-  operational_domain}` output contract. Same behavior, just more correct.
+  operational_domain, region}` output contract. Same behavior, just more correct.
 - **MINOR** (`x.Y.0`) — a new, **backward-compatible** capability. The contract still holds;
   you added something, you didn't change what callers already rely on. **Bumping MINOR resets
   PATCH to 0.**
@@ -116,7 +123,8 @@ A worked progression from `v2.0.0` (the concrete plan, not just the theory):
 | **v2.1.0** | minor | **Scale the eval with the validated judge** — 300 real DVIDS snippets graded by the Opus judge with 95% Wilson CIs: category 93.3% [89.9, 95.6], domain 90.3% [86.5, 93.2], halving the n=54 CI width — **shipped 2026-07-17** (`src/scale_eval.py`, `evals/scale_eval.txt`; the DVIDS-only set is operations-skewed, so the category macro-F1 is documented as uninformative) | New capability, same output contract → MINOR; PATCH resets to 0 |
 | **v2.1.1** | patch | Fix whatever the scaled run exposes — e.g. a resume/batching bug in the judge harness or a larger-data CI timeout | A fix *on top of* v2.1.0 → third digit increments |
 | **v2.2.0** | minor | **Tiered model routing — measured and declined** ([ADR-013](decisions/013-decline-tiered-routing.md)) — built the runner-up trigger + measurement harness ([ADR-011](decisions/011-reaim-tiered-routing-technology-operations.md) had re-aimed it at `technology`-vs-`operations`), measured the trade, and shipped the negative result: routing moved **+0 rows** on both gold axes (escalated rows: fixed 0, broke 1) at **~1.97x** the cost (19.4% escalation rate). The shipped classifier stays single-model; the harness stays dormant as the record — **shipped 2026-07-18** | Additive capability (the harness + verdict), callers unaffected → MINOR again; PATCH back to 0 |
-| **v3.0.0** | major | **Add a `region` field** — output becomes `{category, operational_domain, region}` (`indo-pacific`, `europe`, …), needs a fresh gold-labeling pass | Breaks the output contract → MAJOR; MINOR + PATCH reset to 0 |
+| **v3.0.0** | major | **Add a `region` field** — output becomes `{category, operational_domain, region}` ([ADR-014](decisions/014-region-field-design.md)): six labels with `global` as the no-anchor/multi-region catch-all; fresh gold-labeling pass, owner-reviewed then adversarially audited against source articles on all three axes (cat/dom hand labels survived 108/108). First live run: category 92.6%, domain 92.6%, region 87.0% — with judge-vs-human region agreement **100.0%**, clearing the gate for the scaled region eval. The region misses are one named cluster (7× gold=`global` pulled to a specific region — the no-guessing rule is the model's hardest) — **shipped 2026-07-18** | Breaks the output contract → MAJOR; MINOR + PATCH reset to 0 |
+| **v3.1.0** | minor | **Scale the region eval** — n=300 DVIDS snippets graded on region by the Opus judge (validated at 100.0% vs human on the gold 54, so the answer-key chain holds); same Wilson-CI reporting as v2.1.0. Unblocked by the measured gate; unscheduled until picked | New capability, contract untouched → MINOR |
 
 Read straight down the third digit: it climbs *within* a line (`2.0.1` -> `2.0.2`, then `2.1.1`)
 and **resets to 0 every time a digit to its left moves** (`2.1.0`, `2.2.0`, `3.0.0`). That reset

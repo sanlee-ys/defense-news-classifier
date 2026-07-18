@@ -7,6 +7,59 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ---
 
+## [3.0.0] - 2026-07-18
+
+Milestone: **the `region` field.** The roadmap's planned breaking change: the output contract
+becomes `{category, operational_domain, region}` ([ADR-014](decisions/014-region-field-design.md)).
+Six labels — `indo-pacific`, `europe`, `middle-east`, `africa`, `americas`, and `global` as the
+single catch-all for no-anchor and multi-region stories, mirroring `multi` on the domain axis.
+
+### Changed — BREAKING
+- **Output contract: `{category, operational_domain}` → `{category, operational_domain, region}`**
+  (`src/classify.py`, `src/api.py`) — `region` is a required strict-enum field on `CLASSIFY_TOOL`
+  (ADR-008 pattern), a required key on the `/classify` response, and a third hand-labeled column
+  on the gold set. The SYS-004 frozen-contract literals moved with it; kb-agent's side of that
+  contract needs its own update before it re-pins. `SYSTEM_PROMPT` gains the region axis:
+  definitions, boundary rules (theater of the subject activity; snippet-stated places only — no
+  world-knowledge guessing; ratified conventions: Hawaii→indo-pacific, Mediterranean→europe,
+  Afghanistan+Central Asia→middle-east), worked examples, and a region tie-break.
+
+### Added
+- **Gold set: hand-labeled + adversarially audited `region` column** (`data/gold/gold.csv`,
+  `data/gold/README.md`) — all 54 rows pre-labeled offline, owner-reviewed row by row, then the
+  full set verified against every snippet's source article on **all three axes** (multi-agent
+  pass: one verifier per row, adversarial skeptics on challenges, cross-row consistency audit).
+  Category and domain survived 108/108 — the v2 hand labels and the published numbers stand
+  untouched; region took two review corrections (g003→europe, g024→americas). The labeling
+  rules are recorded in the gold README, including the snippet-decidable/article-confirmable
+  rule that keeps gold truth consistent with what the classifier can actually see.
+- **First live three-axis gold run** (`evals/gold_eval_v3.txt`, `gold_predictions_v3.csv`,
+  `gold_confusion_v3.*`) — category **92.6%** (macro-F1 0.911), domain **92.6%** (0.933),
+  region **87.0%** (0.927); judge-vs-human agreement **92.6% / 98.1% / 100.0%**. The 100.0%
+  judge-region agreement clears ADR-014's gate for the v3.1.0 scaled region eval. The region
+  misses are a single named cluster: 7/7 are gold=`global` rows pulled to a specific region
+  (6× americas, 1× indo-pacific) — the model infers a region from the US actor where the
+  no-guessing rule says no anchor. All v3 eval outputs use new `_v3` filenames; the v2
+  snapshots are frozen records and are never regenerated.
+- **Region floors in the CI gate** (`evals/thresholds.toml`, `src/eval_gate.py`) — measured,
+  never aspirational: region_accuracy 0.78 (vs 0.870 measured), judge_region_agreement 0.93
+  (vs 1.000 measured). Deliberately no region macro-F1 floor (europe support n=1 — one flip
+  moves it ~0.17). The gate's default target graduates to the committed v3 snapshot, grades
+  all eight floors, and refuses a two-axis file loudly; `--preds` lets the live CI job grade
+  its freshly regenerated run.
+
+### Fixed
+- **Transient strict-mode blips no longer kill the live pass** (`src/gold_eval.py`) — the first
+  v3 live run died at row 13 when the Opus judge returned a tool input with no `category` at
+  all despite `strict: true`; the identical replay was clean. Diagnosed as a transient
+  constrained-decoding anomaly (it recurred twice more in the completed run), so the harness's
+  `classify_retry` now retries `InvalidLabelError` with the same bounded backoff as 500s/429s —
+  `classify()` itself stays single-call-fail-loud per ADR-008. The `InvalidLabelError` backstop
+  kept "in case the guarantee is ever violated" fired in the wild and did its job.
+- **Interrupted runs can't masquerade as results** (`src/eval_confusion.py`) — the crashed
+  partial run produced a clean-looking n=12 confusion report; the report now leads with a
+  PARTIAL RUN banner whenever predictions cover fewer rows than the gold set.
+
 ## [2.2.0] - 2026-07-18
 
 Milestone: **tiered model routing — measured and declined.** The roadmap's v2.2.0 ships as a
