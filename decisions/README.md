@@ -16,6 +16,8 @@ Decisions are recorded here as they are made. Each ADR captures the context, the
 | [010](010-rag-path-model-pin.md) | Pin the RAG-grounded path to claude-sonnet-4-6 after the Sonnet-5 workhorse migration | Superseded by [012](012-retire-bm25-grounding.md) |
 | [011](011-reaim-tiered-routing-technology-operations.md) | Re-aim v2.2.0 tiered routing at technology-vs-operations, not industry-vs-procurement | Accepted |
 | [012](012-retire-bm25-grounding.md) | Retire BM25 retrieval grounding — it no longer pays under the improved prompt | Accepted |
+| [013](013-decline-tiered-routing.md) | Decline tiered model routing — measured, it buys nothing at ~2x the cost | Accepted |
+| [014](014-region-field-design.md) | Region field design — six labels with a `global` catch-all, gold-first scope | Accepted |
 
 ## Format
 
