@@ -9,6 +9,9 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
+### Added
+- **Tiered-routing experiment: runner-up trigger + offline-replayable measurement harness** (`src/route.py`, `src/route_eval.py`) — the build for the roadmap's **v2.2.0 "tiered model routing"**, aimed at the `technology`-vs-`operations` boundary per [ADR-011](decisions/011-reaim-tiered-routing-technology-operations.md). The shipped classifier forces tool use and so emits no confidence signal; `route.py` manufactures one — a routing-only variant of the classify tool adds a required `runner_up_category` field, and `route()` escalates to the Opus tier exactly when the workhorse reports {technology, operations} as its top-two. `classify_routed()` keeps the `{category, operational_domain}` contract byte-for-byte. `route_eval.py` measures the cost/quality trade with three honesty guards baked in: quality is graded **only on the n=54 human gold set** (the scale set's answer key is the Opus judge — the escalation target itself — so it reports rate/cost, never "accuracy"); escalations are **replayed from the stored judge predictions** (same model, same call shape), so the live spend is one workhorse pass and zero new Opus calls; and the runner-up schema's perturbation of the workhorse's own labels is measured, not assumed away. Ships with the stated hypothesis that the #79 prompt fix already cleared the target cluster (technology recall 1.000 vs human) and routing likely no longer pays — the experiment exists to measure that verdict, not to presume the feature earns its keep.
+
 ## [2.1.0] - 2026-07-17
 
 Milestone: **scale the eval**. This tag also releases everything that had accumulated under
