@@ -94,7 +94,7 @@ Each web session runs in its own fresh container and can't see another session's
 
 v1 (synthetic, self-graded) and v2 (real text + human gold + BM25 retrieval, since retired —
 [ADR-012](decisions/012-retire-bm25-grounding.md)) have shipped;
-**`v2.1.0` is the current release.** Releases follow **semver** (`MAJOR.MINOR.PATCH`) and
+**`v2.2.0` is the current release.** Releases follow **semver** (`MAJOR.MINOR.PATCH`) and
 [Keep a Changelog](https://keepachangelog.com/) — every milestone gets a git tag + a CHANGELOG
 entry. The line to internalize:
 
@@ -115,7 +115,7 @@ A worked progression from `v2.0.0` (the concrete plan, not just the theory):
 | **v2.0.2** | patch | Backfill the v2 eval modules' remaining orchestration tests — the API-driving run-loops and `main()` entrypoints the pure-function tests skipped in `gold_eval_rag.py` (62%), `stability.py` (58%), `retrieval_error_analysis.py` (82%), `gold_eval_haiku.py` (86%) — and fix any edge cases they expose | Pure correctness/hardening — no feature, contract untouched |
 | **v2.1.0** | minor | **Scale the eval with the validated judge** — 300 real DVIDS snippets graded by the Opus judge with 95% Wilson CIs: category 93.3% [89.9, 95.6], domain 90.3% [86.5, 93.2], halving the n=54 CI width — **shipped 2026-07-17** (`src/scale_eval.py`, `evals/scale_eval.txt`; the DVIDS-only set is operations-skewed, so the category macro-F1 is documented as uninformative) | New capability, same output contract → MINOR; PATCH resets to 0 |
 | **v2.1.1** | patch | Fix whatever the scaled run exposes — e.g. a resume/batching bug in the judge harness or a larger-data CI timeout | A fix *on top of* v2.1.0 → third digit increments |
-| **v2.2.0** | minor | **Tiered model routing** — escalate only low-confidence `technology`-vs-`operations` cases to Opus, measure the cost/quality trade ([ADR-011](decisions/011-reaim-tiered-routing-technology-operations.md) re-aimed this from `industry`-vs-`procurement`: on the real gold set that pair is a non-issue, while `technology`→`operations` is the clustered miss) | Additive, callers unaffected → MINOR again; PATCH back to 0 |
+| **v2.2.0** | minor | **Tiered model routing — measured and declined** ([ADR-013](decisions/013-decline-tiered-routing.md)) — built the runner-up trigger + measurement harness ([ADR-011](decisions/011-reaim-tiered-routing-technology-operations.md) had re-aimed it at `technology`-vs-`operations`), measured the trade, and shipped the negative result: routing moved **+0 rows** on both gold axes (escalated rows: fixed 0, broke 1) at **~1.97x** the cost (19.4% escalation rate). The shipped classifier stays single-model; the harness stays dormant as the record — **shipped 2026-07-18** | Additive capability (the harness + verdict), callers unaffected → MINOR again; PATCH back to 0 |
 | **v3.0.0** | major | **Add a `region` field** — output becomes `{category, operational_domain, region}` (`indo-pacific`, `europe`, …), needs a fresh gold-labeling pass | Breaks the output contract → MAJOR; MINOR + PATCH reset to 0 |
 
 Read straight down the third digit: it climbs *within* a line (`2.0.1` -> `2.0.2`, then `2.1.1`)
@@ -136,8 +136,10 @@ rule is the whole game — a version number is a promise about what changed, not
 
 **Guiding principle (carried over from v1):** model tier and feature scope are per-task
 cost/quality knobs **decided by the eval, not by default** — measure first, escalate only where
-it pays. That's why "scale the eval" (v2.1.0) comes *before* "route to a premium model"
-(v2.2.0): you earn the right to spend by measuring first.
+it pays. That's why "scale the eval" (v2.1.0) came *before* "route to a premium model"
+(v2.2.0): you earn the right to spend by measuring first. The principle has now declined the
+escalation twice with data — BM25 grounding (ADR-012) and tiered routing (ADR-013) — so the
+94%+ single-model, single-call classifier is the measured optimum of everything tried against it.
 
 **Parking lot (unversioned until picked):**
 - A thin **Streamlit demo UI** — turns the eval harness into a usable product; arguably its own

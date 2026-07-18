@@ -11,10 +11,12 @@ The public contract is unchanged: ``classify_routed()`` returns the same
 ``{category, operational_domain}`` dict as ``classify()``. The runner-up field lives
 only on the routing wire; callers never see it.
 
-This ships as an EXPERIMENT with a stated hypothesis: the PR #79 prompt fix already
+This shipped as an EXPERIMENT with a stated hypothesis: the PR #79 prompt fix already
 cleared the tech->ops cluster on the human-graded gold set, so routing likely no longer
-pays. ``src/route_eval.py`` measures that verdict; this module exists so the verdict is
-measured, not assumed.
+pays. ``src/route_eval.py`` measured that verdict, and it held -- routing moved +0 rows
+on both gold axes at ~1.97x the cost (evals/route_eval.txt). Tiered routing is DECLINED
+(decisions/013-decline-tiered-routing.md): nothing in the shipped path imports this
+module; it stays dormant, with its tests, as the reproducible record.
 """
 
 from __future__ import annotations
