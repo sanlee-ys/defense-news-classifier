@@ -593,18 +593,18 @@ it would never report on the PR being merged and there is nothing to require.
 No key needed — it grades whatever is already committed:
 
 ```bash
-uv run python src/eval_gate.py    # grades the ungrounded baseline snapshot
+uv run python src/eval_gate.py    # grades the frozen v2 baseline snapshot
 ```
 
 To exercise the same sequence the live job runs (needs `ANTHROPIC_API_KEY`, costs real
-money, ~162 calls total — San only, not something to run casually):
+money, ~108 calls — San only, not something to run casually). The frozen v2 snapshot
+(`evals/gold_predictions.csv`) is a record — never delete it; the fresh run writes the
+v3 file and the gate grades that via `--preds`:
 
 ```bash
-# Prefix the two eval commands below with: uv run --env-file .env ...
-rm -f evals/gold_predictions.csv evals/gold_rag_predictions.csv    # force a fresh run
-uv run python src/gold_eval.py
-uv run python src/gold_eval_rag.py
-uv run python src/eval_gate.py                                     # no key needed
+rm -f evals/gold_predictions_v3.csv                    # force a fresh run
+uv run --env-file .env python src/gold_eval.py
+uv run python src/eval_gate.py --preds evals/gold_predictions_v3.csv   # no key needed
 ```
 
 ---

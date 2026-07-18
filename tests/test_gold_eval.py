@@ -14,10 +14,10 @@ import pytest
 
 import gold_eval
 
-GOLD_COLUMNS = ["id", "dvids_id", "source_url", "text", "category", "domain"]
+GOLD_COLUMNS = ["id", "dvids_id", "source_url", "text", "category", "domain", "region"]
 
 
-def _row(rid, category, domain):
+def _row(rid, category, domain, region="global"):
     return {
         "id": rid,
         "dvids_id": "news:1",
@@ -25,6 +25,7 @@ def _row(rid, category, domain):
         "text": "some real defense news snippet text",
         "category": category,
         "domain": domain,
+        "region": region,
     }
 
 
@@ -62,6 +63,24 @@ def test_load_gold_rejects_invalid_label(tmp_path):
         gold_eval.load_gold(str(path))
 
 
+def test_load_gold_rejects_blank_region(tmp_path):
+    path = tmp_path / "gold.csv"
+    _write_gold(
+        path,
+        [_row("g001", "procurement", "air"), _row("g002", "operations", "sea", "")],
+    )
+    with pytest.raises(ValueError):
+        gold_eval.load_gold(str(path))
+
+
+def test_load_gold_rejects_invalid_region(tmp_path):
+    # "pacific" is not a label; the axis uses "indo-pacific" (decisions/014).
+    path = tmp_path / "gold.csv"
+    _write_gold(path, [_row("g001", "procurement", "air", "pacific")])
+    with pytest.raises(ValueError, match="region"):
+        gold_eval.load_gold(str(path))
+
+
 # --- build_report ---------------------------------------------------------
 
 
@@ -72,19 +91,25 @@ def test_build_report_runs_and_reports_accuracy():
                 "id": "g001",
                 "category": "procurement",
                 "operational_domain": "air",
+                "region": "global",
                 "pred_category": "procurement",
                 "pred_operational_domain": "air",
+                "pred_region": "global",
                 "judge_category": "procurement",
                 "judge_operational_domain": "air",
+                "judge_region": "global",
             },
             {
                 "id": "g002",
                 "category": "operations",
                 "operational_domain": "sea",
+                "region": "indo-pacific",
                 "pred_category": "policy",  # workhorse miss
                 "pred_operational_domain": "sea",
+                "pred_region": "global",  # workhorse region miss
                 "judge_category": "operations",  # judge agrees with human
                 "judge_operational_domain": "sea",
+                "judge_region": "indo-pacific",
             },
         ]
     )
@@ -187,15 +212,16 @@ def test_main_runs_predictions_and_writes_all_outputs(monkeypatch, tmp_path):
         lambda _client, _text, model: {
             "category": "procurement",
             "operational_domain": "air",
+            "region": "global",
         },
     )
 
     gold_eval.main()
 
-    preds = pd.read_csv(tmp_path / "evals" / "gold_predictions.csv")
+    preds = pd.read_csv(tmp_path / gold_eval.PREDS_PATH)
     assert len(preds) == 2
     assert set(preds["id"]) == {"g001", "g002"}
-    assert (tmp_path / "evals" / "gold_eval.txt").exists()
+    assert (tmp_path / gold_eval.REPORT_PATH).exists()
 
 
 def test_main_skips_api_when_predictions_already_complete(monkeypatch, tmp_path):
@@ -217,18 +243,22 @@ def test_main_skips_api_when_predictions_already_complete(monkeypatch, tmp_path)
                 "id": "g001",
                 "pred_category": "procurement",
                 "pred_operational_domain": "air",
+                "pred_region": "global",
                 "judge_category": "procurement",
                 "judge_operational_domain": "air",
+                "judge_region": "global",
             },
             {
                 "id": "g002",
                 "pred_category": "operations",
                 "pred_operational_domain": "sea",
+                "pred_region": "global",
                 "judge_category": "operations",
                 "judge_operational_domain": "sea",
+                "judge_region": "global",
             },
         ]
-    ).to_csv(tmp_path / "evals" / "gold_predictions.csv", index=False)
+    ).to_csv(tmp_path / gold_eval.PREDS_PATH, index=False)
 
     def boom():
         raise AssertionError("make_client must not be called when preds are complete")
@@ -237,7 +267,7 @@ def test_main_skips_api_when_predictions_already_complete(monkeypatch, tmp_path)
 
     gold_eval.main()  # should not raise — no API client built
 
-    assert (tmp_path / "evals" / "gold_eval.txt").exists()
+    assert (tmp_path / gold_eval.REPORT_PATH).exists()
 
 
 # --- run_predictions_batch (Message Batches API path) ----------------------
@@ -394,15 +424,19 @@ def test_main_batch_flag_calls_run_predictions_batch(monkeypatch, tmp_path):
                     "id": "g001",
                     "pred_category": "procurement",
                     "pred_operational_domain": "air",
+                    "pred_region": "global",
                     "judge_category": "procurement",
                     "judge_operational_domain": "air",
+                    "judge_region": "global",
                 },
                 {
                     "id": "g002",
                     "pred_category": "operations",
                     "pred_operational_domain": "sea",
+                    "pred_region": "global",
                     "judge_category": "operations",
                     "judge_operational_domain": "sea",
+                    "judge_region": "global",
                 },
             ]
         ).to_csv(gold_eval.PREDS_PATH, index=False)
@@ -416,7 +450,7 @@ def test_main_batch_flag_calls_run_predictions_batch(monkeypatch, tmp_path):
 
     gold_eval.main()
     assert called == {"yes": True}
-    assert (tmp_path / "evals" / "gold_eval.txt").exists()
+    assert (tmp_path / gold_eval.REPORT_PATH).exists()
 
 
 def test_batch_custom_ids_match_the_anthropic_pattern():

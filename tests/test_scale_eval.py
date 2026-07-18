@@ -95,8 +95,10 @@ def test_run_predictions_writes_to_the_scale_path(tmp_path, monkeypatch, tool_cl
         "id",
         "pred_category",
         "pred_operational_domain",
+        "pred_region",
         "judge_category",
         "judge_operational_domain",
+        "judge_region",
     }
 
 

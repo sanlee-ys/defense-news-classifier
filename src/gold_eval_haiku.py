@@ -48,7 +48,13 @@ from classify import (
     parse_batch_result,
 )
 from eval import compute_metrics, macro_average
-from gold_eval import PREDS_PATH, WORKHORSE_MODEL, classify_retry, load_gold
+from gold_eval import WORKHORSE_MODEL, classify_retry, load_gold
+
+# Frozen v2 workhorse snapshot -- the baseline this comparison was measured
+# against. Deliberately NOT gold_eval.PREDS_PATH, which moved to the v3
+# three-axis file (ADR-014); repointing would compare the stored Haiku arm
+# against a different era's baseline.
+PREDS_PATH = "evals/gold_predictions.csv"
 
 HAIKU_MODEL = "claude-haiku-4-5"
 HAIKU_PREDS_PATH = "evals/gold_haiku_predictions.csv"

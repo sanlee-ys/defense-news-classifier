@@ -142,7 +142,9 @@ def test_rows_for_baseline_pairs_every_metric_with_its_floor():
 
 def test_check_baseline_passes_when_metrics_clear_floors(monkeypatch):
     monkeypatch.setattr(gold_eval, "load_gold", lambda: pd.DataFrame({"id": ["g001"]}))
-    monkeypatch.setattr(eval_gate, "_baseline_merged", lambda gold: gold)
+    monkeypatch.setattr(
+        eval_gate, "_baseline_merged", lambda gold, _preds_path=None: gold
+    )
     monkeypatch.setattr(
         gold_eval,
         "metrics",
@@ -171,7 +173,9 @@ def test_check_baseline_passes_when_metrics_clear_floors(monkeypatch):
 
 def test_check_baseline_fails_when_a_metric_breaches_its_floor(monkeypatch):
     monkeypatch.setattr(gold_eval, "load_gold", lambda: pd.DataFrame({"id": ["g001"]}))
-    monkeypatch.setattr(eval_gate, "_baseline_merged", lambda gold: gold)
+    monkeypatch.setattr(
+        eval_gate, "_baseline_merged", lambda gold, _preds_path=None: gold
+    )
     monkeypatch.setattr(
         gold_eval,
         "metrics",
@@ -206,7 +210,7 @@ def test_check_baseline_fails_when_predictions_are_truncated(monkeypatch, capsys
         lambda: pd.DataFrame({"id": [f"g{i:03d}" for i in range(54)]}),
     )
     monkeypatch.setattr(
-        eval_gate, "_baseline_merged", lambda gold: gold.iloc[:40]
+        eval_gate, "_baseline_merged", lambda gold, _preds_path=None: gold.iloc[:40]
     )  # simulates the inner join dropping 14 unpredicted ids
     monkeypatch.setattr(
         gold_eval,
@@ -253,7 +257,9 @@ def test_main_exits_nonzero_when_a_floor_is_breached(monkeypatch, tmp_path):
         encoding="utf-8",
     )
     monkeypatch.setattr(gold_eval, "load_gold", lambda: pd.DataFrame({"id": ["g001"]}))
-    monkeypatch.setattr(eval_gate, "_baseline_merged", lambda gold: gold)
+    monkeypatch.setattr(
+        eval_gate, "_baseline_merged", lambda gold, _preds_path=None: gold
+    )
     monkeypatch.setattr(
         gold_eval,
         "metrics",
@@ -272,6 +278,47 @@ def test_main_exits_nonzero_when_a_floor_is_breached(monkeypatch, tmp_path):
     with pytest.raises(SystemExit) as exc_info:
         eval_gate.main()
     assert exc_info.value.code == 1
+
+
+def test_baseline_merged_honors_a_preds_path_override(tmp_path):
+    """The CI live job grades the fresh v3 file via --preds; prove the plumbing.
+
+    The default stays the frozen v2 snapshot -- this exercises the override the
+    workflow's live leg depends on (a v3-shaped file with region columns, which
+    metrics() picks up without any region floor being graded).
+    """
+    preds_path = tmp_path / "fresh_v3.csv"
+    pd.DataFrame(
+        [
+            {
+                "id": "g001",
+                "pred_category": "procurement",
+                "pred_operational_domain": "air",
+                "pred_region": "global",
+                "judge_category": "procurement",
+                "judge_operational_domain": "air",
+                "judge_region": "global",
+            }
+        ]
+    ).to_csv(preds_path, index=False)
+    gold = pd.DataFrame(
+        [
+            {
+                "id": "g001",
+                "category": "procurement",
+                "domain": "air",
+                "region": "global",
+            }
+        ]
+    )
+
+    merged = eval_gate._baseline_merged(gold, str(preds_path))
+
+    assert len(merged) == 1
+    m = gold_eval.metrics(merged)
+    # The six gated v2 keys are present AND the ungated region numbers ride along.
+    assert m["category_accuracy"] == 1.0
+    assert m["region_accuracy"] == 1.0
 
 
 # --- against the real committed snapshot -------------------------------------
