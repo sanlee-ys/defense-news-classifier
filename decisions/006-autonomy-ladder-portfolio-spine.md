@@ -67,3 +67,34 @@ The living map is [docs/specs/autonomy-ladder.md](../docs/specs/autonomy-ladder.
 | Four independent demos, no single spine | Reads as a checklist; leaves the classifier centerpiece outside the loop/agent story. |
 | Standalone RAG demo for L2 | Sits off to the side, breaks the single-protagonist throughline, and duplicates grounding the classifier already has. |
 | Build all four levels now | Violates one-concern-per-session; L4 depends on L3 rungs that are unbuilt. "Cover all four" is the destination, sequenced, not one build. |
+
+---
+
+## Amendment — 2026-07-17: governance primitives for L3/L4
+
+The original decision fixed the *spine*; it left L3 (autonomous loop) and L4 (multi-agent)
+without a concrete safety-and-control vocabulary. This amendment adopts four established
+governance primitives as **design inputs** for those still-unbuilt levels. None of these are
+novel — they are standard patterns from fault-tolerant systems and access control — but stating
+them here keeps the L3/L4 build from re-deriving the obvious and gives the writeup a defensible
+control story. Prior art reviewed: a reference implementation applying these to agent-action
+approval ([`chrisipanaque/agent-approval-gates`](https://github.com/chrisipanaque/agent-approval-gates));
+the circuit breaker traces to Nygard's *Release It!*, and the proposal → policy → decision → audit
+shape is the classic access-control gate.
+
+| Primitive | What it is | Where it lands on the ladder |
+|-----------|-----------|------------------------------|
+| **Circuit breaker** | Track an actor's recent rejection/failure rate over a rolling window; once it crosses a threshold (with a minimum-sample floor so noise doesn't trip it), halt and escalate. | **L4 self-halt / Goodhart guard.** The direct answer to "a loop that keeps optimizing the wrong thing" — the runaway loop trips its own breaker instead of running unbounded. This is the primitive the L4 spec was missing. |
+| **Gate taxonomy** | An action proposal (`action_type`, `risk_level`, `confidence`, `reasoning`, `payload`) is evaluated to one of `BLOCKING` / `ESCALATING` / `VALIDATING` / `ADVISORY`. | **L3 vocabulary.** Turns the abstract "human-in-the-loop" rung into a concrete state machine: propose → evaluate → decide → audit. `ADVISORY` = "logged, no block" is the recommend-never-act mode. |
+| **Fail-closed default** | An action with no matching policy defaults to `BLOCKING`, never to allow. | **Ladder-wide safety default.** An agent meeting a novel action it has no rule for must require approval, never self-authorize. Cheap to state, load-bearing under autonomy. |
+| **Confidence × risk bypass** | High confidence + low risk auto-approves (drops to advisory); anything else stays gated. | **The graduation rule.** Operationalizes the ladder's core claim that autonomy is *earned per-capability* — the agent runs unattended on actions it is measurably good at and stays gated on the rest. |
+
+A fifth, smaller steal: an **append-only audit log** tagging each transition's actor as human vs
+agent. It is both a control primitive and portfolio evidence — an immutable "who approved what"
+trail is the kind of artifact that survives a skeptical reviewer, and it mirrors the prog-log
+instinct applied to agent decisions.
+
+**Scope note:** this is a design input, not a build order. These primitives are adopted *on paper*
+for L3/L4; per one-concern-per-session they get implemented when those levels are picked up, and
+the [autonomy-ladder spec](../docs/specs/autonomy-ladder.md) is where the concrete design will
+land. Nothing here changes L1/L2, which are shipped.

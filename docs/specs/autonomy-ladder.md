@@ -70,6 +70,15 @@ the critic is what catches the classifier gaming its own metric.
   system drives itself*. Adaptation techniques (RAG, and any future fine-tuning) are treated as
   **ingredients used within a level**, not as levels themselves.
 
+**Governance primitives are adopted on paper for L3/L4.**
+- Four established control patterns — a **circuit breaker** (L4 self-halt / Goodhart guard), a
+  **gate taxonomy** (L3's propose → evaluate → decide → audit vocabulary), a **fail-closed default**,
+  and a **confidence × risk graduation rule**, plus an append-only **audit log** — are adopted as
+  design inputs so the L3/L4 build doesn't re-derive them. Full rationale and prior art in the
+  [ADR-006 amendment](../../decisions/006-autonomy-ladder-portfolio-spine.md#amendment--2026-07-17-governance-primitives-for-l3l4).
+- *Scope:* design input only. The concrete implementation is designed when L3/L4 are picked up
+  (§6), not now.
+
 ## 6. Sequencing & scope guard
 
 - L1 and L2 are shipped. No further work owed on the spine there beyond the L2 writeup framing.
