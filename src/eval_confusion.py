@@ -22,9 +22,12 @@ Reuses ``eval.py``'s metric functions so the numbers match the rest of the harne
 Run:
     uv run python src/eval_confusion.py
 
-Reads ``data/gold/gold.csv`` and ``evals/gold_predictions.csv``; writes a Markdown
-report to ``evals/gold_confusion.md`` and the two judge-vs-human matrices to
-``evals/gold_confusion_{category,domain}.csv``.
+Reads ``data/gold/gold.csv`` and ``evals/gold_predictions_v3.csv``; writes a
+Markdown report to ``evals/gold_confusion_v3.md`` and the judge-vs-human matrices
+to ``evals/gold_confusion_v3_{category,domain,region}.csv``. The ``_v3`` names are
+deliberate (ADR-014 migration note): the v2 two-axis outputs
+(``gold_confusion.md`` and friends) are the record behind the published numbers
+and are never overwritten.
 """
 
 from __future__ import annotations
@@ -36,15 +39,20 @@ import pandas as pd
 from eval import compute_metrics, confusion_matrix, macro_average
 
 GOLD_PATH = "data/gold/gold.csv"
-PREDS_PATH = "evals/gold_predictions.csv"
-REPORT_PATH = "evals/gold_confusion.md"
+PREDS_PATH = "evals/gold_predictions_v3.csv"
+REPORT_PATH = "evals/gold_confusion_v3.md"
 CONFUSION_CSV = {
-    "category": "evals/gold_confusion_category.csv",
-    "operational_domain": "evals/gold_confusion_domain.csv",
+    "category": "evals/gold_confusion_v3_category.csv",
+    "operational_domain": "evals/gold_confusion_v3_domain.csv",
+    "region": "evals/gold_confusion_v3_region.csv",
 }
 
 # (axis field on the merged frame, human-facing heading).
-AXES = [("category", "Category"), ("operational_domain", "Operational domain")]
+AXES = [
+    ("category", "Category"),
+    ("operational_domain", "Operational domain"),
+    ("region", "Region"),
+]
 
 
 def load_merged(

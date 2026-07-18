@@ -1,4 +1,4 @@
-"""v2 eval: score the classifier on the human-labeled gold set and validate the judge.
+"""v3 gold eval: score the classifier on the three-axis gold set and validate the judge.
 
 Each gold snippet is run through the same classify call on two models:
 
@@ -10,8 +10,13 @@ Each gold snippet is run through the same classify call on two models:
   as a trustworthy, scalable answer key where hand-labeling doesn't reach (Step 3+).
 
 Reuses the metric functions from eval.py. Resume-safe: predictions are appended to
-evals/gold_predictions.csv as they complete, so a crash costs at most one snippet.
-Writes the report to evals/gold_eval.txt.
+evals/gold_predictions_v3.csv as they complete, so a crash costs at most one snippet.
+Writes the report to evals/gold_eval_v3.txt.
+
+The ``_v3`` filenames are deliberate (ADR-014 migration note): the v2 snapshots
+(``gold_predictions.csv``, ``gold_eval.txt``) are the record the published
+two-axis numbers were graded from and are never overwritten -- ``eval_gate.py``
+stays pinned to them until measured v3 thresholds exist.
 
 Run:
     uv run --env-file .env python src/gold_eval.py
@@ -35,6 +40,7 @@ import pandas as pd
 from classify import (
     CATEGORIES,
     DOMAINS,
+    REGIONS,
     BatchItemError,
     InvalidLabelError,
     build_batch_request,
@@ -45,8 +51,8 @@ from classify import (
 from eval import compute_metrics, macro_average
 
 GOLD_PATH = "data/gold/gold.csv"
-PREDS_PATH = "evals/gold_predictions.csv"
-REPORT_PATH = "evals/gold_eval.txt"
+PREDS_PATH = "evals/gold_predictions_v3.csv"
+REPORT_PATH = "evals/gold_eval_v3.txt"
 
 WORKHORSE_MODEL = "claude-sonnet-5"
 JUDGE_MODEL = "claude-opus-4-8"
@@ -60,18 +66,24 @@ def load_gold(path: str = GOLD_PATH) -> pd.DataFrame:
         path: Path to the gold CSV. Defaults to ``GOLD_PATH``.
 
     Returns:
-        DataFrame with normalized (stripped, lowercased) ``category`` and
-        ``domain`` columns.
+        DataFrame with normalized (stripped, lowercased) ``category``,
+        ``domain``, and ``region`` columns.
 
     Raises:
-        ValueError: If any row is missing a ``category``/``domain`` label, or
-            a label falls outside the allowed ``CATEGORIES``/``DOMAINS`` sets.
+        ValueError: If any row is missing a ``category``/``domain``/``region``
+            label, or a label falls outside the allowed
+            ``CATEGORIES``/``DOMAINS``/``REGIONS`` sets.
     """
     df = pd.read_csv(path)
-    for col in ("category", "domain"):
+    if "region" not in df.columns:
+        raise ValueError(
+            f"{path} has no region column -- v3 needs the three-axis gold set "
+            "(see data/gold/README.md and decisions/014)."
+        )
+    for col in ("category", "domain", "region"):
         df[col] = df[col].fillna("").astype(str).str.strip().str.lower()
 
-    blank = df[(df["category"] == "") | (df["domain"] == "")]
+    blank = df[(df["category"] == "") | (df["domain"] == "") | (df["region"] == "")]
     if len(blank):
         raise ValueError(
             f"{len(blank)} of {len(df)} gold rows are unlabeled. Finish labeling "
@@ -79,9 +91,11 @@ def load_gold(path: str = GOLD_PATH) -> pd.DataFrame:
         )
     bad_cat = sorted(set(df["category"]) - set(CATEGORIES))
     bad_dom = sorted(set(df["domain"]) - set(DOMAINS))
-    if bad_cat or bad_dom:
+    bad_reg = sorted(set(df["region"]) - set(REGIONS))
+    if bad_cat or bad_dom or bad_reg:
         raise ValueError(
-            f"invalid labels in {path} -- category {bad_cat}, domain {bad_dom}"
+            f"invalid labels in {path} -- category {bad_cat}, domain {bad_dom}, "
+            f"region {bad_reg}"
         )
     return df
 
@@ -98,7 +112,7 @@ def classify_retry(
         max_retries: Maximum number of attempts before re-raising.
 
     Returns:
-        Dict with keys ``category`` and ``operational_domain``.
+        Dict with keys ``category``, ``operational_domain``, and ``region``.
 
     Raises:
         anthropic.InternalServerError: If all retries are exhausted on a 500.
@@ -141,8 +155,10 @@ def run_predictions(
             "id": row["id"],
             "pred_category": base["category"],
             "pred_operational_domain": base["operational_domain"],
+            "pred_region": base["region"],
             "judge_category": judge["category"],
             "judge_operational_domain": judge["operational_domain"],
+            "judge_region": judge["region"],
         }
         pd.DataFrame([result]).to_csv(
             preds_path, mode="a", header=write_header, index=False
@@ -243,13 +259,15 @@ def run_predictions_batch(
         if which == "workhorse":
             entry["pred_category"] = pred["category"]
             entry["pred_operational_domain"] = pred["operational_domain"]
+            entry["pred_region"] = pred["region"]
         else:
             entry["judge_category"] = pred["category"]
             entry["judge_operational_domain"] = pred["operational_domain"]
+            entry["judge_region"] = pred["region"]
 
     write_header = not os.path.exists(preds_path)
     for row_id, entry in by_row.items():
-        if entry.get("_incomplete") or len(entry) < 4:
+        if entry.get("_incomplete") or len(entry) < 6:
             continue  # missing a model's result for this row -- leave it todo
         out = {"id": row_id, **entry}
         pd.DataFrame([out]).to_csv(
@@ -278,11 +296,16 @@ def metrics(merged: pd.DataFrame) -> dict:
     Returns:
         Dict with ``n`` and the accuracy / macro-F1 numbers: ``category_accuracy``,
         ``category_macro_f1``, ``domain_accuracy``, ``domain_macro_f1``,
-        ``judge_category_agreement``, ``judge_domain_agreement``.
+        ``judge_category_agreement``, ``judge_domain_agreement``, and -- when the
+        frame carries region predictions -- ``region_accuracy``,
+        ``region_macro_f1``, ``judge_region_agreement``. The region keys are
+        conditional so ``eval_gate.py`` can keep grading the frozen v2 two-axis
+        snapshot (whose predictions predate the region field) until measured v3
+        thresholds exist; the v3 report path always has them.
     """
     cat_macro = macro_average(compute_metrics(merged, "category"))
     dom_macro = macro_average(compute_metrics(merged, "operational_domain"))
-    return {
+    out = {
         "n": len(merged),
         "category_accuracy": _accuracy(merged["category"], merged["pred_category"]),
         "category_macro_f1": cat_macro["f1"],
@@ -297,6 +320,14 @@ def metrics(merged: pd.DataFrame) -> dict:
             merged["operational_domain"], merged["judge_operational_domain"]
         ),
     }
+    if "pred_region" in merged.columns:
+        reg_macro = macro_average(compute_metrics(merged, "region"))
+        out["region_accuracy"] = _accuracy(merged["region"], merged["pred_region"])
+        out["region_macro_f1"] = reg_macro["f1"]
+        out["judge_region_agreement"] = _accuracy(
+            merged["region"], merged["judge_region"]
+        )
+    return out
 
 
 def build_report(merged: pd.DataFrame) -> str:
@@ -315,14 +346,16 @@ def build_report(merged: pd.DataFrame) -> str:
     # not part of metrics()'s gated numbers.
     cat_metrics = compute_metrics(merged, "category")
     dom_metrics = compute_metrics(merged, "operational_domain")
+    reg_metrics = compute_metrics(merged, "region")
     wj_cat = _accuracy(merged["pred_category"], merged["judge_category"])
     wj_dom = _accuracy(
         merged["pred_operational_domain"], merged["judge_operational_domain"]
     )
+    wj_reg = _accuracy(merged["pred_region"], merged["judge_region"])
 
     lines = [
         "=" * 62,
-        "v2 GOLD-SET EVAL -- real text, human-labeled",
+        "v3 GOLD-SET EVAL -- real text, human-labeled, three axes",
         "=" * 62,
         "",
         f"Snippets evaluated : {m['n']}   ({GOLD_PATH})",
@@ -336,6 +369,11 @@ def build_report(merged: pd.DataFrame) -> str:
         "",
         f"Category accuracy           : {m['category_accuracy']:.1%}   (macro-F1 {m['category_macro_f1']:.3f})",
         f"Operational domain accuracy : {m['domain_accuracy']:.1%}   (macro-F1 {m['domain_macro_f1']:.3f})",
+        f"Region accuracy             : {m['region_accuracy']:.1%}   (macro-F1 {m['region_macro_f1']:.3f})",
+        "",
+        "NOTE: the gold region distribution is US-wire-skewed (europe n=1,",
+        "africa n=2), so the region macro-F1 is support-limited -- read the",
+        "per-label table's support column before quoting it.",
         "",
         "Category per-label:",
         cat_metrics.to_string(float_format="{:.3f}".format),
@@ -343,16 +381,23 @@ def build_report(merged: pd.DataFrame) -> str:
         "Operational domain per-label:",
         dom_metrics.to_string(float_format="{:.3f}".format),
         "",
+        "Region per-label:",
+        reg_metrics.to_string(float_format="{:.3f}".format),
+        "",
         "-- Judge validation: judge vs human labels ----------------",
         "High agreement => the judge tracks human judgment, so it can",
         "serve as a scalable answer key where hand-labeling doesn't reach.",
+        "The REGION agreement is the v3.1.0 gate: the scaled region eval",
+        "runs only if the judge validates on this axis (ADR-014).",
         "",
-        f"Category agreement          : {m['judge_category_agreement']:.1%}",
+        f"Category agreement           : {m['judge_category_agreement']:.1%}",
         f"Operational domain agreement : {m['judge_domain_agreement']:.1%}",
+        f"Region agreement             : {m['judge_region_agreement']:.1%}",
         "",
         "-- Workhorse vs judge (do the two models agree?) ----------",
         f"Category           : {wj_cat:.1%}",
         f"Operational domain : {wj_dom:.1%}",
+        f"Region             : {wj_reg:.1%}",
         "=" * 62,
     ]
     return "\n".join(lines)
@@ -364,7 +409,7 @@ def main() -> None:
     Raises:
         EnvironmentError: If ``ANTHROPIC_API_KEY`` is not set (via make_client).
     """
-    parser = argparse.ArgumentParser(description="v2 gold-set eval + judge validation.")
+    parser = argparse.ArgumentParser(description="v3 gold-set eval + judge validation.")
     parser.add_argument(
         "--batch",
         action="store_true",
@@ -397,6 +442,13 @@ def main() -> None:
         print("All predictions already present -- skipping API calls.\n")
 
     preds = pd.read_csv(PREDS_PATH)
+    if "pred_region" not in preds.columns:
+        raise ValueError(
+            f"{PREDS_PATH} has no pred_region column -- it looks like a two-axis "
+            "(v2-shaped) predictions file was placed at the v3 path. The v3 report "
+            "requires three-axis predictions; delete the file and re-run, or score "
+            "the frozen v2 snapshot with src/eval_gate.py instead."
+        )
     merged = gold.rename(columns={"domain": "operational_domain"}).merge(preds, on="id")
 
     report = build_report(merged)

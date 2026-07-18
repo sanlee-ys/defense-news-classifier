@@ -200,6 +200,7 @@ def test_main_skips_api_when_predictions_complete(monkeypatch, tmp_path):
                 "text": "t1",
                 "category": "procurement",
                 "domain": "air",
+                "region": "global",
             },
             {
                 "id": "g002",
@@ -208,6 +209,7 @@ def test_main_skips_api_when_predictions_complete(monkeypatch, tmp_path):
                 "text": "t2",
                 "category": "operations",
                 "domain": "sea",
+                "region": "global",
             },
         ]
     ).to_csv(tmp_path / "data" / "gold" / "gold.csv", index=False)
@@ -344,6 +346,7 @@ def _seed_gold_and_baseline(tmp_path):
                 "text": "t1",
                 "category": "procurement",
                 "domain": "air",
+                "region": "global",
             },
             {
                 "id": "g002",
@@ -352,6 +355,7 @@ def _seed_gold_and_baseline(tmp_path):
                 "text": "t2",
                 "category": "operations",
                 "domain": "sea",
+                "region": "global",
             },
         ]
     ).to_csv(tmp_path / "data" / "gold" / "gold.csv", index=False)

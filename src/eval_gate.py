@@ -33,6 +33,7 @@ is breached.
 
 from __future__ import annotations
 
+import argparse
 import sys
 import tomllib
 
@@ -41,6 +42,14 @@ import pandas as pd
 import gold_eval
 
 THRESHOLDS_PATH = "evals/thresholds.toml"
+
+# Pinned to the FROZEN v2 predictions snapshot deliberately -- NOT
+# gold_eval.PREDS_PATH, which moved to the v3 file that only exists after the
+# owner's live three-axis pass. The gate grades the published two-axis floors
+# until measured v3 numbers exist (ADR-014: thresholds are set from measured
+# numbers, never aspirationally); re-point this at the v3 snapshot only
+# together with a measured region floor in thresholds.toml.
+PREDS_PATH = "evals/gold_predictions.csv"
 
 
 def load_thresholds(path: str = THRESHOLDS_PATH) -> dict:
@@ -56,16 +65,18 @@ def load_thresholds(path: str = THRESHOLDS_PATH) -> dict:
         return tomllib.load(handle)
 
 
-def _baseline_merged(gold: pd.DataFrame) -> pd.DataFrame:
+def _baseline_merged(gold: pd.DataFrame, preds_path: str = PREDS_PATH) -> pd.DataFrame:
     """Build the same merged frame gold_eval.main() scores, from committed CSVs only.
 
     Args:
         gold: Loaded, validated gold DataFrame (see ``gold_eval.load_gold``).
+        preds_path: Predictions CSV to grade. Defaults to the frozen v2
+            snapshot; the CI live job passes the freshly produced v3 file.
 
     Returns:
         Gold merged with the workhorse + judge predictions.
     """
-    preds = pd.read_csv(gold_eval.PREDS_PATH)
+    preds = pd.read_csv(preds_path)
     return gold.rename(columns={"domain": "operational_domain"}).merge(preds, on="id")
 
 
@@ -138,17 +149,18 @@ def _print_table(title: str, rows: list[tuple[str, float, float]]) -> bool:
     return all_pass
 
 
-def check_baseline(thresholds: dict) -> bool:
-    """Grade the committed baseline predictions against the ``[baseline]`` floors.
+def check_baseline(thresholds: dict, preds_path: str = PREDS_PATH) -> bool:
+    """Grade baseline predictions against the ``[baseline]`` floors.
 
     Args:
         thresholds: Parsed evals/thresholds.toml (see ``load_thresholds``).
+        preds_path: Predictions CSV to grade (see ``_baseline_merged``).
 
     Returns:
         True if every baseline metric clears its floor.
     """
     gold = gold_eval.load_gold()
-    merged = _baseline_merged(gold)
+    merged = _baseline_merged(gold, preds_path)
     m = gold_eval.metrics(merged)
     if not _check_sample_size("baseline", m["n"], len(gold)):
         return False
@@ -157,9 +169,26 @@ def check_baseline(thresholds: dict) -> bool:
 
 
 def main() -> None:
-    """Grade committed predictions against evals/thresholds.toml; exit 1 on breach."""
+    """Grade predictions against evals/thresholds.toml; exit 1 on breach.
+
+    ``--preds`` selects which predictions CSV is graded. The default is the
+    frozen v2 snapshot (the offline gate: proves the shipped numbers still
+    clear the bar and the scoring code still computes them). The CI live job
+    passes the freshly produced v3 file so the same six measured v2-axis
+    floors keep guarding the shipped axes through the v3 transition -- region
+    is reported by gold_eval but NOT gated until measured floors exist
+    (ADR-014: thresholds after measurement, never before).
+    """
+    parser = argparse.ArgumentParser(description="Grade eval outputs vs thresholds.")
+    parser.add_argument(
+        "--preds",
+        default=PREDS_PATH,
+        help="predictions CSV to grade (default: the frozen v2 snapshot)",
+    )
+    args = parser.parse_args()
+
     thresholds = load_thresholds()
-    if check_baseline(thresholds):
+    if check_baseline(thresholds, preds_path=args.preds):
         print("\nPASS -- every gated metric cleared its floor.")
     else:
         print(

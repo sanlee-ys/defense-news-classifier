@@ -39,10 +39,14 @@ from __future__ import annotations
 
 import pandas as pd
 
-from gold_eval import PREDS_PATH, load_gold
+from gold_eval import load_gold
 from gold_eval_rag import RAG_PREDS_PATH
 from retrieve import load_corpus
 
+# Frozen v2 workhorse snapshot -- the ungrounded baseline the retired RAG
+# comparison (ADR-012) was measured against. Deliberately NOT
+# gold_eval.PREDS_PATH, which moved to the v3 three-axis file (ADR-014).
+PREDS_PATH = "evals/gold_predictions.csv"
 REPORT_PATH = "evals/retrieval_error_analysis.md"
 FIELDS = (("category", "category"), ("operational_domain", "domain"))
 

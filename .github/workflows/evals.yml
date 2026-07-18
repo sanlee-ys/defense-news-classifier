@@ -97,20 +97,23 @@ jobs:
             exit 1
           fi
 
-      # Force a fresh prediction pass: delete the cached CSV so the eval re-runs every gold
-      # snippet against the live models rather than resuming/skipping (its normal,
-      # cost-saving default for local use -- see the docstring in gold_eval.py). This job
+      # Force a fresh prediction pass: delete the cached v3 CSV so the eval re-runs every
+      # gold snippet against the live models rather than resuming/skipping (its normal,
+      # cost-saving default for local use -- see the docstring in gold_eval.py). The frozen
+      # v2 snapshot (evals/gold_predictions.csv) is a record and is never deleted. This job
       # never commits the refreshed numbers back; updating the checked-in snapshot stays a
       # deliberate, reviewed human PR.
-      - name: Delete cached predictions to force a fresh live run
-        run: rm -f evals/gold_predictions.csv
+      - name: Delete cached v3 predictions to force a fresh live run
+        run: rm -f evals/gold_predictions_v3.csv
 
       - name: Re-run the baseline + judge eval (~108 API calls)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: uv run python src/gold_eval.py
 
-      # Same gate, same floors as offline-gate -- graded against the numbers just produced
-      # by the live models above, not the committed snapshot.
+      # Same six measured v2-axis floors as offline-gate, graded against the fresh v3
+      # numbers just produced above -- the shipped axes stay guarded through the v3
+      # transition. Region is reported by gold_eval but NOT gated: no region floor exists
+      # until the owner's live pass measures one (ADR-014).
       - name: Score fresh predictions against evals/thresholds.toml
-        run: uv run python src/eval_gate.py
+        run: uv run python src/eval_gate.py --preds evals/gold_predictions_v3.csv

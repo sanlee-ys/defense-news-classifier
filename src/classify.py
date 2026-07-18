@@ -72,9 +72,10 @@ Operational domains:
 - multi: joint/combined operations spanning more than one domain
 
 Regions (the geographic theater of the story's subject activity):
-- indo-pacific: East, South, and Southeast Asia, Oceania, and the Pacific
-- europe: Europe, including Russia and the Ukraine conflict theater
-- middle-east: the Gulf, the Levant, Iran, Iraq, and the Arabian Peninsula
+- indo-pacific: East, South, and Southeast Asia, Oceania, and the Pacific, including Hawaii
+- europe: Europe, including Russia, the Ukraine conflict theater, and the Mediterranean Sea
+- middle-east: the Gulf, the Levant, Iran, Iraq, and the Arabian Peninsula, plus \
+Afghanistan and Central Asia
 - africa: the African continent and adjacent waters
 - americas: North, Central, and South America, including the continental United States
 - global: no identifiable regional anchor, or the story genuinely spans multiple regions

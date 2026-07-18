@@ -99,6 +99,7 @@ def _write_gold_csv(path, n=4):
             "text": f"gold article {i}",
             "category": CATEGORIES[i % len(CATEGORIES)],
             "domain": DOMAINS[i % len(DOMAINS)],
+            "region": "global",
         }
         for i in range(n)
     ]

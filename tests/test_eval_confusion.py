@@ -37,16 +37,23 @@ def test_view_aliases_columns_for_reuse():
 
 
 # --- Data-backed regression guard on the committed gold set ------------------
+#
+# These pin to the FROZEN v2 predictions snapshot, not the module's live (v3)
+# PREDS_PATH: the v3 file only exists after the owner's live pass, and these
+# cells are the record behind the published two-axis numbers -- they must not
+# drift even while the v3 harness is being built.
+
+V2_PREDS_PATH = "evals/gold_predictions.csv"
 
 
 def _merged():
-    return eval_confusion.load_merged()
+    return eval_confusion.load_merged(preds_path=V2_PREDS_PATH)
 
 
 def test_gold_join_is_complete():
     merged = _merged()
     # Every prediction row joins to a gold row (no orphaned ids on either side).
-    preds = pd.read_csv(eval_confusion.PREDS_PATH)
+    preds = pd.read_csv(V2_PREDS_PATH)
     gold = pd.read_csv(eval_confusion.GOLD_PATH)
     assert len(merged) == len(preds) == len(gold)
 
@@ -78,8 +85,50 @@ def test_judge_vs_human_domain_cells():
 
 
 def test_report_covers_all_axes_and_comparisons():
-    report = eval_confusion.build_report(_merged())
+    # Synthetic frame (not the v2 snapshot): the report now renders the region
+    # axis, which the frozen v2 predictions don't carry.
+    merged = pd.DataFrame(
+        [
+            {
+                "id": "g001",
+                "category": "procurement",
+                "operational_domain": "air",
+                "region": "global",
+                "pred_category": "procurement",
+                "pred_operational_domain": "air",
+                "pred_region": "global",
+                "judge_category": "procurement",
+                "judge_operational_domain": "air",
+                "judge_region": "americas",  # one region disagreement to render
+            },
+            {
+                "id": "g002",
+                "category": "operations",
+                "operational_domain": "sea",
+                "region": "indo-pacific",
+                "pred_category": "operations",
+                "pred_operational_domain": "sea",
+                "pred_region": "indo-pacific",
+                "judge_category": "operations",
+                "judge_operational_domain": "sea",
+                "judge_region": "indo-pacific",
+            },
+        ]
+    )
+    report = eval_confusion.build_report(merged)
     assert "## Category" in report
     assert "## Operational domain" in report
+    assert "## Region" in report
     for title in ("workhorse vs human", "judge vs human", "workhorse vs judge"):
         assert title in report
+
+
+def test_confusion_csv_paths_cover_every_axis():
+    # The machine-readable judge-vs-human matrices must exist for each axis the
+    # report renders -- adding an axis without its CSV is the drift this guards.
+    assert set(eval_confusion.CONFUSION_CSV) == {
+        field for field, _ in eval_confusion.AXES
+    }
+    # v3 filenames only: the v2 outputs are frozen records (ADR-014).
+    for path in eval_confusion.CONFUSION_CSV.values():
+        assert "_v3" in path

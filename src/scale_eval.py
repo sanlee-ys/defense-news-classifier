@@ -152,12 +152,15 @@ def _gold_reference() -> dict | None:
     """
     import gold_eval
 
-    if not (
-        os.path.exists(gold_eval.GOLD_PATH) and os.path.exists(gold_eval.PREDS_PATH)
-    ):
+    # Frozen v2 workhorse snapshot -- the n=54 reference this v2.1.0 report was
+    # measured against. Deliberately NOT gold_eval.PREDS_PATH, which moved to
+    # the v3 three-axis file (ADR-014); repointing would silently swap the
+    # reference numbers to a different prompt era's run.
+    v2_preds_path = "evals/gold_predictions.csv"
+    if not (os.path.exists(gold_eval.GOLD_PATH) and os.path.exists(v2_preds_path)):
         return None
     gold = gold_eval.load_gold().rename(columns={"domain": "operational_domain"})
-    preds = pd.read_csv(gold_eval.PREDS_PATH)
+    preds = pd.read_csv(v2_preds_path)
     merged = gold.merge(preds, on="id")
     ref = {}
     for axis, truth in (

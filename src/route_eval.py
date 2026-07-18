@@ -561,7 +561,12 @@ def main() -> None:
 
     gold_runner, gold_refused = _load_runner(GOLD_RUNNER_PATH)
     scale_runner, scale_refused = _load_runner(SCALE_RUNNER_PATH)
-    gold_composed = compose_routed(gold_runner, pd.read_csv(gold_eval.PREDS_PATH))
+    # Frozen v2 workhorse+judge snapshot -- the baseline/escalation source the
+    # ADR-013 routing verdict was measured against. Deliberately NOT
+    # gold_eval.PREDS_PATH, which moved to the v3 three-axis file (ADR-014).
+    gold_composed = compose_routed(
+        gold_runner, pd.read_csv("evals/gold_predictions.csv")
+    )
     scale_composed = compose_routed(
         scale_runner, pd.read_csv(scale_eval.SCALE_PREDS_PATH)
     )
