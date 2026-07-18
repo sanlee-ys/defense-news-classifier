@@ -63,6 +63,18 @@ classifier prompt before the live pass.
   unambiguously implies — do not guess a theater from world knowledge. A named US
   base or coast is `americas`; "no anchor" means no meaningful geography at all
   (a budget line, a doctrine change), not "the geography is the US".
+- **Snippet-decidable, article-confirmable.** The gold label must be decidable from
+  the snippet alone — the classifier never sees more. `source_url` may only
+  *disambiguate or confirm* a place the snippet already names (Pearl Harbor →
+  confirm the Pacific scope: fine); never *import* geography the snippet lacks (an
+  unnamed base whose article reveals Germany: stays `global`). This keeps the gold
+  truth consistent with the prompt's own no-guessing rule instead of grading the
+  model on facts it can't see. (Ratified on the pre-label review, 2026-07-17.)
+- **Conventions ratified on review:** Afghanistan (and Central Asia) count as
+  `middle-east` (CENTCOM convention). Hawaii is `indo-pacific` — `americas` means
+  the continental US and the rest of the hemisphere.
+
+## Notes
 
 - **Excel-open is safe here.** Unlike `manifest.csv`, nothing auto-writes this file — the
   judge and eval only *read* it. Label, save, done.
