@@ -1,0 +1,65 @@
+==============================================================
+v3 GOLD-SET EVAL -- real text, human-labeled, three axes
+==============================================================
+
+Snippets evaluated : 54   (data/gold/gold.csv)
+
+Workhorse : claude-sonnet-5
+Judge     : claude-opus-4-8
+
+-- Baseline: workhorse vs human labels --------------------
+The classifier's accuracy on REAL news, graded against human
+truth -- the honest number v1's circular eval couldn't give.
+
+Category accuracy           : 92.6%   (macro-F1 0.911)
+Operational domain accuracy : 92.6%   (macro-F1 0.933)
+Region accuracy             : 87.0%   (macro-F1 0.927)
+
+NOTE: the gold region distribution is US-wire-skewed (europe n=1,
+africa n=2), so the region macro-F1 is support-limited -- read the
+per-label table's support column before quoting it.
+
+Category per-label:
+             precision  recall    f1  support
+label                                        
+industry         0.833   1.000 0.909        5
+operations       1.000   0.909 0.952       22
+policy           0.750   1.000 0.857        6
+procurement      0.875   0.875 0.875        8
+technology       1.000   0.923 0.960       13
+
+Operational domain per-label:
+       precision  recall    f1  support
+label                                  
+air        0.933   0.933 0.933       15
+cyber      1.000   0.833 0.909        6
+land       0.917   1.000 0.957       11
+multi      0.818   0.900 0.857       10
+sea        1.000   0.889 0.941        9
+space      1.000   1.000 1.000        3
+
+Region per-label:
+              precision  recall    f1  support
+label                                         
+africa            1.000   1.000 1.000        2
+americas          0.786   1.000 0.880       22
+europe            1.000   1.000 1.000        1
+global            1.000   0.632 0.774       19
+indo-pacific      0.833   1.000 0.909        5
+middle-east       1.000   1.000 1.000        5
+
+-- Judge validation: judge vs human labels ----------------
+High agreement => the judge tracks human judgment, so it can
+serve as a scalable answer key where hand-labeling doesn't reach.
+The REGION agreement is the v3.1.0 gate: the scaled region eval
+runs only if the judge validates on this axis (ADR-014).
+
+Category agreement           : 92.6%
+Operational domain agreement : 98.1%
+Region agreement             : 100.0%
+
+-- Workhorse vs judge (do the two models agree?) ----------
+Category           : 96.3%
+Operational domain : 94.4%
+Region             : 87.0%
+==============================================================
