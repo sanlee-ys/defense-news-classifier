@@ -46,7 +46,23 @@ gut-label is more useful than an overthought one.
 - **`procurement` vs `industry`.** A *purchase / contract award* (the buyer's side) is
   `procurement`; a *company's own business* (earnings, mergers, acquisitions) is `industry`.
 
-## Notes
+## v3.0.0: the `region` column
+
+`region` is the third gold axis ([ADR-014](../../decisions/014-region-field-design.md)):
+the geographic **theater of the story's subject activity**. The committed values are
+**session pre-labels** produced offline against the ADR-014 rubric; the owner reviews and
+corrects every row (that review happened on the PR that added the column — see it for the
+flagged boundary cases). Corrections that reveal rubric gaps get folded back into the
+classifier prompt before the live pass.
+
+- **Labels:** `indo-pacific` · `europe` · `middle-east` · `africa` · `americas` ·
+  `global` (the single catch-all for *both* no-anchor and multi-region stories,
+  mirroring `multi` on the domain axis).
+- **How to decide:** label where the subject activity happens or is aimed, not the
+  actor's nationality and not the dateline. Use only what the snippet states or
+  unambiguously implies — do not guess a theater from world knowledge. A named US
+  base or coast is `americas`; "no anchor" means no meaningful geography at all
+  (a budget line, a doctrine change), not "the geography is the US".
 
 - **Excel-open is safe here.** Unlike `manifest.csv`, nothing auto-writes this file — the
   judge and eval only *read* it. Label, save, done.
