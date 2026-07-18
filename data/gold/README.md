@@ -72,7 +72,9 @@ classifier prompt before the live pass.
   model on facts it can't see. (Ratified on the pre-label review, 2026-07-17.)
 - **Conventions ratified on review:** Afghanistan (and Central Asia) count as
   `middle-east` (CENTCOM convention). Hawaii is `indo-pacific` — `americas` means
-  the continental US and the rest of the hemisphere.
+  the continental US and the rest of the hemisphere. The Mediterranean counts as
+  `europe` (6th Fleet / EUCOM water) — kept as a fixed mapping so the label stays
+  decidable from the snippet, no fleet-context lookup required.
 
 ## Notes
 
