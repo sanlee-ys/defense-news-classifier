@@ -103,7 +103,17 @@ def load_gold(path: str = GOLD_PATH) -> pd.DataFrame:
 def classify_retry(
     client: anthropic.Anthropic, text: str, model: str, max_retries: int = 3
 ) -> dict:
-    """classify() with exponential backoff on transient API errors.
+    """classify() with exponential backoff on transient per-call failures.
+
+    Retries three failure kinds: 500s, 429s, and ``InvalidLabelError``. The
+    last one deserves its record: with ``strict: true`` an out-of-schema tool
+    input "should no longer occur in practice" (see classify.py), but the
+    live v3 gold pass hit exactly that once (2026-07-18, g014 judge call --
+    the API returned a tool input with no ``category`` at all), and an
+    immediate replay of the identical call was clean. So the guarantee can
+    blip transiently, and the HARNESS retries it bounded-ly. classify()
+    itself deliberately does not (ADR-008: the library makes one call and
+    fails loudly; retry policy belongs to the caller).
 
     Args:
         client: Authenticated Anthropic client.
@@ -117,13 +127,21 @@ def classify_retry(
     Raises:
         anthropic.InternalServerError: If all retries are exhausted on a 500.
         anthropic.RateLimitError: If all retries are exhausted on a 429.
+        InvalidLabelError: If the strict-mode anomaly persists across every
+            attempt (a real API regression, not a blip -- surface it).
     """
     for attempt in range(max_retries):
         try:
             return classify(client, text, model=model)
-        except (anthropic.InternalServerError, anthropic.RateLimitError):
+        except (
+            anthropic.InternalServerError,
+            anthropic.RateLimitError,
+            InvalidLabelError,
+        ) as exc:
             if attempt == max_retries - 1:
                 raise
+            if isinstance(exc, InvalidLabelError):
+                print(f"  [retry] transient invalid tool input: {exc}", flush=True)
             time.sleep(2 ** (attempt + 1))
     raise ValueError("max_retries must be >= 1")
 

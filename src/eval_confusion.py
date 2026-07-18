@@ -189,11 +189,17 @@ def render_comparison(
     return "\n".join(lines)
 
 
-def build_report(merged: pd.DataFrame) -> str:
-    """Assemble the full Markdown report over both axes and all three comparisons.
+def build_report(merged: pd.DataFrame, expected_n: int | None = None) -> str:
+    """Assemble the full Markdown report over all axes and comparisons.
 
     Args:
         merged: The joined frame from :func:`load_merged`.
+        expected_n: Number of rows the gold set has. When given and larger than
+            ``len(merged)``, the report leads with a PARTIAL banner -- an
+            interrupted prediction run otherwise produces plausible-looking
+            percentages over a fraction of the set (this bit the live v3 pass
+            on 2026-07-18: a crash at row 13 yielded a clean-looking n=12
+            report).
 
     Returns:
         The complete report as a Markdown string.
@@ -205,6 +211,16 @@ def build_report(merged: pd.DataFrame) -> str:
         "(workhorse `pred_*`, judge `judge_*`), joined on `id`. "
         f"n={len(merged)}.",
         "",
+    ]
+    if expected_n is not None and len(merged) < expected_n:
+        header += [
+            f"> **PARTIAL RUN — NOT RESULTS.** Predictions cover only "
+            f"{len(merged)} of {expected_n} gold rows (interrupted run?). "
+            "Every number below is computed on the fraction that exists; "
+            "finish the prediction pass before reading anything into them.",
+            "",
+        ]
+    header += [
         "Three comparisons per axis:",
         "",
         "- **workhorse vs human** -- the classifier's real accuracy (the product number).",
@@ -240,7 +256,8 @@ def main() -> None:
     os.makedirs("evals", exist_ok=True)
     merged = load_merged()
 
-    report = build_report(merged)
+    gold_n = len(pd.read_csv(GOLD_PATH))
+    report = build_report(merged, expected_n=gold_n)
     with open(REPORT_PATH, "w", encoding="utf-8") as handle:
         handle.write(report)
 
