@@ -1,0 +1,49 @@
+==============================================================
+v2.2.0 ROUTING EXPERIMENT -- tiered tech/ops escalation
+==============================================================
+
+Trigger : workhorse self-reports its runner-up category; escalate to
+          claude-opus-4-8 iff the top-two categories are {operations/technology}.
+Hypothesis going in: the PR #79 prompt fix already cleared this cluster
+(ADR-011 gate), so routing likely no longer pays. This measures it.
+
+-- Quality verdict: human-graded gold set (n=54) ---------
+Escalations fired: 9/54   ids: g007, g009, g010, g014, g016, g024, g027, g036, g040
+
+Category accuracy vs human, 95% Wilson CI:
+  workhorse only : 94.4%  [84.9%, 98.1%]  (51/54)
+  routed         : 94.4%  [84.9%, 98.1%]  (51/54)
+  all-Opus       : 94.4%  [84.9%, 98.1%]  (51/54)
+  routing moved the category count by +0 rows
+
+Domain   accuracy vs human, 95% Wilson CI:
+  workhorse only : 92.6%  [82.5%, 97.1%]  (50/54)
+  routed         : 92.6%  [82.5%, 97.1%]  (50/54)
+  all-Opus       : 94.4%  [84.9%, 98.1%]  (51/54)
+  routing moved the operational_domain count by +0 rows
+
+Escalated rows, category axis: fixed 0, broke 1, unchanged 8.
+
+-- Schema perturbation check (gold set) -------------------
+Adding the runner_up_category field changes the call; the runner-up pass's
+own labels vs the stored baseline workhorse pass:
+  Category: 52/54 unchanged (2 moved)
+  Domain: 54/54 unchanged (0 moved)
+
+-- Scale set (n=299): rate and cost only ---------------
+No accuracy here BY DESIGN: the scale set's answer key is the Opus judge,
+which is the escalation target itself -- escalated rows would agree with
+it by construction. Rate and cost are what this set can honestly measure.
+
+Escalations fired: 58/299 (19.4%); category label changed by escalation: 2
+
+Cost model (list-price ratio Opus:Sonnet = 5:1), per article, in workhorse-call units:
+  workhorse only : 1.00x
+  routed         : 1.97x   (1 + 19.4% escalation rate x 5)
+  all-Opus       : 5.00x
+
+-- Refusals (excluded from every number above) ------------
+The workhorse declined these snippets on the runner-up call shape
+(stop_reason='refusal'); n above shrinks accordingly:
+  scale: 1 -- s151
+==============================================================
