@@ -123,6 +123,36 @@ def test_report_covers_all_axes_and_comparisons():
         assert title in report
 
 
+def test_report_leads_with_partial_banner_when_predictions_incomplete():
+    """Regression guard for the interrupted live v3 pass (2026-07-18).
+
+    That crash produced a clean-looking n=12 report with no hint that 42
+    rows were missing.
+    """
+    merged = pd.DataFrame(
+        [
+            {
+                "id": "g001",
+                "category": "procurement",
+                "operational_domain": "air",
+                "region": "global",
+                "pred_category": "procurement",
+                "pred_operational_domain": "air",
+                "pred_region": "global",
+                "judge_category": "procurement",
+                "judge_operational_domain": "air",
+                "judge_region": "global",
+            }
+        ]
+    )
+    partial = eval_confusion.build_report(merged, expected_n=54)
+    assert "PARTIAL RUN" in partial
+    assert "1 of 54" in partial
+
+    complete = eval_confusion.build_report(merged, expected_n=1)
+    assert "PARTIAL RUN" not in complete
+
+
 def test_confusion_csv_paths_cover_every_axis():
     # The machine-readable judge-vs-human matrices must exist for each axis the
     # report renders -- adding an axis without its CSV is the drift this guards.

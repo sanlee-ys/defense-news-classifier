@@ -184,6 +184,44 @@ def test_retry_reraises_after_exhausting_attempts(monkeypatch):
         gold_eval.classify_retry(None, "x", "claude-sonnet-4-6", max_retries=2)
 
 
+def test_retry_recovers_from_a_transient_invalid_label(monkeypatch):
+    """Regression guard for the live g014 judge blip (2026-07-18).
+
+    strict:true 'guarantees' schema-valid tool input, but one live call
+    returned an input with no category at all and the identical replay was
+    clean -- so the harness retries a transient InvalidLabelError instead of
+    dying 13 rows into a 54-row pass.
+    """
+    attempts = {"n": 0}
+
+    def blips_once(_client, _text, model):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise gold_eval.InvalidLabelError("category None is not one of [...]")
+        return {
+            "category": "operations",
+            "operational_domain": "cyber",
+            "region": "indo-pacific",
+        }
+
+    monkeypatch.setattr(gold_eval, "classify", blips_once)
+    result = gold_eval.classify_retry(None, "x", "claude-opus-4-8", max_retries=3)
+
+    assert result["region"] == "indo-pacific"
+    assert attempts["n"] == 2
+
+
+def test_retry_reraises_a_persistent_invalid_label(monkeypatch):
+    # A blip that never clears is a real API regression -- it must surface,
+    # not spin forever.
+    def always_invalid(_client, _text, model):
+        raise gold_eval.InvalidLabelError("category None is not one of [...]")
+
+    monkeypatch.setattr(gold_eval, "classify", always_invalid)
+    with pytest.raises(gold_eval.InvalidLabelError):
+        gold_eval.classify_retry(None, "x", "claude-opus-4-8", max_retries=2)
+
+
 def test_retry_raises_value_error_when_max_retries_is_zero():
     # range(0) never runs the loop body, so classify is never called at all —
     # this is a pure guard-clause test, no fake needed for classify itself.
