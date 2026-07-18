@@ -210,16 +210,21 @@ def tool_client_seq():
 class FakeBatchResultItem:
     """Stands in for one item yielded by client.messages.batches.results().
 
-    `spec` is either a payload dict (-> a "succeeded" item wrapping that
-    tool_use input) or a bare result-type string like "errored" / "canceled" /
-    "expired" (-> an item with no `.message`, matching the real SDK shape for
-    a non-succeeded result).
+    `spec` is a payload dict (-> a "succeeded" item wrapping that tool_use
+    input), the string "refusal" (-> a "succeeded" item whose message carries
+    stop_reason="refusal" and NO tool_use block, matching the real API shape
+    for a safety-layer decline), or a bare result-type string like "errored" /
+    "canceled" / "expired" (-> an item with no `.message`, matching the real
+    SDK shape for a non-succeeded result).
     """
 
     def __init__(self, custom_id: str, spec):
         self.custom_id = custom_id
         if isinstance(spec, dict):
             message = types.SimpleNamespace(content=[make_tool_block(spec)])
+            self.result = types.SimpleNamespace(type="succeeded", message=message)
+        elif spec == "refusal":
+            message = types.SimpleNamespace(content=[], stop_reason="refusal")
             self.result = types.SimpleNamespace(type="succeeded", message=message)
         else:
             self.result = types.SimpleNamespace(type=spec)

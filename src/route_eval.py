@@ -46,6 +46,7 @@ import scale_eval
 from classify import (
     OUTPUT_CONFIG,
     BatchItemError,
+    ClassificationRefusalError,
     InvalidLabelError,
     parse_batch_result,
 )
@@ -67,6 +68,15 @@ REPORT_PATH = "evals/route_eval.txt"
 # ratio holds for both input and output tokens). Used only to express the routed
 # pipeline's expected cost in workhorse-call units -- not a billing calculation.
 OPUS_SONNET_PRICE_RATIO = 5.0
+
+# Sentinel written in place of labels when the model REFUSES a snippet on the
+# runner-up call shape (stop_reason == "refusal"). Observed live: s151, a chem-bio
+# DEFENSE program story, tripped the workhorse's bio safeguard on this schema even
+# though the baseline pass had classified the same text cleanly. Writing the
+# sentinel (instead of crashing or leaving the row todo) lets the run converge:
+# the id counts as done on resume, _load_runner splits it out, and the report
+# states the exclusion. Delete the row from the CSV to retry a refusal by hand.
+REFUSED = "refused"
 
 # (axis label, runner-up-pass column, stored workhorse column, stored judge column).
 AXES = [
@@ -125,18 +135,37 @@ def run_runner_up_predictions(
     write_header = not os.path.exists(preds_path)
     for i, (_, row) in enumerate(todo.iterrows()):
         print(f"[{i + 1:3d}/{len(todo)}] {row['id']}", flush=True)
-        result = _classify_runner_up_retry(client, row["text"])
-        out = {
-            "id": row["id"],
-            "rp_category": result["category"],
-            "rp_operational_domain": result["operational_domain"],
-            "runner_up_category": result["runner_up_category"],
-        }
+        try:
+            result = _classify_runner_up_retry(client, row["text"])
+            out = _runner_row(str(row["id"]), result)
+        except ClassificationRefusalError as exc:
+            print(f"  [refused] id={row['id']}: {exc}", flush=True)
+            out = _refused_row(str(row["id"]))
         pd.DataFrame([out]).to_csv(
             preds_path, mode="a", header=write_header, index=False
         )
         write_header = False
         time.sleep(gold_eval.SLEEP_BETWEEN_CALLS)
+
+
+def _runner_row(row_id: str, pred: dict) -> dict:
+    """One runner-up predictions CSV row from a validated prediction dict."""
+    return {
+        "id": row_id,
+        "rp_category": pred["category"],
+        "rp_operational_domain": pred["operational_domain"],
+        "runner_up_category": pred["runner_up_category"],
+    }
+
+
+def _refused_row(row_id: str) -> dict:
+    """The sentinel CSV row recorded when the model refused a snippet (see REFUSED)."""
+    return {
+        "id": row_id,
+        "rp_category": REFUSED,
+        "rp_operational_domain": REFUSED,
+        "runner_up_category": REFUSED,
+    }
 
 
 def _build_route_batch_request(custom_id: str, text: str) -> Request:
@@ -212,17 +241,18 @@ def run_runner_up_predictions_batch(
     write_header = not os.path.exists(preds_path)
     for result in client.messages.batches.results(batch.id):
         try:
-            pred = _validate_runner_up(parse_batch_result(result))
+            out = _runner_row(
+                result.custom_id, _validate_runner_up(parse_batch_result(result))
+            )
+        except ClassificationRefusalError as exc:
+            # A refusal is final for this run -- record the sentinel so the id
+            # counts as done and the run converges (see REFUSED).
+            print(f"  [refused] id={result.custom_id}: {exc}", flush=True)
+            out = _refused_row(result.custom_id)
         except (BatchItemError, InvalidLabelError) as exc:
             # Leave the row out of the CSV -- it stays todo for a later run.
             print(f"  [skip] id={result.custom_id}: {exc}", flush=True)
             continue
-        out = {
-            "id": result.custom_id,
-            "rp_category": pred["category"],
-            "rp_operational_domain": pred["operational_domain"],
-            "runner_up_category": pred["runner_up_category"],
-        }
         pd.DataFrame([out]).to_csv(
             preds_path, mode="a", header=write_header, index=False
         )
@@ -390,13 +420,17 @@ def cost_lines(rate: float) -> list[str]:
     ]
 
 
-def build_report(gm: dict, sm: dict, perturb: dict) -> str:
+def build_report(
+    gm: dict, sm: dict, perturb: dict, refused: dict[str, list[str]] | None = None
+) -> str:
     """Assemble the human-readable routing-experiment report.
 
     Args:
         gm: ``gold_metrics`` output.
         sm: ``scale_metrics`` output.
         perturb: ``perturbation_check`` output (for the gold set).
+        refused: Optional ``{set label: refused ids}`` -- rows the model refused
+            on the runner-up call shape, excluded from every metric above.
 
     Returns:
         The report as a string.
@@ -460,16 +494,37 @@ def build_report(gm: dict, sm: dict, perturb: dict) -> str:
         f"; category label changed by escalation: {sm['category_changed']}",
         "",
         *cost_lines(sm["rate"]),
-        "=" * 62,
     ]
+    refusals = {k: v for k, v in (refused or {}).items() if v}
+    if refusals:
+        lines += [
+            "",
+            "-- Refusals (excluded from every number above) ------------",
+            "The workhorse declined these snippets on the runner-up call shape",
+            "(stop_reason='refusal'); n above shrinks accordingly:",
+        ]
+        for label, ids in refusals.items():
+            lines.append(f"  {label}: {len(ids)} -- {', '.join(ids)}")
+    lines.append("=" * 62)
     return "\n".join(lines)
 
 
-def _load_runner(path: str) -> pd.DataFrame:
-    """Load a runner-up predictions CSV, with NaN-safe runner-up values."""
+def _load_runner(path: str) -> tuple[pd.DataFrame, list[str]]:
+    """Load a runner-up predictions CSV, splitting out refused-sentinel rows.
+
+    Args:
+        path: The runner-up predictions CSV.
+
+    Returns:
+        ``(frame, refused_ids)``: the predictions frame with refusal rows removed
+        (and NaN-safe runner-up values), plus the sorted ids of rows the model
+        refused (see REFUSED) -- excluded from every metric, named in the report.
+    """
     df = pd.read_csv(path)
+    refused = sorted(df.loc[df["rp_category"] == REFUSED, "id"])
+    df = df[df["rp_category"] != REFUSED].reset_index(drop=True)
     df["runner_up_category"] = df["runner_up_category"].fillna("none")
-    return df
+    return df, refused
 
 
 def main() -> None:
@@ -504,16 +559,17 @@ def main() -> None:
                 client = make_client()
             run(client, df, done, preds_path=path)
 
-    gold_composed = compose_routed(
-        _load_runner(GOLD_RUNNER_PATH), pd.read_csv(gold_eval.PREDS_PATH)
-    )
+    gold_runner, gold_refused = _load_runner(GOLD_RUNNER_PATH)
+    scale_runner, scale_refused = _load_runner(SCALE_RUNNER_PATH)
+    gold_composed = compose_routed(gold_runner, pd.read_csv(gold_eval.PREDS_PATH))
     scale_composed = compose_routed(
-        _load_runner(SCALE_RUNNER_PATH), pd.read_csv(scale_eval.SCALE_PREDS_PATH)
+        scale_runner, pd.read_csv(scale_eval.SCALE_PREDS_PATH)
     )
     report = build_report(
         gold_metrics(gold, gold_composed),
         scale_metrics(scale_composed),
         perturbation_check(gold_composed),
+        refused={"gold": gold_refused, "scale": scale_refused},
     )
     with open(REPORT_PATH, "w", encoding="utf-8") as handle:
         handle.write(report + "\n")

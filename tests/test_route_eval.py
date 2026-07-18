@@ -235,6 +235,75 @@ def test_run_runner_up_predictions_batch_writes_valid_rows(tmp_path, batch_clien
     assert written.loc[0, "runner_up_category"] == "operations"
 
 
+def test_batch_refusal_writes_the_sentinel_row_and_continues(tmp_path, batch_client):
+    """Regression guard for the live s151 crash.
+
+    A safety-layer refusal must not abort the results loop -- it records the
+    REFUSED sentinel so the id counts as done on resume, and every other row is
+    still written.
+    """
+    client = batch_client(
+        {
+            "s001": {
+                "category": "technology",
+                "operational_domain": "air",
+                "runner_up_category": "operations",
+            },
+            "s002": "refusal",
+        }
+    )
+    df = pd.DataFrame(
+        [{"id": "s001", "text": "snippet one"}, {"id": "s002", "text": "snippet two"}]
+    )
+    out = tmp_path / "runner.csv"
+
+    route_eval.run_runner_up_predictions_batch(client, df, set(), preds_path=str(out))
+
+    written = pd.read_csv(out).set_index("id")
+    assert written.loc["s002", "rp_category"] == route_eval.REFUSED
+    assert written.loc["s001", "rp_category"] == "technology"
+
+
+def test_load_runner_splits_out_refused_rows(tmp_path):
+    path = tmp_path / "runner.csv"
+    pd.DataFrame(
+        [
+            {
+                "id": "s001",
+                "rp_category": "operations",
+                "rp_operational_domain": "air",
+                "runner_up_category": None,
+            },
+            {
+                "id": "s002",
+                "rp_category": route_eval.REFUSED,
+                "rp_operational_domain": route_eval.REFUSED,
+                "runner_up_category": route_eval.REFUSED,
+            },
+        ]
+    ).to_csv(path, index=False)
+
+    df, refused = route_eval._load_runner(str(path))
+
+    assert refused == ["s002"]
+    assert list(df["id"]) == ["s001"]
+    assert df.loc[0, "runner_up_category"] == "none"  # NaN-safe fill still applies
+
+
+def test_build_report_names_refusals_only_when_present():
+    gold, composed = _gold_fixture()
+    gm = route_eval.gold_metrics(gold, composed)
+    sm = route_eval.scale_metrics(composed)
+    perturb = route_eval.perturbation_check(composed)
+
+    silent = route_eval.build_report(gm, sm, perturb, refused={"gold": [], "scale": []})
+    assert "Refusals" not in silent
+
+    loud = route_eval.build_report(gm, sm, perturb, refused={"scale": ["s151"]})
+    assert "Refusals (excluded from every number above)" in loud
+    assert "scale: 1 -- s151" in loud
+
+
 def test_route_batch_custom_ids_match_the_anthropic_pattern():
     """Regression guard for the '::' custom_id 400 (see gold_eval._BATCH_ID_SEP)."""
     pattern = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
