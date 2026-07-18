@@ -44,11 +44,12 @@ by design. The trade-off is acknowledged openly (see the "circular eval" caveat 
 
 ### 2. `classify.py`: sort one article (the thing being tested)
 The actual classifier. It takes one article's **text only** (never its label), makes a
-single Claude call, and returns `{category, operational_domain}`. This is the model
-under test, and the only stage that does the "AI" job of deciding.
+single Claude call, and returns `{category, operational_domain, region}` (the region
+axis arrived in v3.0.0). This is the model under test, and the only stage that does
+the "AI" job of deciding.
 
 *Why one call with forced tool-use?* It guarantees the response *shape*: you always get
-the two fields back as structured data, never free text to parse. The enum in the schema
+the three fields back as structured data, never free text to parse. The enum in the schema
 strongly biases the model toward valid labels, but it does not hard-enforce them (a tool
 schema is a guided prior, not constrained decoding), so `classify.py` validates the
 labels in code and re-samples once on the rare out-of-enum case.

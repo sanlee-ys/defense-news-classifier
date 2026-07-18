@@ -6,11 +6,14 @@
 [![python: 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 
 An NLP pipeline that classifies public defense-related news snippets into a **category**
-(what the article is about) and an **operational domain** (the warfighting domain involved).
+(what the article is about), an **operational domain** (the warfighting domain involved),
+and — since v3.0.0 — a **region** (the geographic theater of the story's subject activity).
 **v1** is built and graded entirely on synthetic, publicly safe data; **v2** moves to *real*
-public-domain text (DoD news wire + SEC filings) and grades against a human-labeled answer key.
-The workhorse runs on **Claude Sonnet 5**. A BM25 retrieval-grounding layer shipped in v2, was
-measured against the ungrounded classifier, and was **retired** once it stopped paying
+public-domain text (DoD news wire + SEC filings) and grades against a human-labeled answer key;
+**v3** adds the region axis with a fresh, adversarially audited gold-labeling pass
+([ADR-014](decisions/014-region-field-design.md)). The workhorse runs on **Claude Sonnet 5**.
+A BM25 retrieval-grounding layer shipped in v2, was measured against the ungrounded
+classifier, and was **retired** once it stopped paying
 ([ADR-012](decisions/012-retire-bm25-grounding.md)); tiered Opus routing was then built,
 measured, and **declined** the same way ([ADR-013](decisions/013-decline-tiered-routing.md)) —
 two measured negative results, kept as such. The measured eval numbers are the centerpiece.
@@ -32,13 +35,44 @@ re-measured on the same gold set. Those are the current numbers, directly below.
 | **Retrieval** | none | BM25 over a 62-doc corpus, tried and cited — then measured and **retired** ([ADR-012](decisions/012-retire-bm25-grounding.md)) |
 | **Honest read** | in-distribution *consistency* | real-world *accuracy* |
 
-### Current state — Sonnet 5 on the v2 gold set
+### Current state — v3.0.0: three axes, human-graded
 
-Every change here goes through the same gate — run the v2 gold eval before and after, on the
-same 54 human-labeled snippets (`evals/gold_eval.txt`). The current numbers below reflect the
-Sonnet 5 workhorse plus the PR #79 prompt refinement.
+v3.0.0 is the roadmap's planned breaking change: output becomes
+`{category, operational_domain, region}` ([ADR-014](decisions/014-region-field-design.md)).
+The gold set gained a hand-labeled `region` column, and every label on **all three axes** was
+then adversarially verified against each snippet's source article — category and domain
+survived 108/108 (the v2 hand labels stand untouched); region took two review corrections
+before anything was measured against it. The numbers below are the first live three-axis run
+(`evals/gold_eval_v3.txt`, n=54, human answer key):
 
-| Field | Sonnet 4.6 (v2 as shipped) | Sonnet 5 (current) |
+| Axis | Accuracy | Macro-F1 | Judge vs human |
+|---|---|---|---|
+| Category | **92.6%** | 0.911 | 92.6% |
+| Operational domain | **92.6%** | 0.933 | 98.1% |
+| Region | **87.0%** | 0.927* | **100.0%** |
+
+\* Region macro-F1 is support-limited (`europe` n=1, `africa` n=2 on a US-wire gold set) —
+read the per-label table in the report before quoting it.
+
+Two things worth saying plainly. First, the **region misses are one named cluster**: all seven
+are rows whose gold label is `global` (no identifiable theater in the snippet) that the model
+pulled to a specific region — six to `americas`, one to `indo-pacific`
+(`evals/gold_confusion_v3.md` names them). The rubric forbids inferring a theater from the US
+*actor* when the text states no place; the model does it anyway. That's a precise target for a
+future prompt clause, the same shape as the tech-vs-ops fix that lifted v2. Second, category
+dipped one row from the v2-era 94.4% — consistent with the schema-perturbation effect the
+routing experiment measured (adding one field moved 2/54 there) and inside n=54 noise.
+
+The **100.0% judge-vs-human region agreement** is the load-bearing number: it clears ADR-014's
+gate for scaling the region eval to n=300 with the Opus judge as answer key (v3.1.0).
+
+#### The road here — Sonnet 5 on the v2 gold set (two-axis record)
+
+The section below is the v2.2.0-era record: the two-axis contract graded against the same 54
+snippets (`evals/gold_eval.txt`, frozen). The numbers reflect the Sonnet 5 workhorse plus the
+PR #79 prompt refinement.
+
+| Field | Sonnet 4.6 (v2 as shipped) | Sonnet 5 (v2.2.0 record) |
 |---|---|---|
 | Category accuracy | 88.9% | **94.4%** |
 | Category macro-F1 | 0.906 | **0.950** |
@@ -53,7 +87,7 @@ a couple of flips, so read it as a real but modest gain, not a leap. The remaini
 ceiling is label ambiguity in borderline snippets, which neither a stronger model nor a sharper
 prompt can un-blur.
 
-#### Category: per-label precision / recall / F1 (Sonnet 5, current)
+#### Category: per-label precision / recall / F1 (Sonnet 5, v2.2.0 record)
 
 | Label | Precision | Recall | F1 | n |
 |---|---|---|---|---|
@@ -129,7 +163,7 @@ measured.
 This is the number v1's circular eval could not produce: the classifier run on real defense
 news and graded against labels a **human** assigned, not labels the model invented. The numbers
 in this section are the v2.0 ship on `claude-sonnet-4-6`, kept as the record of that iteration;
-the current Sonnet 5 numbers are above.
+the later Sonnet 5 numbers (two-axis record, then the current v3 three-axis run) are above.
 
 | Field | Accuracy | Macro-F1 |
 |---|---|---|
