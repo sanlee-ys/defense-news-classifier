@@ -16,12 +16,25 @@
 # check: BM25 retrieval grounding was retired in ADR-012 (it stopped paying under the
 # improved prompt), so there is no [rag] table any more -- the gate grades the
 # ungrounded classifier that actually ships.
-# Committed today (evals/gold_eval.txt): category_accuracy 0.944 (macro-F1 0.950),
-# domain_accuracy 0.926 (macro-F1 0.932), judge_category_agreement 0.944,
-# judge_domain_agreement 0.944.
+# Committed today (evals/gold_eval_v3.txt, the first three-axis run):
+# category_accuracy 0.926 (macro-F1 0.911), domain_accuracy 0.926 (macro-F1 0.933),
+# region_accuracy 0.870 (macro-F1 0.927), judge agreement cat/dom/region
+# 0.926 / 0.981 / 1.000. The v2 floors are kept unchanged (measured v3 numbers
+# clear them all); the two region floors below are derived from the v3 run with
+# the same deliberate live-noise margin.
 category_accuracy = 0.83
 category_macro_f1 = 0.85
 domain_accuracy = 0.83
 domain_macro_f1 = 0.83
 judge_category_agreement = 0.83
 judge_domain_agreement = 0.88
+# Region floors (ADR-014: set from the measured 2026-07-18 live run, never
+# aspirationally). region_accuracy 0.870 measured -> 0.78 floor (~9 pts, matching
+# the category margin). judge_region_agreement 1.000 measured -> 0.93 floor
+# (~7 pts; this floor guards the signal the v3.1.0 scaled eval stands on).
+# There is deliberately NO region_macro_f1 floor: with europe support n=1, a
+# single flipped row moves region macro-F1 by ~0.17 -- any floor would either be
+# meaninglessly low or flap on noise. The per-label table in gold_eval_v3.txt is
+# the honest view of that axis's tails.
+region_accuracy = 0.78
+judge_region_agreement = 0.93
