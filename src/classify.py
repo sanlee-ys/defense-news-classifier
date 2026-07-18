@@ -1,4 +1,4 @@
-"""Classifier: maps article text -> {category, operational_domain}.
+"""Classifier: maps article text -> {category, operational_domain, region}.
 
 Single LLM call with forced tool use for structured output.
 Usable as a module (import classify) or as a CLI tool.
@@ -29,6 +29,10 @@ UserContent = str | list[TextBlockParam | SearchResultBlockParam]
 
 CATEGORIES = ["procurement", "operations", "policy", "technology", "industry"]
 DOMAINS = ["air", "land", "sea", "cyber", "space", "multi"]
+# v3.0.0 axis (decisions/014): the geographic theater of the story's subject
+# activity. `global` is the single catch-all for both no-anchor and
+# multi-region stories, mirroring how `multi` works on the domain axis.
+REGIONS = ["indo-pacific", "europe", "middle-east", "africa", "americas", "global"]
 MODEL = "claude-sonnet-5"
 
 # Effort hint sent on every classify call via output_config. On Sonnet 5 (and the
@@ -50,7 +54,7 @@ OUTPUT_CONFIG: OutputConfigParam = {"effort": EFFORT}
 # Without this, the model has to infer what "procurement" vs "industry" means from
 # the label name alone, which introduces unnecessary ambiguity.
 SYSTEM_PROMPT = """You are a defense-news analyst. Given a defense-related article snippet, \
-classify it into exactly one category and one operational domain.
+classify it into exactly one category, one operational domain, and one region.
 
 Categories:
 - procurement: contracts, acquisitions, budgets, program awards
@@ -66,6 +70,14 @@ Operational domains:
 - cyber: information warfare, network attacks, electronic warfare
 - space: satellites, launch systems, space operations
 - multi: joint/combined operations spanning more than one domain
+
+Regions (the geographic theater of the story's subject activity):
+- indo-pacific: East, South, and Southeast Asia, Oceania, and the Pacific
+- europe: Europe, including Russia and the Ukraine conflict theater
+- middle-east: the Gulf, the Levant, Iran, Iraq, and the Arabian Peninsula
+- africa: the African continent and adjacent waters
+- americas: North, Central, and South America, including the continental United States
+- global: no identifiable regional anchor, or the story genuinely spans multiple regions
 
 Pick the single best label for each field. If the article spans two categories or domains, \
 choose the one that is most prominent.
@@ -122,35 +134,64 @@ ground forces or ground targets are present. Do not default to land just because
 setting is on the ground; use multi only when a ground engagement genuinely shares the \
 story's center of gravity with the air action.
 
+Region rules:
+- Label the theater where the story's subject activity happens or is aimed, not the \
+actor's nationality: a US carrier operating in the South China Sea is indo-pacific; a \
+Ukraine aid debate in Washington is europe.
+- Use only what the snippet states or unambiguously implies (a named base, city, sea, or \
+country). Do not guess a region from world knowledge when the text names no place: an \
+unnamed "contested strait" is global.
+- A concrete identifiable location makes an anchor even at home: training at a named US \
+base or waters off a named US coast is americas. No-anchor means the story has no \
+meaningful geography at all -- a budget line, a doctrine change, an enterprise-wide \
+program -- not "the geography is the United States".
+- Two or more theaters with none dominant is global -- the same test as multi on the \
+domain axis. Pick a single region only when the story is primarily about that theater.
+- Orbital/space and cyberspace stories with no terrestrial theater in view are global.
+
 Worked examples:
-- "Army awards $1.2B contract for next-generation ground vehicles" -> procurement / land
-- "Contractor reports quarterly earnings up 8 percent on strong missile demand" -> industry / air
-- "Destroyers conduct freedom-of-navigation transit through contested strait" -> operations / sea
-- "New national defense strategy elevates deterrence across theaters" -> policy / multi
-- "Startup demonstrates autonomous drone swarm for contested resupply" -> technology / air
-- "Two defense primes announce merger to consolidate satellite manufacturing" -> industry / space
-- "Air Force awards development contract for counter-drone electronic-warfare pod" -> procurement / cyber
-- "Cyber command runs defensive operations against intrusions into logistics networks" -> operations / cyber
-- "Congress passes authorization act setting shipbuilding budget levels" -> policy / sea
-- "Soldiers field-test powered exoskeleton during live-fire exercise" -> technology / land
-- "Navy commissions new attack submarine after sea trials" -> operations / sea
-- "Pentagon budget request prioritizes munitions restocking over platform buys" -> policy / multi
-- "Prime contractor selected to build next missile-warning satellite constellation" -> procurement / space
-- "Battalion completes rotation at combat training center under new doctrine" -> operations / land
-- "Lab unveils jam-resistant navigation system for GPS-denied environments" -> technology / cyber
-- "Shipbuilder stock surges after analysts raise defense-spending outlook" -> industry / sea
-- "Squadron stands up test track to put a new hypersonic sled through its paces" -> technology / air
-- "Prototype uncrewed surface vessels join a fleet exercise to prove autonomous resupply" -> technology / sea
-- "Coalition aircraft conduct airstrike on insurgent position during ground firefight" -> operations / multi
+- "Army awards $1.2B contract for next-generation ground vehicles" -> procurement / land / global
+- "Contractor reports quarterly earnings up 8 percent on strong missile demand" -> industry / air / global
+- "Destroyers conduct freedom-of-navigation transit through contested strait" -> operations / sea / global
+- "New national defense strategy elevates deterrence across theaters" -> policy / multi / global
+- "Startup demonstrates autonomous drone swarm for contested resupply" -> technology / air / global
+- "Two defense primes announce merger to consolidate satellite manufacturing" -> industry / space / global
+- "Air Force awards development contract for counter-drone electronic-warfare pod" -> procurement / cyber / global
+- "Cyber command runs defensive operations against intrusions into logistics networks" -> operations / cyber / global
+- "Congress passes authorization act setting shipbuilding budget levels" -> policy / sea / global
+- "Soldiers field-test powered exoskeleton during live-fire exercise" -> technology / land / global
+- "Navy commissions new attack submarine after sea trials" -> operations / sea / global
+- "Pentagon budget request prioritizes munitions restocking over platform buys" -> policy / multi / global
+- "Prime contractor selected to build next missile-warning satellite constellation" -> procurement / space / global
+- "Battalion completes rotation at combat training center under new doctrine" -> operations / land / global
+- "Lab unveils jam-resistant navigation system for GPS-denied environments" -> technology / cyber / global
+- "Shipbuilder stock surges after analysts raise defense-spending outlook" -> industry / sea / global
+- "Squadron stands up test track to put a new hypersonic sled through its paces" -> technology / air / global
+- "Prototype uncrewed surface vessels join a fleet exercise to prove autonomous resupply" -> technology / sea / global
+- "Coalition aircraft conduct airstrike on insurgent position during ground firefight" -> operations / multi / global
+- "Carrier strike group drills with allied navies in the South China Sea" -> operations / sea / indo-pacific
+- "Fighter squadrons rotate to bases on NATO's eastern flank amid heightened tensions" -> operations / air / europe
+- "Naval coalition escorts commercial tankers through the Strait of Hormuz" -> operations / sea / middle-east
+- "Peacekeepers expand counterinsurgency patrols across the Sahel" -> operations / land / africa
+- "Destroyer completes builder's sea trials off the coast of Maine" -> operations / sea / americas
+- "Allied cyber commands on three continents run a joint defensive exercise" -> operations / cyber / global
+
+Note the pattern in the examples: a snippet earns a specific region only when it names an \
+identifiable place; everything else -- however strongly world knowledge suggests a theater \
+-- is global.
 
 Tie-breaking, in order: (1) weigh the headline and lead sentence most heavily; (2) identify \
 the story's center of gravity -- the money event (procurement), the action (operations), \
 the rule (policy), the machine (technology), or the business result (industry) -- and label \
-that; (3) if two domains genuinely share the center of gravity, only then use multi."""
+that; (3) if two domains genuinely share the center of gravity, only then use multi; (4) for \
+region, ask where the subject activity happens or is aimed -- if the snippet names no \
+identifiable place, or the story spans regions, use global."""
 
 CLASSIFY_TOOL: ToolParam = {
     "name": "classify_article",
-    "description": "Return the category and operational domain for a defense-news snippet.",
+    "description": (
+        "Return the category, operational domain, and region for a defense-news snippet."
+    ),
     # strict=true turns on server-side constrained decoding: the API guarantees
     # tool_use.input validates against input_schema, including enum membership,
     # before the response is ever returned to us. See decisions/008 for why this
@@ -171,8 +212,16 @@ CLASSIFY_TOOL: ToolParam = {
                 "enum": DOMAINS,
                 "description": "The warfighting domain the article relates to.",
             },
+            "region": {
+                "type": "string",
+                "enum": REGIONS,
+                "description": (
+                    "The geographic theater of the story's subject activity; "
+                    "global when no place is identified or the story spans regions."
+                ),
+            },
         },
-        "required": ["category", "operational_domain"],
+        "required": ["category", "operational_domain", "region"],
         "additionalProperties": False,
     },
 }
@@ -254,15 +303,18 @@ def _raise_if_refusal(payload, *, context: str = "") -> None:
 
 
 def _validate(result: dict) -> dict:
-    """Return ``result`` unchanged if both labels are valid; raise InvalidLabelError otherwise."""
+    """Return ``result`` unchanged if all three labels are valid; raise InvalidLabelError otherwise."""
     category = result.get("category")
     domain = result.get("operational_domain")
+    region = result.get("region")
     if category not in CATEGORIES:
         raise InvalidLabelError(f"category {category!r} is not one of {CATEGORIES}")
     if domain not in DOMAINS:
         raise InvalidLabelError(
             f"operational_domain {domain!r} is not one of {DOMAINS}"
         )
+    if region not in REGIONS:
+        raise InvalidLabelError(f"region {region!r} is not one of {REGIONS}")
     return result
 
 
@@ -278,7 +330,7 @@ def classify(
     Makes one LLM call with forced, strict tool use so the response is always
     structured JSON — never free text — and is guaranteed by the API's
     constrained decoding to validate against CLASSIFY_TOOL's schema (including
-    both enums) before we ever see it. ``_validate`` is still run as a
+    all three enums) before we ever see it. ``_validate`` is still run as a
     defensive backstop (see ``InvalidLabelError``), but there is no re-sample
     loop any more: a single out-of-schema response would indicate the
     guarantee itself failed, which a client-side retry can't fix.
@@ -307,7 +359,8 @@ def classify(
             passes a revised prompt here to score a variant against the eval.
 
     Returns:
-        Dict with keys ``category`` and ``operational_domain``, both str.
+        Dict with keys ``category``, ``operational_domain``, and ``region``,
+        all str.
 
     Raises:
         ClassificationRefusalError: If the model declined the request
@@ -453,8 +506,8 @@ def parse_batch_result(result) -> dict:
             ``client.messages.batches.results(batch_id)``.
 
     Returns:
-        Dict with keys ``category`` and ``operational_domain``, validated the
-        same way as classify()'s return value.
+        Dict with keys ``category``, ``operational_domain``, and ``region``,
+        validated the same way as classify()'s return value.
 
     Raises:
         BatchItemError: If the item's result type is not ``"succeeded"``.

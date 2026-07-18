@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 # Flat import works when uvicorn is started with `--app-dir src` (local + Docker).
-from classify import CATEGORIES, DOMAINS, classify, make_client
+from classify import CATEGORIES, DOMAINS, REGIONS, classify, make_client
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Defense News Classifier",
-    description="Classify a defense-news snippet into a category and operational domain.",
+    description=(
+        "Classify a defense-news snippet into a category, operational domain, and region."
+    ),
     version="2.0.1",
     lifespan=lifespan,
 )
@@ -58,6 +60,7 @@ class ClassifyResponse(BaseModel):
 
     category: str = Field(..., description=f"One of: {', '.join(CATEGORIES)}")
     operational_domain: str = Field(..., description=f"One of: {', '.join(DOMAINS)}")
+    region: str = Field(..., description=f"One of: {', '.join(REGIONS)}")
 
 
 @app.get("/health")
@@ -68,13 +71,14 @@ def health() -> dict:
 
 @app.post("/classify", response_model=ClassifyResponse)
 def classify_article(req: ClassifyRequest) -> ClassifyResponse:
-    """Classify a defense-news snippet into a category and operational domain.
+    """Classify a defense-news snippet into a category, operational domain, and region.
 
     Args:
         req: Request body containing the article ``text`` (1–10 000 chars).
 
     Returns:
-        ClassifyResponse with ``category`` and ``operational_domain`` fields.
+        ClassifyResponse with ``category``, ``operational_domain``, and
+        ``region`` fields.
 
     Raises:
         HTTPException: 422 if text is blank after stripping whitespace;

@@ -110,8 +110,16 @@ def test_run_predictions_batch_writes_one_row_per_id(
     os.makedirs("evals", exist_ok=True)
     client = batch_client(
         {
-            "g001": {"category": "procurement", "operational_domain": "air"},
-            "g002": {"category": "policy", "operational_domain": "sea"},
+            "g001": {
+                "category": "procurement",
+                "operational_domain": "air",
+                "region": "global",
+            },
+            "g002": {
+                "category": "policy",
+                "operational_domain": "sea",
+                "region": "global",
+            },
         }
     )
     gold_eval_haiku.run_predictions_batch(client, _gold_df(), done_ids=set())
@@ -126,7 +134,15 @@ def test_run_predictions_batch_submits_haiku_model_for_todo_rows(
 ):
     monkeypatch.chdir(tmp_path)
     os.makedirs("evals", exist_ok=True)
-    client = batch_client({"g002": {"category": "policy", "operational_domain": "sea"}})
+    client = batch_client(
+        {
+            "g002": {
+                "category": "policy",
+                "operational_domain": "sea",
+                "region": "global",
+            }
+        }
+    )
     gold_eval_haiku.run_predictions_batch(client, _gold_df(), done_ids={"g001"})
 
     submitted = client.messages.batches.created_requests
@@ -140,7 +156,11 @@ def test_run_predictions_batch_skips_errored_item(monkeypatch, batch_client, tmp
     client = batch_client(
         {
             "g001": "errored",
-            "g002": {"category": "operations", "operational_domain": "sea"},
+            "g002": {
+                "category": "operations",
+                "operational_domain": "sea",
+                "region": "global",
+            },
         }
     )
     gold_eval_haiku.run_predictions_batch(client, _gold_df(), done_ids=set())
@@ -248,7 +268,11 @@ def test_run_predictions_writes_todo_rows_on_the_haiku_model(monkeypatch, tmp_pa
 
     def fake_classify_retry(_client, text, model):
         calls.append((text, model))
-        return {"category": "operations", "operational_domain": "sea"}
+        return {
+            "category": "operations",
+            "operational_domain": "sea",
+            "region": "global",
+        }
 
     monkeypatch.setattr(gold_eval_haiku, "classify_retry", fake_classify_retry)
     gold_eval_haiku.run_predictions(object(), _gold_df(), done_ids={"g001"})
@@ -271,8 +295,16 @@ def test_run_predictions_batch_polls_until_batch_ends(
 
     client = batch_client(
         {
-            "g001": {"category": "procurement", "operational_domain": "air"},
-            "g002": {"category": "operations", "operational_domain": "sea"},
+            "g001": {
+                "category": "procurement",
+                "operational_domain": "air",
+                "region": "global",
+            },
+            "g002": {
+                "category": "operations",
+                "operational_domain": "sea",
+                "region": "global",
+            },
         }
     )
     # First retrieve() reports still-processing (exercises the poll+sleep branch);

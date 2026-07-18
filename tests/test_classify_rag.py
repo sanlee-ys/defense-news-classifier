@@ -69,7 +69,9 @@ def test_search_result_blocks_fall_back_to_id_when_source_missing():
 
 
 def test_classify_grounded_returns_labels_and_citations(tool_client):
-    client = tool_client({"category": "operations", "operational_domain": "sea"})
+    client = tool_client(
+        {"category": "operations", "operational_domain": "sea", "region": "global"}
+    )
     retriever = Retriever(_docs())
 
     result = classify_rag.classify_grounded(
@@ -85,7 +87,9 @@ def test_classify_grounded_returns_labels_and_citations(tool_client):
 
 def test_grounded_context_reaches_the_model_as_search_result_blocks(tool_client):
     """The retrieved excerpts must reach the API as search_result blocks, not plain text."""
-    client = tool_client({"category": "procurement", "operational_domain": "land"})
+    client = tool_client(
+        {"category": "procurement", "operational_domain": "land", "region": "global"}
+    )
     retriever = Retriever(_docs())
 
     classify_rag.classify_grounded(client, "drone production contract", retriever, k=2)
@@ -110,7 +114,9 @@ def test_rag_path_is_pinned_to_its_own_model_not_the_workhorse(tool_client):
     on 4.6. If a future workhorse bump silently re-coupled these (e.g. by reintroducing
     ``from classify import MODEL``), this test fails instead of the RAG delta gate.
     """
-    client = tool_client({"category": "operations", "operational_domain": "sea"})
+    client = tool_client(
+        {"category": "operations", "operational_domain": "sea", "region": "global"}
+    )
     retriever = Retriever(_docs())
 
     classify_rag.classify_grounded(client, "a carrier strike group at sea", retriever)

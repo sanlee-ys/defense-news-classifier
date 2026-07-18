@@ -15,8 +15,9 @@ def test_route_tool_extends_the_shipped_schema():
     assert route.ROUTE_TOOL["strict"] is True
     assert schema["properties"]["runner_up_category"]["enum"] == route.RUNNER_UP_VALUES
     assert "runner_up_category" in schema["required"]
-    # The shared fields are the shipped ones, verbatim.
-    for field in ("category", "operational_domain"):
+    # The shared fields are the shipped ones, verbatim (region included since
+    # v3.0.0 -- the dormant harness tracks the shipped schema, decisions/014).
+    for field in ("category", "operational_domain", "region"):
         assert (
             schema["properties"][field]
             == classify.CLASSIFY_TOOL["input_schema"]["properties"][field]
@@ -27,7 +28,7 @@ def test_route_tool_does_not_mutate_the_shipped_tool():
     """ROUTE_TOOL is a deep copy -- the shipped classifier schema must be untouched."""
     shipped = classify.CLASSIFY_TOOL["input_schema"]
     assert "runner_up_category" not in shipped["properties"]
-    assert shipped["required"] == ["category", "operational_domain"]
+    assert shipped["required"] == ["category", "operational_domain", "region"]
 
 
 def test_route_prompt_is_a_superset_of_the_shipped_prompt():
@@ -44,6 +45,7 @@ def test_validate_runner_up_accepts_a_valid_result():
     result = {
         "category": "technology",
         "operational_domain": "air",
+        "region": "global",
         "runner_up_category": "operations",
     }
     assert route._validate_runner_up(dict(result)) == result
@@ -55,6 +57,7 @@ def test_validate_runner_up_rejects_an_out_of_enum_runner_up():
             {
                 "category": "technology",
                 "operational_domain": "air",
+                "region": "global",
                 "runner_up_category": "sports",
             }
         )
@@ -65,6 +68,7 @@ def test_validate_runner_up_normalizes_a_self_runner_up_to_none():
         {
             "category": "technology",
             "operational_domain": "air",
+            "region": "global",
             "runner_up_category": "technology",
         }
     )
@@ -81,6 +85,7 @@ def test_classify_with_runner_up_uses_the_routing_schema_and_prompt(tool_client)
         {
             "category": "operations",
             "operational_domain": "sea",
+            "region": "global",
             "runner_up_category": "none",
         }
     )
@@ -117,6 +122,7 @@ def test_should_escalate_fires_only_on_the_tech_ops_pair(category, runner_up, ex
     result = {
         "category": category,
         "operational_domain": "air",
+        "region": "global",
         "runner_up_category": runner_up,
     }
     assert route.should_escalate(result) is expected
@@ -132,6 +138,7 @@ def test_route_keeps_the_workhorse_answer_when_no_escalation(tool_client):
         {
             "category": "policy",
             "operational_domain": "multi",
+            "region": "global",
             "runner_up_category": "none",
         }
     )
@@ -147,11 +154,13 @@ def test_route_escalates_the_tech_ops_boundary_to_the_premium_model(tool_client_
             {  # workhorse: on the boundary
                 "category": "technology",
                 "operational_domain": "air",
+                "region": "global",
                 "runner_up_category": "operations",
             },
             {  # escalation answer wins outright
                 "category": "operations",
                 "operational_domain": "land",
+                "region": "global",
             },
         ]
     )
@@ -173,6 +182,7 @@ def test_classify_routed_returns_the_shipped_contract_only(tool_client):
         {
             "category": "procurement",
             "operational_domain": "space",
+            "region": "global",
             "runner_up_category": "industry",
         }
     )

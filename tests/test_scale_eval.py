@@ -81,7 +81,9 @@ def test_build_report_leads_with_accuracy_and_wilson_cis():
 def test_run_predictions_writes_to_the_scale_path(tmp_path, monkeypatch, tool_client):
     """scale_eval relies on gold_eval.run_predictions honoring a custom preds_path."""
     monkeypatch.setattr(gold_eval, "SLEEP_BETWEEN_CALLS", 0)
-    client = tool_client({"category": "operations", "operational_domain": "air"})
+    client = tool_client(
+        {"category": "operations", "operational_domain": "air", "region": "global"}
+    )
     df = pd.DataFrame([{"id": "s001", "text": "a real snippet"}])
     out = tmp_path / "scale_predictions.csv"
 

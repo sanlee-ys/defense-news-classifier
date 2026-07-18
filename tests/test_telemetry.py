@@ -53,7 +53,9 @@ def test_classify_emits_chat_span_with_attributes(monkeypatch, tool_client):
 
     # The tool_client fake returns one tool_use block; give the response object a
     # usage + stop_reason so the recording path has something to read.
-    client = tool_client({"category": "technology", "operational_domain": "air"})
+    client = tool_client(
+        {"category": "technology", "operational_domain": "air", "region": "global"}
+    )
     original_create = client.messages.create
 
     def create_with_usage(**kwargs):
@@ -70,7 +72,11 @@ def test_classify_emits_chat_span_with_attributes(monkeypatch, tool_client):
     monkeypatch.setattr(client.messages, "create", create_with_usage)
 
     result = classify.classify(client, "a drone swarm demo")
-    assert result == {"category": "technology", "operational_domain": "air"}
+    assert result == {
+        "category": "technology",
+        "operational_domain": "air",
+        "region": "global",
+    }
 
     spans = exporter.get_finished_spans()
     assert len(spans) == 1

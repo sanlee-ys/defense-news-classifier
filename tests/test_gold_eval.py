@@ -121,7 +121,7 @@ def test_retry_returns_on_first_success(monkeypatch):
 
     def fake_classify(client, text, model):
         calls.append((text, model))
-        return {"category": "policy", "operational_domain": "multi"}
+        return {"category": "policy", "operational_domain": "multi", "region": "global"}
 
     monkeypatch.setattr(gold_eval, "classify", fake_classify)
     result = gold_eval.classify_retry(None, "some article text", "claude-sonnet-4-6")
@@ -137,7 +137,11 @@ def test_retry_recovers_after_transient_errors(monkeypatch):
         attempts["n"] += 1
         if attempts["n"] < 3:
             raise _FakeServerError("boom")
-        return {"category": "industry", "operational_domain": "land"}
+        return {
+            "category": "industry",
+            "operational_domain": "land",
+            "region": "global",
+        }
 
     monkeypatch.setattr(gold_eval, "classify", flaky_classify)
     result = gold_eval.classify_retry(None, "x", "claude-sonnet-4-6", max_retries=3)
@@ -254,10 +258,26 @@ def test_run_predictions_batch_writes_one_combined_row_per_gold_id(
 
     client = batch_client(
         {
-            "g001__workhorse": {"category": "procurement", "operational_domain": "air"},
-            "g001__judge": {"category": "procurement", "operational_domain": "air"},
-            "g002__workhorse": {"category": "policy", "operational_domain": "sea"},
-            "g002__judge": {"category": "operations", "operational_domain": "sea"},
+            "g001__workhorse": {
+                "category": "procurement",
+                "operational_domain": "air",
+                "region": "global",
+            },
+            "g001__judge": {
+                "category": "procurement",
+                "operational_domain": "air",
+                "region": "global",
+            },
+            "g002__workhorse": {
+                "category": "policy",
+                "operational_domain": "sea",
+                "region": "global",
+            },
+            "g002__judge": {
+                "category": "operations",
+                "operational_domain": "sea",
+                "region": "global",
+            },
         }
     )
     gold_eval.run_predictions_batch(client, df, done_ids=set())
@@ -281,8 +301,16 @@ def test_run_predictions_batch_submits_both_models_for_each_todo_row(
 
     client = batch_client(
         {
-            "g002__workhorse": {"category": "policy", "operational_domain": "sea"},
-            "g002__judge": {"category": "operations", "operational_domain": "sea"},
+            "g002__workhorse": {
+                "category": "policy",
+                "operational_domain": "sea",
+                "region": "global",
+            },
+            "g002__judge": {
+                "category": "operations",
+                "operational_domain": "sea",
+                "region": "global",
+            },
         }
     )
     gold_eval.run_predictions_batch(client, df, done_ids={"g001"})
@@ -304,10 +332,22 @@ def test_run_predictions_batch_drops_row_if_either_model_errors(
 
     client = batch_client(
         {
-            "g001__workhorse": {"category": "procurement", "operational_domain": "air"},
+            "g001__workhorse": {
+                "category": "procurement",
+                "operational_domain": "air",
+                "region": "global",
+            },
             "g001__judge": "errored",  # one model failed for g001
-            "g002__workhorse": {"category": "policy", "operational_domain": "sea"},
-            "g002__judge": {"category": "operations", "operational_domain": "sea"},
+            "g002__workhorse": {
+                "category": "policy",
+                "operational_domain": "sea",
+                "region": "global",
+            },
+            "g002__judge": {
+                "category": "operations",
+                "operational_domain": "sea",
+                "region": "global",
+            },
         }
     )
     gold_eval.run_predictions_batch(client, df, done_ids=set())

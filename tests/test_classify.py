@@ -21,20 +21,27 @@ def test_tool_schema_enums_match_label_constants():
     schema = cast(dict, classify.CLASSIFY_TOOL["input_schema"])
     assert schema["properties"]["category"]["enum"] == classify.CATEGORIES
     assert schema["properties"]["operational_domain"]["enum"] == classify.DOMAINS
+    assert schema["properties"]["region"]["enum"] == classify.REGIONS
 
 
-def test_tool_requires_both_fields():
+def test_tool_requires_all_fields():
     schema = cast(dict, classify.CLASSIFY_TOOL["input_schema"])
-    assert set(schema["required"]) == {"category", "operational_domain"}
+    assert set(schema["required"]) == {"category", "operational_domain", "region"}
 
 
 # --- classify() ----------------------------------------------------------
 
 
 def test_classify_returns_tool_input(tool_client):
-    client = tool_client({"category": "procurement", "operational_domain": "air"})
+    client = tool_client(
+        {"category": "procurement", "operational_domain": "air", "region": "global"}
+    )
     result = classify.classify(client, "Pentagon awards F-35 contract.")
-    assert result == {"category": "procurement", "operational_domain": "air"}
+    assert result == {
+        "category": "procurement",
+        "operational_domain": "air",
+        "region": "global",
+    }
 
 
 def test_classify_skips_non_tool_blocks(tool_client):
@@ -42,7 +49,7 @@ def test_classify_skips_non_tool_blocks(tool_client):
     from conftest import make_text_block
 
     client = tool_client(
-        {"category": "operations", "operational_domain": "sea"},
+        {"category": "operations", "operational_domain": "sea", "region": "global"},
         extra_blocks=[make_text_block("thinking out loud")],
     )
     result = classify.classify(client, "Carrier group deploys to the strait.")
@@ -50,7 +57,9 @@ def test_classify_skips_non_tool_blocks(tool_client):
 
 
 def test_classify_sends_expected_request(tool_client):
-    client = tool_client({"category": "policy", "operational_domain": "multi"})
+    client = tool_client(
+        {"category": "policy", "operational_domain": "multi", "region": "global"}
+    )
     classify.classify(client, "New defense strategy published.")
 
     kwargs = client.messages.last_kwargs
@@ -73,7 +82,9 @@ def test_classify_sends_expected_request(tool_client):
 def test_classify_sends_custom_system_prompt(tool_client):
     # The prompt-optimization loop overrides the system prompt to score a
     # variant against the eval. Prove that override actually reaches the API call.
-    client = tool_client({"category": "policy", "operational_domain": "multi"})
+    client = tool_client(
+        {"category": "policy", "operational_domain": "multi", "region": "global"}
+    )
     custom_prompt = "REVISED: classify using these new rules."
     classify.classify(
         client, "New defense strategy published.", system_prompt=custom_prompt
@@ -90,7 +101,9 @@ def test_classify_system_prompt_is_cache_marked(tool_client):
     # SAME system_prompt (only the per-row article text varies) -- the
     # textbook repeated-prefix caching case. Prove the cache_control marker
     # is actually on the wire, not just documented as intended.
-    client = tool_client({"category": "policy", "operational_domain": "multi"})
+    client = tool_client(
+        {"category": "policy", "operational_domain": "multi", "region": "global"}
+    )
     classify.classify(client, "New defense strategy published.")
 
     kwargs = client.messages.last_kwargs
@@ -122,7 +135,11 @@ def test_classify_tool_schema_forbids_additional_properties():
 
 
 def test_validate_accepts_in_range_labels():
-    payload = {"category": "industry", "operational_domain": "sea"}
+    payload = {
+        "category": "industry",
+        "operational_domain": "sea",
+        "region": "indo-pacific",
+    }
     assert classify._validate(payload) == payload
 
 
@@ -130,12 +147,34 @@ def test_validate_rejects_out_of_enum_category():
     # "cyber" is a valid domain but not a valid category — the exact id-95 bug
     # that predates strict mode.
     with pytest.raises(classify.InvalidLabelError):
-        classify._validate({"category": "cyber", "operational_domain": "cyber"})
+        classify._validate(
+            {"category": "cyber", "operational_domain": "cyber", "region": "global"}
+        )
 
 
 def test_validate_rejects_out_of_enum_domain():
     with pytest.raises(classify.InvalidLabelError):
-        classify._validate({"category": "operations", "operational_domain": "naval"})
+        classify._validate(
+            {
+                "category": "operations",
+                "operational_domain": "naval",
+                "region": "global",
+            }
+        )
+
+
+def test_validate_rejects_out_of_enum_region():
+    # "pacific" is not a label; the axis uses "indo-pacific" (decisions/014).
+    with pytest.raises(classify.InvalidLabelError):
+        classify._validate(
+            {"category": "operations", "operational_domain": "sea", "region": "pacific"}
+        )
+
+
+def test_validate_rejects_missing_region():
+    # A v2-shaped payload (two fields) is no longer a valid result.
+    with pytest.raises(classify.InvalidLabelError):
+        classify._validate({"category": "operations", "operational_domain": "sea"})
 
 
 def test_classify_raises_immediately_on_invalid_label_no_resample(tool_client_seq):
@@ -143,8 +182,16 @@ def test_classify_raises_immediately_on_invalid_label_no_resample(tool_client_se
     # out-of-enum response raises on the first and only call.
     client = tool_client_seq(
         [
-            {"category": "cyber", "operational_domain": "cyber"},  # invalid
-            {"category": "operations", "operational_domain": "cyber"},  # would be valid
+            {  # invalid category
+                "category": "cyber",
+                "operational_domain": "cyber",
+                "region": "global",
+            },
+            {  # would be valid
+                "category": "operations",
+                "operational_domain": "cyber",
+                "region": "global",
+            },
         ]
     )
     with pytest.raises(classify.InvalidLabelError):
@@ -195,7 +242,9 @@ def test_refusal_error_is_distinct_from_invalid_label_and_batch_item():
 def test_normal_response_is_not_treated_as_refusal(tool_client):
     # Guard against a false positive: a normal (stop_reason-less) fake response
     # must classify fine, proving the refusal branch doesn't fire on non-refusals.
-    client = tool_client({"category": "procurement", "operational_domain": "air"})
+    client = tool_client(
+        {"category": "procurement", "operational_domain": "air", "region": "global"}
+    )
     assert (
         classify.classify(client, "Pentagon awards contract.")["category"]
         == "procurement"
@@ -244,7 +293,11 @@ def test_parse_batch_result_returns_validated_labels():
             message=types_namespace(
                 content=[
                     make_tool_block(
-                        {"category": "policy", "operational_domain": "multi"}
+                        {
+                            "category": "policy",
+                            "operational_domain": "multi",
+                            "region": "global",
+                        }
                     )
                 ]
             ),
@@ -253,6 +306,7 @@ def test_parse_batch_result_returns_validated_labels():
     assert classify.parse_batch_result(result) == {
         "category": "policy",
         "operational_domain": "multi",
+        "region": "global",
     }
 
 
@@ -272,7 +326,11 @@ def test_parse_batch_result_raises_invalid_label_error_on_bad_labels():
             message=types_namespace(
                 content=[
                     make_tool_block(
-                        {"category": "cyber", "operational_domain": "cyber"}
+                        {
+                            "category": "cyber",
+                            "operational_domain": "cyber",
+                            "region": "global",
+                        }
                     )
                 ]
             ),
