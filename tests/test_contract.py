@@ -3,9 +3,11 @@
 This enforces the SYS-004 contract shared with kb-agent — kb-agent's
 ``classify_snippet`` tool POSTs to this service's ``/classify`` endpoint and
 relies on the response shape and the label enums staying fixed. Changing the
-categories/domains or adding a field (e.g. the planned v3.0.0 ``region``) is a
-breaking change to that integration, so it must be a deliberate, versioned
-move rather than an accidental edit. These assertions are the tripwire.
+enums or the field set is a breaking change to that integration, so it must be
+a deliberate, versioned move rather than an accidental edit. These assertions
+are the tripwire. The v3.0.0 ``region`` field (decisions/014) is exactly such
+a move: the frozen literals below were updated with it, and kb-agent's side of
+SYS-004 must follow before it re-pins its own copy of the contract.
 
 Follows the offline mocking pattern from tests/test_api.py: the Anthropic SDK
 is faked and ``classify()`` is monkeypatched, so no real API calls or keys are
@@ -24,7 +26,15 @@ from api import ClassifyResponse
 # detect drift, which means the expected values must live here independently.
 FROZEN_CATEGORIES = ["procurement", "operations", "policy", "technology", "industry"]
 FROZEN_DOMAINS = ["air", "land", "sea", "cyber", "space", "multi"]
-FROZEN_RESPONSE_FIELDS = {"category", "operational_domain"}
+FROZEN_REGIONS = [
+    "indo-pacific",
+    "europe",
+    "middle-east",
+    "africa",
+    "americas",
+    "global",
+]
+FROZEN_RESPONSE_FIELDS = {"category", "operational_domain", "region"}
 
 
 def test_categories_enum_is_frozen():
@@ -37,9 +47,13 @@ def test_domains_enum_is_frozen():
     assert classify_mod.DOMAINS == FROZEN_DOMAINS
 
 
+def test_regions_enum_is_frozen():
+    assert classify_mod.REGIONS == FROZEN_REGIONS
+
+
 def test_response_model_has_exactly_the_contract_fields():
-    # Fails the moment someone adds a field like the planned v3.0.0 `region`
-    # without a deliberate, versioned change to the output contract.
+    # Fails the moment someone adds or drops a response field without a
+    # deliberate, versioned change to the output contract.
     assert set(ClassifyResponse.model_fields.keys()) == FROZEN_RESPONSE_FIELDS
 
 
@@ -58,7 +72,11 @@ def test_classify_response_body_matches_contract(client, monkeypatch):
     monkeypatch.setattr(
         api,
         "classify",
-        lambda *_a, **_k: {"category": "technology", "operational_domain": "cyber"},
+        lambda *_a, **_k: {
+            "category": "technology",
+            "operational_domain": "cyber",
+            "region": "global",
+        },
     )
     resp = client.post("/classify", json={"text": "A new autonomous drone program."})
 
@@ -67,6 +85,7 @@ def test_classify_response_body_matches_contract(client, monkeypatch):
     assert set(body.keys()) == FROZEN_RESPONSE_FIELDS
     assert body["category"] in FROZEN_CATEGORIES
     assert body["operational_domain"] in FROZEN_DOMAINS
+    assert body["region"] in FROZEN_REGIONS
 
 
 def test_classify_rejects_blank_text(client, monkeypatch):

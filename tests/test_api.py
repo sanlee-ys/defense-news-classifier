@@ -35,13 +35,21 @@ def test_classify_happy_path(client, monkeypatch):
 
     def fake_classify(_client, text):
         seen["text"] = text
-        return {"category": "operations", "operational_domain": "sea"}
+        return {
+            "category": "operations",
+            "operational_domain": "sea",
+            "region": "indo-pacific",
+        }
 
     monkeypatch.setattr(api, "classify", fake_classify)
     resp = client.post("/classify", json={"text": "  Carrier strike group deploys.  "})
 
     assert resp.status_code == 200
-    assert resp.json() == {"category": "operations", "operational_domain": "sea"}
+    assert resp.json() == {
+        "category": "operations",
+        "operational_domain": "sea",
+        "region": "indo-pacific",
+    }
     # The endpoint strips whitespace before calling the classifier.
     assert seen["text"] == "Carrier strike group deploys."
 

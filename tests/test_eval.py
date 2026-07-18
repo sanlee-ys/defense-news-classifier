@@ -198,7 +198,7 @@ def test_retry_returns_on_first_success(monkeypatch):
 
     def fake_classify(_client, text):
         calls.append(text)
-        return {"category": "policy", "operational_domain": "multi"}
+        return {"category": "policy", "operational_domain": "multi", "region": "global"}
 
     monkeypatch.setattr(evalmod, "classify", fake_classify)
     result = evalmod.classify_with_retry(None, "x")
@@ -213,7 +213,11 @@ def test_retry_recovers_after_transient_errors(monkeypatch):
         attempts["n"] += 1
         if attempts["n"] < 3:
             raise _FakeServerError("boom")
-        return {"category": "industry", "operational_domain": "land"}
+        return {
+            "category": "industry",
+            "operational_domain": "land",
+            "region": "global",
+        }
 
     monkeypatch.setattr(evalmod, "classify", flaky_classify)
     result = evalmod.classify_with_retry(None, "x", max_retries=3)
@@ -266,8 +270,16 @@ def test_main_runs_predictions_and_writes_all_outputs(monkeypatch, tmp_path):
     # Predict ground truth for id 0 and a wrong domain for id 1, so the
     # misclassification log has exactly one entry.
     preds = {
-        "Air strike reported.": {"category": "operations", "operational_domain": "air"},
-        "New treaty signed.": {"category": "policy", "operational_domain": "air"},
+        "Air strike reported.": {
+            "category": "operations",
+            "operational_domain": "air",
+            "region": "global",
+        },
+        "New treaty signed.": {
+            "category": "policy",
+            "operational_domain": "air",
+            "region": "global",
+        },
     }
     monkeypatch.setattr(evalmod, "classify", lambda _c, text: preds[text])
 
@@ -317,8 +329,16 @@ def test_run_predictions_batch_writes_one_row_per_article(
 
     client = batch_client(
         {
-            "0": {"category": "operations", "operational_domain": "air"},
-            "1": {"category": "policy", "operational_domain": "sea"},
+            "0": {
+                "category": "operations",
+                "operational_domain": "air",
+                "region": "global",
+            },
+            "1": {
+                "category": "policy",
+                "operational_domain": "sea",
+                "region": "global",
+            },
         }
     )
     evalmod.run_predictions_batch(client, df, done_ids=set())
@@ -335,7 +355,9 @@ def test_run_predictions_batch_submits_only_todo_rows(
     df = _write_dataset(tmp_path)
     os.makedirs("evals", exist_ok=True)
 
-    client = batch_client({"1": {"category": "policy", "operational_domain": "sea"}})
+    client = batch_client(
+        {"1": {"category": "policy", "operational_domain": "sea", "region": "global"}}
+    )
     evalmod.run_predictions_batch(client, df, done_ids={0})
 
     submitted_ids = {r["custom_id"] for r in client.messages.batches.created_requests}
@@ -351,7 +373,11 @@ def test_run_predictions_batch_skips_a_bad_item_without_aborting(
 
     client = batch_client(
         {
-            "0": {"category": "operations", "operational_domain": "air"},
+            "0": {
+                "category": "operations",
+                "operational_domain": "air",
+                "region": "global",
+            },
             "1": "errored",  # batch item failed -- must not crash the whole run
         }
     )

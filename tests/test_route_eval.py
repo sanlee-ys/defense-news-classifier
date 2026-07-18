@@ -192,6 +192,7 @@ def test_run_runner_up_predictions_appends_resume_safe(
         {
             "category": "operations",
             "operational_domain": "air",
+            "region": "global",
             "runner_up_category": "none",
         }
     )
@@ -218,6 +219,7 @@ def test_run_runner_up_predictions_batch_writes_valid_rows(tmp_path, batch_clien
             "s001": {
                 "category": "technology",
                 "operational_domain": "air",
+                "region": "global",
                 "runner_up_category": "operations",
             },
             "s002": "errored",  # transport failure -> skipped, stays todo
@@ -247,6 +249,7 @@ def test_batch_refusal_writes_the_sentinel_row_and_continues(tmp_path, batch_cli
             "s001": {
                 "category": "technology",
                 "operational_domain": "air",
+                "region": "global",
                 "runner_up_category": "operations",
             },
             "s002": "refusal",
