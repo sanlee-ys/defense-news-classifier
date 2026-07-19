@@ -79,4 +79,5 @@ So, precisely:
 **What this ADR no longer governs.** Data sourcing for real text — public-domain only, DVIDS
 plus hand-pulled filings — is a live constraint with no home. It is asserted in
 `data/gold/README.md` and honored in practice, but never decided anywhere. That deserves its
-own ADR rather than being read into this one.
+own ADR rather than being read into this one. **Written 2026-07-19 as
+[ADR-015](015-public-domain-data-sourcing.md).**

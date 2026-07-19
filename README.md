@@ -314,10 +314,13 @@ the full before/after.)
 
 ### Problem
 
-Given a plain-text defense-news snippet, assign two labels:
+Given a plain-text defense-news snippet, assign three labels:
 
 - **`category`**: `procurement` · `operations` · `policy` · `technology` · `industry`
 - **`operational_domain`**: `air` · `land` · `sea` · `cyber` · `space` · `multi`
+- **`region`**: `indo-pacific` · `europe` · `middle-east` · `africa` · `americas` · `global`
+  (the catch-all for both no-anchor and multi-region stories, added in `v3.0.0` —
+  [ADR-014](decisions/014-region-field-design.md))
 
 ### Approach (v1 core)
 
@@ -330,14 +333,28 @@ retrieval-grounding layer *in front of it* (see [v2 architecture](#v2-architectu
 which was then measured against this same ungrounded call and retired when it stopped paying.
 
 Tool use (rather than asking the model to return raw JSON in the message body) is the key
-reliability mechanism for the response *shape*: you always get the two fields back as
-structured data, never free text to parse. The `enum` in the schema strongly biases the model
-toward valid labels, but it is **not** a hard server-side constraint: a tool-use schema is a
-guided prior, not constrained decoding. So `classify()` validates the returned labels against
-the allowed sets and re-samples once on the rare out-of-enum response before raising. This
-isn't hypothetical: in one 300-article run exactly one prediction came back out-of-enum
-(`category="cyber"`, which isn't a category), which is what prompted adding the guard (see
-[`evals/error_audit.md`](evals/error_audit.md)).
+reliability mechanism for the response *shape*: you always get the fields back as structured
+data, never free text to parse.
+
+**The label enum is enforced in two layers, and they changed hands over time — worth reading
+in order, because the older description is still quoted in places.**
+
+1. **Originally a guided prior.** A plain tool-use schema biases the model toward valid
+   labels but does not constrain decoding, so an out-of-enum answer was possible. It was not
+   hypothetical: in one 300-article run exactly one prediction came back as
+   `category="cyber"`, which isn't a category (see
+   [`evals/error_audit.md`](evals/error_audit.md)). `classify()` therefore validated the
+   labels and **re-sampled once** before raising.
+2. **Now server-enforced.** [ADR-008](decisions/008-strict-structured-outputs.md) added
+   `"strict": true` to the tool definition, which turns on constrained decoding: the API
+   guarantees a schema-valid answer, so the enum is a hard constraint rather than a bias.
+   The re-sample loop was **removed** with it — `classify()` makes exactly one call.
+
+`_validate()` survives as a **defensive backstop, not the primary guard**: it still raises
+`InvalidLabelError` on an out-of-enum label, which is now a signal that something upstream is
+wrong rather than a routine retry. Retry paths still exist elsewhere for a different reason
+(a transient malformed tool payload, seen once live), which is a separate failure from a bad
+label.
 
 ### Dataset
 

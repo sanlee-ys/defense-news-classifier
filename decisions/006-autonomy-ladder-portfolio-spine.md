@@ -31,8 +31,20 @@ protagonist** climbing all four levels. Each level is the same system handed mor
 |-------|------|-------|
 | **L1** Single call | prompt + structured label + eval | shipped (v1) |
 | **L2** Augmented | BM25 retrieval grounding | shipped (v2.0.0), then **retired** ([ADR-012](012-retire-bm25-grounding.md)) |
-| **L3** Autonomous loop | prompt-opt loop → agent-driven ML loop (ADR-005) | spec'd |
+| **L3** Autonomous loop | prompt-opt loop → agent-driven ML loop (ADR-005) | rung 1 **shipped**; rung 2 (agent-driven ML loop) not started |
 | **L4** Multi-agent | triage → classify → critic with backward handoff | to spec |
+
+> **Status correction, 2026-07-19.** The L3 row read "spec'd" until this amendment, eight
+> days after the prompt-optimization loop ([ADR-005](005-agentic-prompt-optimization-loop.md))
+> actually shipped on 2026-07-11. It now reads **rung 1 shipped, rung 2 not started** rather
+> than a bare "shipped," because L3 was always defined as two rungs and only one is built.
+>
+> The row was held at "spec'd" through 2026-07-19 for a second reason worth recording: the
+> loop knew nothing about the `region` axis that shipped in `v3.0.0`, so it could have
+> silently deleted the region rubric on its next run. Calling L3 shipped while the artifact
+> could destroy an axis would have been the same over-claim the L2 correction below is about.
+> It is marked shipped now that the freeze is both instructed and mechanically enforced
+> (`region_rubric_violations()` in `src/optimize.py`, plus the `region_guardrail` score on C).
 
 > **Status correction, 2026-07-18.** The L2 row read "shipped (v2.0.0)" until this
 > amendment, months after [ADR-012](012-retire-bm25-grounding.md) retired BM25 grounding
@@ -64,8 +76,9 @@ The living map is [docs/specs/autonomy-ladder.md](../docs/specs/autonomy-ladder.
 
 - **The classifier stops being a side demo** and becomes the throughline a reviewer follows end
   to end.
-- **Two of four levels are already shipped** (L1, L2). The spine ratifies existing work rather
-  than proposing a rebuild; the outstanding spine work is L3 (spec'd) and L4 (to spec).
+- **Two of four levels are already shipped** (L1, L2), and L3's first rung landed
+  2026-07-11. The spine ratifies existing work rather than proposing a rebuild; the
+  outstanding spine work is L3 rung 2 and L4 (to spec).
 - **A vocabulary collision is introduced and must be managed:** the loop spec's "rung 1 / rung 2"
   are sub-steps *inside* L3, not ladder levels. The roadmap doc names this explicitly.
 - **L2's legibility cost is pushed to the writeup.** Folding RAG in loses the standalone "I did
