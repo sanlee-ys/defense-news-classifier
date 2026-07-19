@@ -94,7 +94,10 @@ A/B/C were disjoint, without re-shipping the id lists themselves.
   "agent_rationale": null,
   "edit_summary": null,
   "tokens_spent": 0,
-  "done_signal": null
+  "done_signal": null,
+  "unclassified": {"A": 0, "B": 0, "C": 0},
+  "region_guardrail": {"macro_f1": 0.87, "accuracy": 0.8704,
+                       "per_class_f1": {"europe": 0.9, "global": 0.81}}
 }
 ```
 
@@ -117,6 +120,32 @@ being explicit about:
 - **`done_signal` is non-null only on the final record.** Its value is one
   of `"threshold"`, `"plateau"`, `"budget_iterations"`, `"budget_tokens"` --
   see `check_done_signal()`'s docstring for the fixed precedence order.
+- **`unclassified` counts ROWS, not axes.** A row lands here if `classify()`
+  could not return a valid label on *at least one* of the three axes. The
+  `__unclassified__` sentinel itself is applied **per axis** (`_salvage_labels()`
+  in `src/optimize.py`): a row whose `region` was out of enum but whose
+  `category` and `operational_domain` were fine keeps both good labels and is
+  scored a miss on region only. Blanket-sentinelling all three would inject a
+  phantom category miss into the very metric the done-signal reads.
+- **`region_guardrail` is the region axis on split C -- a guardrail, never a
+  target** (added 2026-07-19; `null` on runs and log records that predate it).
+  The loop optimizes `category`, but the proposer rewrites the *whole*
+  classifier prompt, which since `v3.0.0` carries a ~130-line region rubric
+  ([ADR-014](../../decisions/014-region-field-design.md)) it was never asked to
+  touch. This is the number that makes silent damage to that rubric visible:
+  watch it flat across a run, and treat any sustained drop as a regression in
+  the revised prompt, whatever category did.
+  - **C only.** `data/synthetic_articles.csv` has no `region` column, so
+    region is not scoreable on splits A or B. Gold is the only region-labeled
+    data the loop has.
+  - **Never wired into any decision.** Not in `scores`, not in the B-F1
+    history, not read by `check_done_signal()` or `select_best_iteration()`.
+    Pointing the optimizer at it would make C an optimization target and
+    destroy the one honest held-out number the 3-way split exists to protect.
+  - **`null` means "not measured"**, never "measured and zero".
+  - **In a `--dry-run` log it is always `1.0` and means nothing** -- the mock
+    backend copies the true region straight through, like it does for domain.
+    It is not evidence the region rubric survived anything.
 
 ### 3. `run_summary` (always the last line, once the run completes)
 
@@ -128,6 +157,8 @@ being explicit about:
   "done_signal": "threshold",
   "delta_macro_f1": {"A": 0.396, "B": 0.512, "C": 0.424},
   "overfitting_gap_a_vs_c": -0.028,
+  "region_guardrail_macro_f1": {"baseline": 0.870, "best": 0.868},
+  "region_guardrail_delta": -0.002,
   "total_tokens_spent": 0
 }
 ```
@@ -157,6 +188,15 @@ iteration 0 even runs, before `best_iteration` can possibly be known.
 - **C is directional only** (n≈54, a noisy sample -- see the spec's
   "Known Limitations" section). The done-signal never rides C for exactly
   this reason; treat single-run C movements as a hint, not a verdict.
+- **`region_guardrail_delta`** = the region macro-F1 movement from the
+  baseline to the **best** iteration (same span as `delta_macro_f1`, so it
+  describes the prompt that actually won, not a discarded final one). It is
+  the one-glance answer to "did optimizing category cost us the region axis?"
+  A clearly negative value means the winning prompt damaged a rubric the loop
+  was never asked to touch -- read the winning iteration's `prompt_diff`
+  before trusting its category gain. `null` when region was not measured. The
+  same n≈54 noise caveat as C applies: a small wobble is noise, a collapse is
+  not.
 
 ## Why JSONL instead of one pretty-printed JSON object
 

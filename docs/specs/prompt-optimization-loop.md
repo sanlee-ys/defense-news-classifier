@@ -91,6 +91,17 @@ The agent's job is **error-driven**: it reads *why* the classifier failed and ed
 
 The leak this prevents: optimizing *and* measuring the done-signal on the same set makes plateau detection optimistically biased. B exists to break that.
 
+**Region guardrail on C (added 2026-07-19, after `v3.0.0` shipped the `region` axis — [ADR-014](../../decisions/014-region-field-design.md)).** This spec was written against a two-axis classifier. The shipped classifier has three, and the proposer rewrites the *whole* system prompt — including a ~130-line region rubric this loop never optimizes and must not damage. The rubric is not separable from the rest of the prompt (all 25 worked examples carry three labels, and the tie-breaking list's clause (4) is region), so it cannot be withheld from the proposer; the defense is instead:
+
+| Layer | What it does |
+|---|---|
+| **Freeze instruction** in `OPTIMIZER_SYSTEM_PROMPT` | Tells the proposer the classifier has three axes and names the four places region material lives, to be reproduced verbatim. |
+| **`region_guardrail` score on C** | Region macro-F1 + accuracy, computed on split C each iteration (`region_guardrail()` in `src/optimize.py`), written to the run log's `region_guardrail` field and printed on the console line. |
+
+The guardrail is **reported, never optimized** — the same standing rule that governs C itself. It is not in `scores`, not in `b_f1_history`, not read by `check_done_signal` or `select_best_iteration`. Wiring it into any of those would make C an optimization target and destroy the honest generalization number this whole section exists to protect.
+
+It is scored on **C only** because `data/synthetic_articles.csv` (the source of A and B) has no `region` column, so region is not scoreable on the synthetic splits at all. Adding one would mean a fresh labeling pass — deliberately not done here; the gold set's real region labels are the guardrail's basis.
+
 ### 5.3 Feedback to the agent
 
 Each iteration the agent receives, **computed on set A only**:
@@ -182,7 +193,9 @@ agent_rationale:  natural-language reasoning for the edit
 edit_summary:     one-line "what changed"
 tokens_spent:     int
 done_signal:      null, or which condition fired (final iteration only)
+region_guardrail: { macro_f1, accuracy, per_class_f1 } on C, or null   # added 2026-07-19
 ```
+`region_guardrail` is a **sibling of `scores`, not a member of it** — `scores` holds the metrics the loop optimizes and reads; this is a read-only damage detector for an axis it must not break (§5.2). Keeping it out also leaves A/B/C the same shape for existing readers. `null` means "not measured", never "measured and zero".
 Run-level metadata:
 ```
 model · token_budget · iteration_cap · split_hashes · start_prompt · timestamp
@@ -243,6 +256,6 @@ Most design questions are resolved (see §5–§9). Remaining:
 
 - **[Eng]** `classify()` prompt-parameterization (F1): confirm the cleanest refactor that leaves the pinned wire contract green. *(verify first in Phase 1)*
 - **[Eng]** Run-log persistence format: JSONL per run under `evals/`? Confirm location + naming alongside the existing `evals/` artifacts.
-- **[Scope]** Primary metric = `category` macro-F1 (§5.5). Confirm, vs a combined category+domain score.
+- **[Scope]** Primary metric = `category` macro-F1 (§5.5). Confirm, vs a combined category+domain score. *(Partly answered 2026-07-19: whatever the primary metric ends up being, the third axis `region` is **out** of it. `v3.0.0` made the classifier three-axis, and region is now tracked as a held-out **guardrail** on split C, not a target — see §5.2. Folding region into a combined score would point the optimizer at C, which the whole 3-way split exists to prevent. The category-vs-category+domain question itself is still open.)*
 - **[Data]** Exact A/B split ratio (proposed ~210/90) and whether the split is seeded/recorded for reproducibility (`split_hashes`).
 - **[Design]** Project-page replay: confirm step-through-on-click for v1, auto-play deferred to P1.

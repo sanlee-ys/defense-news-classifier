@@ -52,7 +52,9 @@ from anthropic.types import ToolParam, ToolUseBlock
 
 from classify import (
     CATEGORIES,
+    DOMAINS,
     MODEL,
+    REGIONS,
     SYSTEM_PROMPT,
     InvalidLabelError,
     classify,
@@ -64,16 +66,21 @@ from gold_eval import GOLD_PATH, load_gold
 DATA_PATH = "data/synthetic_articles.csv"
 RUN_LOG_DIR = "evals/optimize"
 
-# Sentinel prediction recorded for a row that classify() still cannot get a
-# valid label for after exhausting its own re-sample budget (classify.py's
-# `for _ in range(4)`). Set on BOTH the category and domain prediction
-# columns so the row scores as wrong on both axes -- San's explicit choice
-# to count an unclassifiable row as a miss rather than drop it, since
-# dropping would silently shrink the split and change what macro-F1 is being
-# averaged over mid-run. The value can never collide with a real label: it
-# is not a member of CATEGORIES or DOMAINS, so eval.py's compute_metrics /
-# macro_average / confusion_matrix (which key off the ground-truth label
-# set) treat it as simply an incorrect prediction, never crash on it.
+# Sentinel prediction recorded for an axis that classify() could not return a
+# valid label for. Recording it (rather than dropping the row) is San's
+# explicit choice to count an unclassifiable answer as a miss, since dropping
+# would silently shrink the split and change what macro-F1 is being averaged
+# over mid-run. The value can never collide with a real label: it is not a
+# member of CATEGORIES, DOMAINS, or REGIONS, so eval.py's compute_metrics /
+# macro_average / confusion_matrix (which key off the ground-truth label set)
+# treat it as simply an incorrect prediction, never crash on it.
+#
+# It is applied PER AXIS, not per row (see `_salvage_labels`). The output is
+# three independent axes as of v3.0.0 (decisions/014), so an InvalidLabelError
+# raised on `region` alone says nothing about whether `category` was right --
+# and blanket-sentinelling all three would inject a phantom category miss into
+# the very metric that drives the done-signal, biasing the loop off a failure
+# on an axis it does not even optimize.
 UNCLASSIFIED = "__unclassified__"
 
 # --- tunable defaults (all overridable via CLI flags; see main()) ----------
@@ -151,9 +158,13 @@ class OptimizationConfig:
 class ScoreOutcome:
     """What a backend's `score()` returns: predictions plus tokens spent.
 
-    `unclassified_ids` lists the row ids (if any) that classify() could not
-    get a valid label for after exhausting its retries -- always `[]` for
-    `DryRunBackend`, which never produces an invalid label.
+    `unclassified_ids` lists the row ids (if any) where classify() could not
+    get a valid label on AT LEAST ONE axis after exhausting its retries. It
+    stays a row count, not an axis count -- the sentinel itself is applied
+    per axis (`_salvage_labels`), but the log field answers "how many rows
+    were affected at all", which is the question a reader scanning a run
+    actually asks. Always `[]` for `DryRunBackend`, which never produces an
+    invalid label.
     """
 
     merged: pd.DataFrame
@@ -337,6 +348,52 @@ def score_split(prompt: str, backend: OptimizerBackend, df: pd.DataFrame) -> Spl
         tokens=int(outcome.tokens),
         unclassified_ids=list(outcome.unclassified_ids),
     )
+
+
+def region_guardrail(merged_c: pd.DataFrame) -> dict | None:
+    """Score the `region` axis on split C only -- a GUARDRAIL, never a target.
+
+    Why this exists: the loop optimizes `category`, but the proposer rewrites
+    the WHOLE classifier prompt, and that prompt carries a ~130-line region
+    rubric (v3.0.0, decisions/014) which the proposer could silently delete or
+    water down while genuinely improving category. Without a region number in
+    the run log, that damage is invisible: the log would show a category
+    improvement and nothing else. This makes it visible.
+
+    Why C and not A/B: `data/synthetic_articles.csv` has no `region` column,
+    so region is not scoreable on the synthetic splits at all. The gold set is
+    the only region-labeled data the loop has.
+
+    Why it is safe to compute on C: C is already scored every iteration for
+    reporting, so this adds no API calls and consumes no held-out information
+    -- the number is written to the log and read by a human, never by
+    `check_done_signal` or `select_best_iteration`. Do NOT wire this into the
+    done-signal or the winner selection: the moment the loop optimizes toward
+    it, C stops being held out and the honest generalization number is gone
+    (ADR-005's core guard). Kept out of `SplitScore.as_dict()` for the same
+    reason -- it must not look like one of the metrics the loop is chasing.
+
+    Args:
+        merged_c: Split C's ground-truth + prediction DataFrame (from
+            `score_split(...).merged`).
+
+    Returns:
+        `{"macro_f1", "accuracy", "per_class_f1"}` for the region axis, or
+        `None` when region is not scoreable -- either the ground truth has no
+        `region` column or the backend produced no `pred_region` (e.g. a
+        `DryRunBackend` run over region-less fixture data). `None` is logged
+        as-is rather than faked as 0.0, so "not measured" never reads as
+        "measured and terrible".
+    """
+    if "region" not in merged_c.columns or "pred_region" not in merged_c.columns:
+        return None
+    metrics = compute_metrics(merged_c, "region")
+    accuracy = float((merged_c["region"] == merged_c["pred_region"]).mean())
+    return {
+        "macro_f1": macro_average(metrics)["f1"],
+        "accuracy": round(accuracy, 4),
+        "per_class_f1": {str(k): float(v) for k, v in metrics["f1"].to_dict().items()},
+    }
 
 
 def _confusion_stats(merged: pd.DataFrame) -> dict:
@@ -611,6 +668,7 @@ def make_iteration_record(
     tokens_spent: int,
     done_signal: str | None,
     unclassified: dict | None = None,
+    region_guard: dict | None = None,
 ) -> dict:
     """Build one run-log iteration record (spec section 8 schema).
 
@@ -638,6 +696,13 @@ def make_iteration_record(
             zeros when not passed, so a record with no unclassified rows is
             still schema-valid and existing readers (the portfolio viewer,
             older run logs) are unaffected.
+        region_guard: `region_guardrail(split C)` for this iteration, or
+            `None` when region was not scoreable. Deliberately a sibling of
+            `scores`, not a member of it: `scores` holds the metrics the loop
+            is optimizing and reading, and this is neither -- it is a
+            read-only damage detector for the axis the loop must not break.
+            Keeping it out of `scores` also leaves A/B/C the same shape, so
+            existing readers of `scores` need no change.
 
     Returns:
         A `type: "iteration"` dict, JSON-serializable.
@@ -655,6 +720,7 @@ def make_iteration_record(
         "tokens_spent": int(tokens_spent),
         "done_signal": done_signal,
         "unclassified": unclassified or {"A": 0, "B": 0, "C": 0},
+        "region_guardrail": region_guard,
     }
 
 
@@ -669,6 +735,21 @@ def iteration_records(records: list) -> list:
         Just the `type == "iteration"` records, in order.
     """
     return [r for r in records if r.get("type") == "iteration"]
+
+
+def _region_macro_f1(record: dict) -> float | None:
+    """Region macro-F1 out of one iteration record, or None if not measured.
+
+    Tolerates records written before the guardrail existed (no
+    `region_guardrail` key at all) and runs where region was not scoreable
+    (the key present but `None`), so `make_run_summary` stays readable
+    against older logs.
+    """
+    guard = record.get("region_guardrail")
+    if not isinstance(guard, dict):
+        return None
+    value = guard.get("macro_f1")
+    return float(value) if isinstance(value, int | float) else None
 
 
 def make_run_summary(records: list, done_signal: str | None) -> dict:
@@ -703,6 +784,18 @@ def make_run_summary(records: list, done_signal: str | None) -> dict:
         )
         for split in ("A", "B", "C")
     }
+    # Region headline, measured on the same baseline -> BEST span as the
+    # deltas above, so it describes the prompt that actually won. This is the
+    # one-glance answer to "did optimizing category cost us the region axis?"
+    # -- a clearly negative delta means the winning prompt damaged a rubric
+    # this loop was never asked to touch. Reported, never optimized.
+    baseline_region = _region_macro_f1(first)
+    best_region = _region_macro_f1(best)
+    region_delta = (
+        round(best_region - baseline_region, 4)
+        if baseline_region is not None and best_region is not None
+        else None
+    )
     return {
         "type": "run_summary",
         "best_iteration": best_iteration,
@@ -710,6 +803,11 @@ def make_run_summary(records: list, done_signal: str | None) -> dict:
         "done_signal": done_signal,
         "delta_macro_f1": delta,
         "overfitting_gap_a_vs_c": round(delta["A"] - delta["C"], 4),
+        "region_guardrail_macro_f1": {
+            "baseline": baseline_region,
+            "best": best_region,
+        },
+        "region_guardrail_delta": region_delta,
         "total_tokens_spent": last["tokens_spent"],
     }
 
@@ -798,21 +896,59 @@ def _estimate_tokens(system_prompt: str, text: str) -> int:
     return estimated_input + _ESTIMATED_OUTPUT_TOKENS + _PER_CALL_OVERHEAD_TOKENS
 
 
+# The proposer rewrites the ENTIRE classifier prompt, and that prompt now
+# carries a third axis (`region`, v3.0.0 / decisions/014) that this loop does
+# not optimize and must not damage. The region rubric is ~130 lines and is NOT
+# separable from the rest of the prompt -- every worked example carries three
+# labels and the tie-breaking list's clause (4) is region -- so the proposer
+# has to be shown it. The defense is therefore an explicit freeze instruction
+# here, backed by the `region_guardrail` score on split C that makes any
+# violation visible in the run log.
 OPTIMIZER_SYSTEM_PROMPT = """You are optimizing the system prompt for a defense-news \
-classifier. The classifier assigns each article snippet a `category` (procurement, \
-operations, policy, technology, industry) and an `operational_domain` (air, land, sea, \
-cyber, space, multi).
+classifier. The classifier assigns each article snippet THREE labels: a `category` \
+(procurement, operations, policy, technology, industry), an `operational_domain` (air, \
+land, sea, cyber, space, multi), and a `region` (indo-pacific, europe, middle-east, \
+africa, americas, global).
+
+Your job is to improve the `category` axis ONLY. The feedback report you receive describes \
+category failures and nothing else.
 
 You will be shown the classifier's CURRENT system prompt and a feedback report describing \
 where it is failing on a held-out set of examples: raw misclassified cases (true label vs. \
 predicted label) and aggregate confusion patterns (e.g. "industry -> procurement x8" means \
 industry articles are systematically mistaken for procurement).
 
-Propose a REVISED system prompt that addresses the failure patterns you see. Keep the label \
-definitions intact -- the five categories and six domains are fixed; do not add, remove, or \
-rename any label. Tighten the instructions, add disambiguating guidance, or clarify boundary \
-cases between labels that are being confused. Return the full revised prompt text (not a \
-diff), a short rationale for what you changed and why, and a one-line summary of the edit."""
+=== HARD CONSTRAINT: THE REGION RUBRIC IS FROZEN ===
+
+The current prompt contains region material that you MUST reproduce in your revised prompt \
+VERBATIM -- character for character, in the same order, in the same place:
+
+1. The "Regions (...)" heading and all six region label definitions beneath it.
+2. The entire "Region rules:" section, every bullet, including the rule that forbids \
+guessing a region the text does not name.
+3. The THIRD label (the region) on EVERY line of the "Worked examples:" list, plus the \
+sentence following that list which explains the pattern the examples demonstrate.
+4. Clause (4) of the closing "Tie-breaking, in order:" sentence -- the region clause.
+
+Do NOT delete, shorten, summarize, paraphrase, reword, reorder, merge, or "tidy up" any of \
+it. Do NOT drop or alter the region label on a worked example even if you rewrite that \
+example's category. If you rewrite a worked example, it must still end in "-> category / \
+domain / region" with the region unchanged.
+
+This region rubric was designed, gold-labeled, and tuned in a separate measured pass. It is \
+not yours to edit and it is not what you are being scored on. Every revision is checked \
+against a held-out region score: a revision that degrades region is recorded as a \
+regression, no matter what it does for category.
+
+=== YOUR TASK ===
+
+Propose a REVISED system prompt that addresses the category failure patterns you see. Keep \
+the label definitions intact -- the five categories, six domains, and six regions are all \
+fixed; do not add, remove, or rename any label. Tighten the instructions, add \
+disambiguating guidance, or clarify boundary cases between the categories that are being \
+confused. Return the full revised prompt text (not a diff) -- complete, and carrying the \
+frozen region material above unchanged -- plus a short rationale for what you changed and \
+why, and a one-line summary of the edit."""
 
 PROPOSE_TOOL: ToolParam = {
     "name": "propose_revision",
@@ -903,6 +1039,43 @@ def _classify_retry(
     raise ValueError("max_retries must be >= 1")
 
 
+def _salvage_labels(exc: InvalidLabelError) -> tuple[str, str, str]:
+    """Split one `InvalidLabelError` into per-axis predictions, salvaging valid ones.
+
+    `classify._validate` short-circuits on the FIRST invalid field, so the
+    error message names one axis but certifies nothing about the other two.
+    This therefore re-checks every field against its own enum instead of
+    trusting which axis was reported -- correct regardless of validation
+    order, and correct when more than one axis is bad.
+
+    The axes it cannot salvage get the `UNCLASSIFIED` sentinel (counted as a
+    miss on that axis alone). The axes that came back valid are kept, so a
+    region-only failure no longer fabricates a category miss and skews the
+    macro-F1 that drives the done-signal.
+
+    Args:
+        exc: The error raised by `classify()`.
+
+    Returns:
+        `(category, operational_domain, region)`, each either the model's
+        valid label or `UNCLASSIFIED`. An error carrying no payload at all
+        (`result is None`, e.g. one raised by a test double or another module)
+        degrades safely to all three sentinels -- the old behavior.
+    """
+    raw = getattr(exc, "result", None)
+    payload: dict = raw if isinstance(raw, dict) else {}
+
+    def keep(key: str, allowed: list) -> str:
+        value = payload.get(key)
+        return str(value) if value in allowed else UNCLASSIFIED
+
+    return (
+        keep("category", CATEGORIES),
+        keep("operational_domain", DOMAINS),
+        keep("region", REGIONS),
+    )
+
+
 class AnthropicBackend:
     """Live backend: scores via classify(), proposes via a direct tool-use call.
 
@@ -933,12 +1106,16 @@ class AnthropicBackend:
         A row that is STILL unclassifiable after classify()'s own retries
         (an `InvalidLabelError`, e.g. the model returning a domain value
         like "cyber" in the category field) is not allowed to abort the
-        run either: it is recorded with the `UNCLASSIFIED` sentinel on both
-        prediction columns -- guaranteed wrong on both axes, San's chosen
-        "count it as a miss" semantics -- and scoring continues. This is
-        never silent: a warning line prints per occurrence, and the caller
-        surfaces the count via `ScoreOutcome.unclassified_ids` into the run
-        log's `unclassified` field.
+        run either: the offending AXES are recorded with the `UNCLASSIFIED`
+        sentinel -- guaranteed wrong there, San's chosen "count it as a
+        miss" semantics -- while any axis that came back valid keeps its
+        real label (see `_salvage_labels`), and scoring continues. Per-axis
+        rather than per-row matters: sentinelling all three on a
+        region-only failure would book a phantom `category` miss into the
+        exact metric the done-signal reads. This is never silent: a warning
+        naming the failed axes prints per occurrence, and the caller
+        surfaces the row count via `ScoreOutcome.unclassified_ids` into the
+        run log's `unclassified` field.
 
         Args:
             prompt: System prompt to score.
@@ -960,13 +1137,23 @@ class AnthropicBackend:
                 )
                 pred_category = pred["category"]
                 pred_domain = pred["operational_domain"]
-            except InvalidLabelError:
-                pred_category = UNCLASSIFIED
-                pred_domain = UNCLASSIFIED
+                pred_region = pred["region"]
+            except InvalidLabelError as exc:
+                pred_category, pred_domain, pred_region = _salvage_labels(exc)
+                failed_axes = [
+                    axis
+                    for axis, value in (
+                        ("category", pred_category),
+                        ("operational_domain", pred_domain),
+                        ("region", pred_region),
+                    )
+                    if value == UNCLASSIFIED
+                ]
                 unclassified_ids.append(row["id"])
                 print(
-                    f"    row {row['id']}: unclassified after retries, "
-                    "counting as a miss",
+                    f"    row {row['id']}: invalid label on "
+                    f"{', '.join(failed_axes)} after retries, counting that "
+                    "axis as a miss",
                     flush=True,
                 )
             rows.append(
@@ -974,6 +1161,7 @@ class AnthropicBackend:
                     "id": row["id"],
                     "pred_category": pred_category,
                     "pred_operational_domain": pred_domain,
+                    "pred_region": pred_region,
                 }
             )
             tokens += _estimate_tokens(prompt, row["text"])
@@ -1085,9 +1273,15 @@ class DryRunBackend:
     `propose()` mutates the prompt by appending a numbered marker line, so
     `prompt_diff` and the run log are real and inspectable, never fabricated
     after the fact. Tokens are always 0 -- no call was made to spend any.
-    Domain is always scored correct: the primary metric (spec section 5.5)
-    is category macro-F1 only, so simulating domain confusion would add
-    nothing but noise to the mock.
+    Domain and region are always scored correct: the primary metric (spec
+    section 5.5) is category macro-F1 only, so simulating confusion on the
+    other two axes would add nothing but noise to the mock. Consequence
+    worth stating plainly: a `--dry-run` log's `region_guardrail` is always
+    a perfect 1.0 and is NOT evidence the region rubric survived -- like
+    every other number in a dry-run log, it is a mock (see
+    evals/optimize/README.md). Region is emitted only when the input frame
+    actually carries a `region` column, so region-less fixture data still
+    scores cleanly and the guardrail reports `None` (not measured).
     """
 
     def __init__(
@@ -1141,19 +1335,21 @@ class DryRunBackend:
             `ScoreOutcome` with simulated predictions and `tokens=0`.
         """
         accuracy = self._accuracy_for(prompt)
+        has_region = "region" in df.columns
         rows = []
         for _, row in df.iterrows():
             correct = self._correct(row["id"], prompt, accuracy)
             pred_category = (
                 row["category"] if correct else _next_category(row["category"])
             )
-            rows.append(
-                {
-                    "id": row["id"],
-                    "pred_category": pred_category,
-                    "pred_operational_domain": row["operational_domain"],
-                }
-            )
+            simulated = {
+                "id": row["id"],
+                "pred_category": pred_category,
+                "pred_operational_domain": row["operational_domain"],
+            }
+            if has_region:
+                simulated["pred_region"] = row["region"]
+            rows.append(simulated)
         merged = df.merge(pd.DataFrame(rows), on="id")
         return ScoreOutcome(merged=merged, tokens=0)
 
@@ -1192,6 +1388,13 @@ class DryRunBackend:
 # ---------------------------------------------------------------------------
 
 
+def _format_region_guard(region_guard: dict | None) -> str:
+    """One-glance region-guardrail cell for the per-iteration console line."""
+    if region_guard is None:
+        return "region(C)=n/a"
+    return f"region(C) macro-F1={region_guard['macro_f1']:.3f}"
+
+
 def run_optimization(
     backend: OptimizerBackend,
     split: Split,
@@ -1207,6 +1410,11 @@ def run_optimization(
     done-signal (fixed precedence -- see `check_done_signal`). The loop
     always halts, even on a logic bug elsewhere, because the budget check is
     the unconditional backstop (F8).
+
+    Every iteration also records a `region_guardrail` score on split C (see
+    `region_guardrail`). It is written to the log and printed, and read by
+    nothing in this function: the done-signal and the winner selection are
+    untouched by it, by design.
 
     Args:
         backend: `DryRunBackend` for a zero-API run/test; `AnthropicBackend`
@@ -1262,9 +1470,11 @@ def run_optimization(
         config.token_budget,
         config.plateau_n,
     )
+    region_guard = region_guardrail(score_c.merged)
     print(
         f"  A macro-F1={score_a.macro_f1:.3f}  B macro-F1={score_b.macro_f1:.3f}  "
-        f"C macro-F1={score_c.macro_f1:.3f}  tokens={tokens_spent}",
+        f"C macro-F1={score_c.macro_f1:.3f}  "
+        f"{_format_region_guard(region_guard)}  tokens={tokens_spent}",
         flush=True,
     )
     record = make_iteration_record(
@@ -1283,6 +1493,7 @@ def run_optimization(
             "B": len(score_b.unclassified_ids),
             "C": len(score_c.unclassified_ids),
         },
+        region_guard=region_guard,
     )
     append_run_log(run_log_path, record)
     records.append(record)
@@ -1336,9 +1547,11 @@ def run_optimization(
             config.token_budget,
             config.plateau_n,
         )
+        region_guard = region_guardrail(score_c.merged)
         print(
             f"  A macro-F1={score_a.macro_f1:.3f}  B macro-F1={score_b.macro_f1:.3f}  "
-            f"C macro-F1={score_c.macro_f1:.3f}  tokens={tokens_spent}",
+            f"C macro-F1={score_c.macro_f1:.3f}  "
+            f"{_format_region_guard(region_guard)}  tokens={tokens_spent}",
             flush=True,
         )
         if signal:
@@ -1363,6 +1576,7 @@ def run_optimization(
                 "B": len(score_b.unclassified_ids),
                 "C": len(score_c.unclassified_ids),
             },
+            region_guard=region_guard,
         )
         append_run_log(run_log_path, record)
         records.append(record)

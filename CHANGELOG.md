@@ -9,6 +9,41 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
+### Fixed
+- **The prompt-optimization loop can no longer silently destroy the `region` axis**
+  (`src/optimize.py`, `src/classify.py`). `src/optimize.py` had not been touched since
+  2026-07-11 and knew nothing about the `region` axis that shipped in `v3.0.0`
+  ([ADR-014](decisions/014-region-field-design.md)) — `grep region src/optimize.py`
+  returned zero hits. Three concrete hazards, all fixed:
+
+  1. **`OPTIMIZER_SYSTEM_PROMPT` told the proposer the classifier had two axes**, handed it
+     the live `SYSTEM_PROMPT` (now carrying a ~130-line region rubric), asked for "the full
+     revised prompt text", and only ever said "the five categories and six domains are
+     fixed". Nothing instructed it to preserve the region rubric, so the agent could delete
+     the hardest-won axis (87.0% at `v3.0.0`, including the no-guessing rule) and the run
+     log would show only a category improvement. The prompt now names all three axes and
+     freezes the region rubric verbatim, calling out each of the four places region material
+     lives — the label list, the `Region rules:` section, the third label on every worked
+     example, and clause (4) of the tie-breaking sentence. The rubric is *not* separable
+     from the rest of the prompt (all 25 worked examples carry three labels), so withholding
+     it from the proposer was never an option; an explicit freeze plus a guardrail score is.
+  2. **No region number in the run log.** Each iteration now records a `region_guardrail`
+     score (region macro-F1 / accuracy / per-class F1) on split C — the gold set is the only
+     region-labeled data the loop has, since `data/synthetic_articles.csv` has no `region`
+     column — printed on the console line and summarized baseline-vs-best in the run
+     trailer. It is **reported, never optimized**: not in `scores`, not in the B-F1 history,
+     not read by `check_done_signal()` or `select_best_iteration()`. Wiring it into a
+     decision would make the held-out set an optimization target, the exact failure ADR-005's
+     3-way split exists to prevent.
+  3. **A region-only invalid label scored as a category miss.** `AnthropicBackend.score()`
+     caught `InvalidLabelError` and set *both* `pred_category` and `pred_domain` to the
+     `__unclassified__` sentinel, so a bad `region` polluted the very metric that drives the
+     done-signal. The sentinel is now applied **per axis** (`_salvage_labels()`): valid axes
+     keep their labels, only the failed one is counted a miss. `classify.InvalidLabelError`
+     gained an optional `result` payload to make this possible; it re-checks every axis
+     against its own enum rather than trusting which one `_validate` happened to report
+     first. An error raised without a payload still degrades to all-three sentinels.
+
 ### Added
 - **Published `/classify` contract artifact** (`contracts/classify-response.schema.json`,
   `scripts/gen_contract_schema.py`, `tests/test_contract_schema.py`) — this repo is the
