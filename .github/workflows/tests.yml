@@ -48,6 +48,14 @@ jobs:
       - name: Contract artifact is current (SYS-004)
         run: uv run python scripts/gen_contract_schema.py --check
 
+      # The measured numbers are this project's headline claim and are quoted on
+      # outward surfaces. evals/metrics.json is what those surfaces assert
+      # against instead of retyping them; a stale artifact is worse than none,
+      # because a consumer would verify against it and conclude wrong figures
+      # are right.
+      - name: Metrics artifact is current
+        run: uv run python scripts/gen_metrics_artifact.py --check
+
       # --cov-fail-under gates the build on coverage. Set a few points below the
       # current total so it holds the line without breaking now, and can be
       # ratcheted upward as coverage improves.
