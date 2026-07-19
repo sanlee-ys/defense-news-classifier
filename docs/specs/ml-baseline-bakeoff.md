@@ -5,7 +5,7 @@
 **Author:** San Lee
 **Last updated:** 2026-07-19
 **Roadmap fit:** new **MINOR** (additive measurement harness; the `{category, operational_domain, region}` output contract is untouched, and nothing is swapped into the shipped classifier).
-**Related:** [ADR-004](../../decisions/004-plain-python-eval-metrics.md) (no ML framework — this spec proposes a bounded exception) · [ADR-012](../../decisions/012-retire-bm25-grounding.md) and [ADR-013](../../decisions/013-decline-tiered-routing.md) (the two prior measure-before-escalate verdicts) · [autonomy-ladder](autonomy-ladder.md) (this is the substrate for rung 2)
+**Related:** [ADR-004](../../decisions/004-no-ml-framework-for-eval.md) (no ML framework — this spec proposes a bounded exception) · [ADR-012](../../decisions/012-retire-bm25-grounding.md) and [ADR-013](../../decisions/013-decline-tiered-routing.md) (the two prior measure-before-escalate verdicts) · [autonomy-ladder](autonomy-ladder.md) (this is the substrate for rung 2)
 
 ---
 
@@ -82,7 +82,7 @@ Deliberately boring. The point is a *standard* baseline, not a clever one — a 
 
 ### The dependency decision (surface this, do not just do it)
 
-TF-IDF + logistic regression means **scikit-learn**, and [ADR-004](../../decisions/004-plain-python-eval-metrics.md) deliberately chose plain Python with no ML framework for the eval metrics.
+TF-IDF + logistic regression means **scikit-learn**, and [ADR-004](../../decisions/004-no-ml-framework-for-eval.md) deliberately chose plain Python with no ML framework for the eval metrics.
 
 - **Zero-dep alternative:** hand-roll TF-IDF and logistic regression. Real cost: a hand-rolled baseline is not the *standard* baseline, so a skeptical reader discounts a loss ("your implementation was bad") and discounts a win equally. It also spends a day on machinery that is not the point.
 - **Recommendation:** add `scikit-learn` to the **dev/eval dependency group**, not the runtime dependencies. ADR-004 governs *eval metrics* (κ, confusion, intervals), which stay plain Python; this adds a *model* the eval measures. That is a bounded exception, and the ADR for this work should say so explicitly rather than let ADR-004 quietly erode.
