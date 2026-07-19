@@ -7,6 +7,27 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Published `/classify` contract artifact** (`contracts/classify-response.schema.json`,
+  `scripts/gen_contract_schema.py`, `tests/test_contract_schema.py`) — this repo is the
+  **provider** on the SYS-004 seam, so it now publishes the wire contract as a committed
+  artifact consumers assert against. Generated from `ClassifyResponse` plus
+  `CATEGORIES`/`DOMAINS`/`REGIONS`, never hand-edited, with `additionalProperties: false`
+  so an added field is a detectable breaking change. A test regenerates in memory and
+  compares byte-for-byte, and CI runs `--check`, so editing the response model or a label
+  constant without regenerating turns the build red. The generator also refuses to publish
+  a response field that has no backing enum, closing the "fourth axis silently published as
+  an unconstrained string" path.
+
+  **Why:** SYS-004 claimed "contract tests on both sides… turn any drift into a red build."
+  That was false in kind — each repo asserted against its *own* copy of the shape, so when
+  `region` shipped in v3.0.0 the provider's fixture moved with it, the consumer's did not,
+  and both suites stayed green through a breaking change. This artifact is the shared thing
+  that was missing. Output contract untouched, so per this project's own precedent (the
+  evals-CI gate in v2.1.0) it earns no version bump on its own.
+
 ## [3.0.0] - 2026-07-18
 
 Milestone: **the `region` field.** The roadmap's planned breaking change: the output contract
