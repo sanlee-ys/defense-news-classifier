@@ -45,11 +45,15 @@ survived 108/108 (the v2 hand labels stand untouched); region took two review co
 before anything was measured against it. The numbers below are the first live three-axis run
 (`evals/gold_eval_v3.txt`, n=54, human answer key):
 
+<!-- BEGIN GENERATED: gold-metrics (scripts/gen_readme_metrics.py) -->
+
 | Axis | Accuracy | Macro-F1 | Judge vs human |
 |---|---|---|---|
 | Category | **92.6%** | 0.911 | 92.6% |
 | Operational domain | **92.6%** | 0.933 | 98.1% |
 | Region | **87.0%** | 0.927* | **100.0%** |
+
+<!-- END GENERATED: gold-metrics -->
 
 \* Region macro-F1 is support-limited (`europe` n=1, `africa` n=2 on a US-wire gold set) —
 read the per-label table in the report before quoting it.

@@ -56,6 +56,15 @@ jobs:
       - name: Metrics artifact is current
         run: uv run python scripts/gen_metrics_artifact.py --check
 
+      # The README's headline table is GENERATED from that artifact rather than
+      # checked against it. Other repos assert their copies; this repo owns the
+      # source, so it can hold no copy at all. A checked number is still wrong in
+      # the window between a careless edit and the next CI run — a generated one
+      # was never typed. Historical tables below it are frozen records and are
+      # deliberately outside the generated block.
+      - name: README metrics table is current
+        run: uv run python scripts/gen_readme_metrics.py --check
+
       # ADR-014 shipped the region axis with no "Downstream surfaces" section, so
       # the sweep that followed missed src/optimize.py and left the optimization
       # loop able to delete the region rubric. The architecture repo has enforced
