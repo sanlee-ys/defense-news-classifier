@@ -23,7 +23,7 @@ This roadmap is the map. The per-level specs and ADRs are the territory.
 | Level | What the classifier gains | Who drives | State |
 |-------|---------------------------|-----------|-------|
 | **L1 — Single call** | Prompt + structured `{category, operational_domain}` + eval | Human runs each item | **Shipped** (v1) |
-| **L2 — Augmented** | BM25 retrieval grounds the label in a corpus | Human runs it; the model reaches for a tool | **Shipped** (v2.0.0) |
+| **L2 — Augmented** | BM25 retrieval grounds the label in a corpus | Human runs it; the model reaches for a tool | **Shipped** (v2.0.0), then **retired** ([ADR-012](../../decisions/012-retire-bm25-grounding.md)) |
 | **L3 — Autonomous loop** | Wrapped in a loop that iterates to an explicit done-signal | The system decides when it is done | **Spec'd** — see [ADR-005](../../decisions/005-agentic-prompt-optimization-loop.md) |
 | **L4 — Multi-agent** | Decomposed: triage → classify → critic that can hand work *backward* | Multiple agents coordinate | **To spec** — build-vs-adopt decided, see [§7](#7-l4-build-vs-adopt-decision-2026-07-11) |
 
@@ -82,6 +82,11 @@ the critic is what catches the classifier gaming its own metric.
 ## 6. Sequencing & scope guard
 
 - L1 and L2 are shipped. No further work owed on the spine there beyond the L2 writeup framing.
+  L2's grounding was subsequently **retired** ([ADR-012](../../decisions/012-retire-bm25-grounding.md))
+  after a fair same-prompt re-measure — 0 domain calls fixed, 4 broken across 162 grounded
+  classifications. The rung stands: the axis is *who drives*, and L2's question (can the model
+  reach for a tool?) was answered yes. The tool just did not earn its place. The climbed-then-
+  retired arc is the honest L2 story and the writeup should tell it that way.
 - **L3 is next**, delivered as the loop spec's rung 1 then rung 2. Sequenced after v2.1.0 for
   the reason in the loop spec (v2.1.0 shrinks the held-out noise floor the loop's honest number
   depends on).

@@ -30,9 +30,23 @@ protagonist** climbing all four levels. Each level is the same system handed mor
 | Level | Rung | State |
 |-------|------|-------|
 | **L1** Single call | prompt + structured label + eval | shipped (v1) |
-| **L2** Augmented | BM25 retrieval grounding | shipped (v2.0.0) |
+| **L2** Augmented | BM25 retrieval grounding | shipped (v2.0.0), then **retired** ([ADR-012](012-retire-bm25-grounding.md)) |
 | **L3** Autonomous loop | prompt-opt loop → agent-driven ML loop (ADR-005) | spec'd |
 | **L4** Multi-agent | triage → classify → critic with backward handoff | to spec |
+
+> **Status correction, 2026-07-18.** The L2 row read "shipped (v2.0.0)" until this
+> amendment, months after [ADR-012](012-retire-bm25-grounding.md) retired BM25 grounding
+> on 2026-07-17 — a fair same-prompt re-measure found it fixed a domain call zero times
+> and broke four across 162 grounded classifications. The rung was climbed and then
+> climbed back down.
+>
+> **That does not vacate L2, and the ladder is not renumbered.** The axis is *who
+> drives*, not *which techniques survive*: L2 asked whether the model could reach for a
+> tool, and it can — the tool simply did not earn its place once the ungrounded baseline
+> improved. A ladder that quietly deletes a rung whose experiment failed would be
+> measuring narrative tidiness rather than autonomy. The retirement is the interesting
+> part of L2, not an embarrassment to hide, and the retrieval code stays in the repo
+> dormant and reproducible as the record.
 
 Two design choices define the spine:
 
