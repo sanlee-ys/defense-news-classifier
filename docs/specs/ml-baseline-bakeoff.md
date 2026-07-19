@@ -82,10 +82,11 @@ Deliberately boring. The point is a *standard* baseline, not a clever one — a 
 
 ### The dependency decision (surface this, do not just do it)
 
-TF-IDF + logistic regression means **scikit-learn**, and [ADR-004](../../decisions/004-no-ml-framework-for-eval.md) deliberately chose plain Python with no ML framework for the eval metrics.
+TF-IDF + logistic regression means **scikit-learn**. [ADR-004](../../decisions/004-no-ml-framework-for-eval.md) was amended 2026-07-19 to scope its ban to *metric computation*, so this is **not an exception to it** — a baseline model the eval measures is outside that ADR's scope by its own terms. An earlier draft of this spec framed it as a bounded exception; that was a misreading of ADR-004, whose stated reasons were always about metrics.
 
 - **Zero-dep alternative:** hand-roll TF-IDF and logistic regression. Real cost: a hand-rolled baseline is not the *standard* baseline, so a skeptical reader discounts a loss ("your implementation was bad") and discounts a win equally. It also spends a day on machinery that is not the point.
-- **Recommendation:** add `scikit-learn` to the **dev/eval dependency group**, not the runtime dependencies. ADR-004 governs *eval metrics* (κ, confusion, intervals), which stay plain Python; this adds a *model* the eval measures. That is a bounded exception, and the ADR for this work should say so explicitly rather than let ADR-004 quietly erode.
+- **Do:** add `scikit-learn` to the **dev/eval dependency group**, not the runtime dependencies.
+- **Do not:** let sklearn's arrival become a reason to replace the hand-written metrics with `classification_report`. ADR-004's amendment forbids that explicitly, and the reason is that the hand-rolled metrics are portfolio signal.
 - The shipped classifier's runtime deps are unchanged. Nothing in `src/classify.py` or `src/api.py` imports sklearn.
 
 ---

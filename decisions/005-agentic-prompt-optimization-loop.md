@@ -52,7 +52,7 @@ Primary metric: `category` macro-F1 (`macro_average` from `src/eval.py`). Optimi
 | Mechanical sweep / `GridSearchCV`-style search | A prompt has no hyperparameter grid; no qualitative judgment, so it is not loop engineering — it would be a worse version of a sweep |
 | Single 2-way train/test split | Optimizing and detecting plateau on the same set biases stop-detection; the A-vs-B memorization signal disappears |
 | Optimize directly on the real gold set (C) | Overfits n≈54 and destroys the one honest held-out number we have |
-| A prompt-optimization framework (DSPy, etc.) | Heavyweight dependency against the repo's minimal-deps rule (ADR-004); a hand-built loop is more legible as the artifact |
+| A prompt-optimization framework (DSPy, etc.) | A hand-built loop is more legible as the artifact — the loop *is* the deliverable, and a framework hides the mechanism this ADR exists to demonstrate. (Re-grounded 2026-07-19: this entry also cited ADR-004's minimal-deps rule, which [ADR-004's amendment](004-no-ml-framework-for-eval.md#amendment-2026-07-19) scoped to metric computation. The legibility argument was always the stronger half and now carries the rejection alone.) |
 | Gate "done" on measurable improvement | Couples release to an outcome we cannot control (label-ambiguity ceiling) and pressures gaming the eval — the exact failure this design exists to expose |
 
 ## Resolved during implementation
