@@ -72,6 +72,20 @@ public, so every source is redistributed to anyone who clones it. A source that 
   PRD N1 ("all data is synthetic") and `README.md:366`, both of which predate v2. Neither is
   wrong about the *spirit*; both are wrong about the *fact*.
 
+## Downstream surfaces
+
+Surfaces this decision touches, and their state as of 2026-07-19:
+
+| Surface | State |
+|---|---|
+| `docs/PRD.md` N1 — "All data is synthetic — no proprietary, scraped, or non-public text" | **Stale.** True at v1, wrong since v2. Should become "public-domain or synthetic," citing this ADR. Not edited here: the PRD is a versioned requirements doc and rewriting a numbered requirement is its own change. |
+| `README.md:366` — "All data is synthetic: no proprietary text, no scraping, no real news sources" | **Stale out of context.** Correct *within* the v1 section it sits in, misleading to a reader who lands on it. Same treatment as N1. |
+| `README.md:12`, `:33`, `:383-384`, `:704` | Accurate. These already describe public-domain sourcing and need no change. |
+| `data/gold/README.md` | Accurate. Describes DVIDS + SEC provenance; now has an ADR to cite. |
+| [ADR-003](003-synthetic-data-only.md) | Amended 2026-07-19 to point here for real-text sourcing. Done. |
+| [`docs/specs/ml-baseline-bakeoff.md`](../docs/specs/ml-baseline-bakeoff.md) | Its training set (the 300-snippet judge-graded DVIDS set) is governed by this ADR. No separate sourcing call needed. |
+| Any future corpus expansion | Gated by this ADR. A new source needs a superseding record, not a judgment call. |
+
 ## Alternatives Considered
 
 | Option | Reason Not Chosen |
