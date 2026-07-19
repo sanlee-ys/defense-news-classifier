@@ -56,6 +56,15 @@ jobs:
       - name: Metrics artifact is current
         run: uv run python scripts/gen_metrics_artifact.py --check
 
+      # ADR-014 shipped the region axis with no "Downstream surfaces" section, so
+      # the sweep that followed missed src/optimize.py and left the optimization
+      # loop able to delete the region rubric. The architecture repo has enforced
+      # this section on SYS-NNN docs since 2026-07-18; repo-local ADRs were never
+      # covered, which is the gap that let ADR-014 through. Ratcheted: 001-014 are
+      # grandfathered, new ADRs must comply.
+      - name: ADRs list their downstream surfaces
+        run: uv run python scripts/lint_decisions.py
+
       # --cov-fail-under gates the build on coverage. Set a few points below the
       # current total so it holds the line without breaking now, and can be
       # ratcheted upward as coverage improves.
