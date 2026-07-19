@@ -18,6 +18,7 @@ Decisions are recorded here as they are made. Each ADR captures the context, the
 | [012](012-retire-bm25-grounding.md) | Retire BM25 retrieval grounding — it no longer pays under the improved prompt | Accepted |
 | [013](013-decline-tiered-routing.md) | Decline tiered model routing — measured, it buys nothing at ~2x the cost | Accepted |
 | [014](014-region-field-design.md) | Region field design — six labels with a `global` catch-all, gold-first scope | Accepted |
+| [015](015-public-domain-data-sourcing.md) | All text is public-domain or synthetic — DVIDS + SEC + generated, never scraped or licensed | Accepted |
 
 ## Format
 

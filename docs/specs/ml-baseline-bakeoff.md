@@ -97,7 +97,7 @@ TF-IDF + logistic regression means **scikit-learn**. [ADR-004](../../decisions/0
 2. `evals/baseline_eval.txt` — the report: accuracy per axis, per-label precision/recall/F1, confusion matrices, and the cost/latency comparison.
 3. `evals/baseline_predictions.csv` — per-row predictions on the 54 gold rows, for auditability.
 4. Tests in `tests/`, offline, no API key. At minimum: the train/test join is correct, `judge_*` is the label source and `pred_*` is never read, and the gold set is not used in fitting.
-5. **An ADR** recording the verdict and the sklearn exception. Next free number is **015** (014 is the region field).
+5. **An ADR** recording the verdict. Next free number is **016** — 015 is [public-domain data sourcing](../../decisions/015-public-domain-data-sourcing.md), written 2026-07-19. It records a *result*; it does not need to litigate a dependency exception, since [ADR-004's amendment](../../decisions/004-no-ml-framework-for-eval.md#amendment-2026-07-19) already scoped that ban to metric computation.
 6. README section leading with the comparison, with the n=54 caveat attached.
 
 ---
@@ -108,7 +108,7 @@ TF-IDF + logistic regression means **scikit-learn**. [ADR-004](../../decisions/0
 2. It scores on the 54 gold rows through the existing eval path.
 3. `evals/baseline_eval.txt` reports both axes, per-label breakdowns, and cost/latency.
 4. Tests pass offline; the no-test-set-leakage test exists and is meaningful.
-5. ADR-015 records the verdict and the bounded ADR-004 exception.
+5. ADR-016 records the verdict.
 6. README states the comparison honestly, including that region is uncovered and that train labels are judge-generated.
 
 ---
