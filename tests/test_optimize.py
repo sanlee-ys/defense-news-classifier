@@ -1923,3 +1923,127 @@ def test_cli_live_path_constructs_anthropic_backend_with_client_and_model(
 
     assert captured["client"] == "FAKE_CLIENT"
     assert captured["model"] == optimize.MODEL
+
+
+# --- Region rubric enforcement (the offline half of the region guard) --------
+#
+# `region_guardrail` measures whether region accuracy moved, but only after a
+# full scoring pass on split C. These cover the cheap deterministic check that
+# rejects a mangled rubric the instant the proposal comes back, before any
+# scoring call is spent.
+
+
+def _prompt_with_region_block(extra: str = "") -> str:
+    return (
+        "You are a defense-news analyst.\n"
+        "Category rules:\n- something about categories\n\n"
+        "Region rules:\n"
+        "- Label the theater, not the actor's nationality.\n"
+        "- Do not guess a region the text does not name; unnamed is global.\n\n"
+        "Worked examples:\n"
+        '- "Army awards contract" -> procurement / land / global\n'
+        '- "Carrier transits strait" -> operations / sea / indo-pacific\n' + extra
+    )
+
+
+def test_extract_region_block_returns_none_without_markers():
+    assert optimize.extract_region_block("no region section here") is None
+    assert optimize.extract_region_block("Region rules:\n- unterminated") is None
+
+
+def test_unchanged_prompt_has_no_region_violations():
+    p = _prompt_with_region_block()
+    assert optimize.region_rubric_violations(p, p) == []
+
+
+def test_category_only_edit_is_not_punished():
+    current = _prompt_with_region_block()
+    revised = current.replace(
+        "- something about categories", "- a sharper rule about categories"
+    )
+    assert optimize.region_rubric_violations(current, revised) == []
+
+
+def test_adding_an_example_that_mentions_a_theater_is_not_punished():
+    # Counts use `fewer`, not `different`, so a new category example that
+    # happens to carry a region must not trip the guard.
+    current = _prompt_with_region_block()
+    revised = current + '- "Budget line moves" -> policy / multi / global\n'
+    assert optimize.region_rubric_violations(current, revised) == []
+
+
+def test_deleted_region_block_is_a_violation():
+    current = _prompt_with_region_block()
+    revised = current[: current.find("Region rules:")] + "Worked examples:\n"
+    problems = optimize.region_rubric_violations(current, revised)
+    assert problems
+    assert any("Region rules:" in p for p in problems)
+
+
+def test_reworded_region_block_is_a_violation():
+    current = _prompt_with_region_block()
+    revised = current.replace(
+        "- Label the theater, not the actor's nationality.",
+        "- Label the theater rather than the nationality of the actor.",
+    )
+    problems = optimize.region_rubric_violations(current, revised)
+    assert any("frozen" in p for p in problems)
+
+
+def test_region_dropped_from_a_worked_example_is_a_violation():
+    current = _prompt_with_region_block()
+    revised = current.replace(
+        '- "Carrier transits strait" -> operations / sea / indo-pacific',
+        '- "Carrier transits strait" -> operations / sea',
+    )
+    problems = optimize.region_rubric_violations(current, revised)
+    assert any("indo-pacific" in p for p in problems)
+
+
+def test_pre_v3_prompt_without_a_region_section_is_not_a_violation():
+    current = "Category rules:\n- old two-axis prompt\n"
+    assert optimize.region_rubric_violations(current, current) == []
+
+
+def test_propose_retries_then_raises_when_every_revision_mangles_region():
+    """Enforcement, not just detection.
+
+    A persistently mangled rubric aborts the run rather than reaching a
+    scoring pass.
+    """
+    current = _prompt_with_region_block()
+    mangled = current.replace("Region rules:", "Regions (rewritten):")
+    payload = {
+        "revised_prompt": mangled,
+        "rationale": "r",
+        "edit_summary": "e",
+    }
+
+    client = _FakeProposeSequenceClient([payload])
+    backend = optimize.AnthropicBackend(client=client, model="m")
+
+    with pytest.raises(optimize.ProposalError) as exc:
+        backend.propose(current, "feedback", max_retries=3)
+
+    assert "region" in str(exc.value).lower()
+    assert client.messages.calls == 3, "should retry before giving up"
+
+
+def test_propose_accepts_a_revision_that_leaves_region_alone():
+    current = _prompt_with_region_block()
+    revised = current.replace(
+        "- something about categories", "- a sharper rule about categories"
+    )
+    payload = {
+        "revised_prompt": revised,
+        "rationale": "r",
+        "edit_summary": "e",
+    }
+
+    client = _FakeProposeSequenceClient([payload])
+    backend = optimize.AnthropicBackend(client=client, model="m")
+
+    outcome = backend.propose(current, "feedback", max_retries=3)
+
+    assert outcome.revised_prompt == revised
+    assert client.messages.calls == 1, "a clean proposal must not retry"

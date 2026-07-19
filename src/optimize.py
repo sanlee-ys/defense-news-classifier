@@ -182,6 +182,92 @@ class ProposeOutcome:
     tokens: int
 
 
+REGION_BLOCK_START = "Region rules:"
+REGION_BLOCK_END = "Worked examples:"
+
+
+def extract_region_block(prompt: str) -> str | None:
+    """The frozen region rubric, sliced out of a classifier prompt.
+
+    Returns the text between the `Region rules:` header and the
+    `Worked examples:` header, inclusive of the header line, or `None` if
+    either marker is missing. `None` is itself the finding: a prompt with
+    no region section is exactly what this guard exists to catch.
+    """
+    start = prompt.find(REGION_BLOCK_START)
+    if start == -1:
+        return None
+    end = prompt.find(REGION_BLOCK_END, start)
+    if end == -1:
+        return None
+    return prompt[start:end]
+
+
+def region_rubric_violations(current: str, revised: str) -> list[str]:
+    """Structural check that a proposed revision left the region rubric alone.
+
+    Deterministic, offline, and runs before any scoring call. This is the
+    cheap half of the region guard: `region_guardrail()` measures whether
+    region *accuracy* moved, but only after a full scoring pass on split C
+    (~350 API calls). This catches outright deletion or mangling of the
+    rubric for free, in the same second the proposal comes back.
+
+    Two checks, both deliberately conservative so a legitimate category-only
+    edit never trips them:
+
+    1. The `Region rules:` block must survive **byte for byte**. The
+       proposer is told to reproduce it verbatim, so any difference at all
+       is a violation, not a judgment call.
+    2. No region label may appear *fewer* times than it did. This catches a
+       region dropped from a worked example, which lives outside the block.
+       `fewer`, not `different`, so adding a category example that happens
+       to mention a theater is not punished.
+
+    Args:
+        current: The prompt handed to the proposer.
+        revised: The prompt it handed back.
+
+    Returns:
+        Human-readable violations, empty if the rubric is intact.
+    """
+    problems: list[str] = []
+
+    current_block = extract_region_block(current)
+    revised_block = extract_region_block(revised)
+    if current_block is None:
+        # Nothing to protect -- a pre-v3 prompt. Not a violation.
+        return problems
+    if revised_block is None:
+        problems.append(
+            f"the {REGION_BLOCK_START!r} section is gone from the revision "
+            f"(or its {REGION_BLOCK_END!r} terminator is)"
+        )
+    elif revised_block != current_block:
+        problems.append(
+            f"the {REGION_BLOCK_START!r} section was modified; it is frozen "
+            f"and must be reproduced verbatim "
+            f"({len(current_block)} chars in, {len(revised_block)} out)"
+        )
+
+    for label in REGIONS:
+        was, now = current.count(label), revised.count(label)
+        if now < was:
+            problems.append(
+                f"region label {label!r} appears {now}x in the revision, "
+                f"was {was}x -- likely dropped from a worked example"
+            )
+
+    return problems
+
+
+class RegionRubricError(RuntimeError):
+    """A proposed revision damaged the frozen region rubric.
+
+    Raised inside `propose()`'s retry loop so the proposer gets another
+    attempt, and surfaced as a `ProposalError` if every attempt mangles it.
+    """
+
+
 class ProposalError(RuntimeError):
     """Raised when `propose()` exhausts its retries without a usable payload.
 
@@ -1228,14 +1314,25 @@ class AnthropicBackend:
                     b for b in response.content if isinstance(b, ToolUseBlock)
                 )
                 payload = cast(dict, tool_block.input)
+                revised = payload["revised_prompt"]
+                violations = region_rubric_violations(current_prompt, revised)
+                if violations:
+                    raise RegionRubricError("; ".join(violations))
                 return ProposeOutcome(
-                    revised_prompt=payload["revised_prompt"],
+                    revised_prompt=revised,
                     rationale=payload["rationale"],
                     edit_summary=payload["edit_summary"],
                     tokens=tokens,
                 )
-            except (StopIteration, KeyError) as exc:
+            except (StopIteration, KeyError, RegionRubricError) as exc:
                 last_error = exc
+        if isinstance(last_error, RegionRubricError):
+            raise ProposalError(
+                f"every one of {max_retries} proposals damaged the frozen region "
+                f"rubric; refusing to score a prompt with a mangled region axis. "
+                f"Last: {last_error}",
+                tokens=tokens,
+            )
         raise ProposalError(
             f"propose_revision call incomplete after {max_retries} attempts "
             f"(likely truncated at max_tokens): {last_error!r}",

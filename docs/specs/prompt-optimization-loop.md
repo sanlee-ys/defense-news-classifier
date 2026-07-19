@@ -96,7 +96,21 @@ The leak this prevents: optimizing *and* measuring the done-signal on the same s
 | Layer | What it does |
 |---|---|
 | **Freeze instruction** in `OPTIMIZER_SYSTEM_PROMPT` | Tells the proposer the classifier has three axes and names the four places region material lives, to be reproduced verbatim. |
+| **Structural check, offline** (added 2026-07-19) | `region_rubric_violations()` compares the proposal against the prompt it was handed, before any scoring call: the `Region rules:` block must survive byte for byte, and no region label may appear *fewer* times than it did (which catches a region dropped from a worked example, outside the block). A violation retries the proposer; if every attempt mangles it, `propose()` raises `ProposalError` and the run stops. |
 | **`region_guardrail` score on C** | Region macro-F1 + accuracy, computed on split C each iteration (`region_guardrail()` in `src/optimize.py`), written to the run log's `region_guardrail` field and printed on the console line. |
+
+**The two layers do different jobs, and the order matters.** The structural check is
+deterministic, free, and fires the instant the proposal returns — it catches deletion,
+rewording, and dropped example labels before a scoring pass spends ~350 API calls. The
+guardrail score catches what a string comparison cannot: a rubric that is textually intact
+but whose surrounding prompt changes shifted region behavior anyway. Detection alone was the
+first design; enforcement was added because the cheap check makes the expensive one a
+backstop rather than the only line.
+
+The structural check is deliberately conservative in one direction: it compares label counts
+with *fewer*, not *different*, so a legitimate category-only edit that happens to add an
+example mentioning a theater does not trip it. A guard that cries wolf on valid work gets
+disabled.
 
 The guardrail is **reported, never optimized** — the same standing rule that governs C itself. It is not in `scores`, not in `b_f1_history`, not read by `check_done_signal` or `select_best_iteration`. Wiring it into any of those would make C an optimization target and destroy the honest generalization number this whole section exists to protect.
 

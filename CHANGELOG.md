@@ -27,6 +27,17 @@ Versions are tagged by milestone; individual commits are noted where relevant.
      example, and clause (4) of the tie-breaking sentence. The rubric is *not* separable
      from the rest of the prompt (all 25 worked examples carry three labels), so withholding
      it from the proposer was never an option; an explicit freeze plus a guardrail score is.
+
+     The freeze is now **enforced, not just instructed**: `region_rubric_violations()`
+     compares each proposal against the prompt it was handed before any scoring call —
+     the `Region rules:` block must survive byte for byte, and no region label may appear
+     fewer times than it did (catching a region dropped from a worked example, which lives
+     outside the block). A violation retries the proposer; if every attempt mangles the
+     rubric, `propose()` raises `ProposalError` and the run stops rather than scoring a
+     damaged prompt. This is deterministic and free, where the guardrail score below only
+     reveals damage after a scoring pass costing ~350 API calls. Count comparison uses
+     *fewer*, not *different*, so a category-only edit that adds an example mentioning a
+     theater is not punished — a guard that cries wolf on valid work gets disabled.
   2. **No region number in the run log.** Each iteration now records a `region_guardrail`
      score (region macro-F1 / accuracy / per-class F1) on split C — the gold set is the only
      region-labeled data the loop has, since `data/synthetic_articles.csv` has no `region`
