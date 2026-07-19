@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/sanlee-ys/defense-news-classifier/main/contracts/classify-response.schema.json",
+  "title": "POST /classify \u2014 200 response",
+  "description": "The frozen wire contract between defense-news-classifier (provider) and its consumers. Governed by system/SYS-004; adding, removing or renaming a field, or changing an enum's membership, is a breaking change requiring a MAJOR bump and a coordinated consumer update.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "category",
+    "operational_domain",
+    "region"
+  ],
+  "properties": {
+    "category": {
+      "type": "string",
+      "enum": [
+        "procurement",
+        "operations",
+        "policy",
+        "technology",
+        "industry"
+      ]
+    },
+    "operational_domain": {
+      "type": "string",
+      "enum": [
+        "air",
+        "land",
+        "sea",
+        "cyber",
+        "space",
+        "multi"
+      ]
+    },
+    "region": {
+      "type": "string",
+      "enum": [
+        "indo-pacific",
+        "europe",
+        "middle-east",
+        "africa",
+        "americas",
+        "global"
+      ]
+    }
+  }
+}

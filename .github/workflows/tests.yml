@@ -41,6 +41,13 @@ jobs:
       - name: Type check (mypy)
         run: uv run mypy src
 
+      # This repo is the PROVIDER on the SYS-004 /classify seam, so it publishes
+      # contracts/classify-response.schema.json for consumers to assert against.
+      # A stale artifact is worse than none — a consumer would validate against a
+      # shape this service no longer returns. Fail the build rather than publish it.
+      - name: Contract artifact is current (SYS-004)
+        run: uv run python scripts/gen_contract_schema.py --check
+
       # --cov-fail-under gates the build on coverage. Set a few points below the
       # current total so it holds the line without breaking now, and can be
       # ratcheted upward as coverage improves.
