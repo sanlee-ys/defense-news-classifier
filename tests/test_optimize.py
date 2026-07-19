@@ -771,6 +771,7 @@ def test_make_iteration_record_has_full_section8_schema():
         "tokens_spent",
         "done_signal",
         "unclassified",
+        "region_guardrail",
     }
     assert set(rec.keys()) == expected_keys
     assert rec["type"] == "iteration"
@@ -779,6 +780,10 @@ def test_make_iteration_record_has_full_section8_schema():
     # still has the key, defaulted to all-zero counts, so older callers and
     # the portfolio viewer never see a missing field.
     assert rec["unclassified"] == {"A": 0, "B": 0, "C": 0}
+    # Same additive contract for the region guardrail, except its "not
+    # passed" default is None ("not measured"), never 0.0 -- a zero would
+    # read as "measured, and the region axis collapsed".
+    assert rec["region_guardrail"] is None
 
 
 def test_iteration_zero_record_has_null_diff_rationale_edit_summary():
@@ -922,7 +927,7 @@ def test_anthropic_backend_score_calls_classify_with_prompt_and_model(monkeypatc
 
     def fake_classify(client, text, model=None, system_prompt=None):
         captured.append((text, model, system_prompt))
-        return {"category": "policy", "operational_domain": "air"}
+        return {"category": "policy", "operational_domain": "air", "region": "europe"}
 
     monkeypatch.setattr(optimize, "classify", fake_classify)
 
@@ -941,18 +946,24 @@ def test_anthropic_backend_score_calls_classify_with_prompt_and_model(monkeypatc
     assert outcome.tokens > 0
     assert len(outcome.merged) == 2
     assert (outcome.merged["pred_category"] == "policy").all()
+    # The third axis is carried through as `pred_region` so the region
+    # guardrail has something to score against gold's `region` column.
+    assert (outcome.merged["pred_region"] == "europe").all()
 
 
 def test_anthropic_backend_score_survives_persistent_invalid_label(monkeypatch, capsys):
     # classify() persistently raises InvalidLabelError for row id=2 only (as if
     # the model kept returning an out-of-enum label through all of classify()'s
     # own retries). score() must not propagate it: the row gets the
-    # UNCLASSIFIED sentinel on both prediction columns, scoring continues for
-    # every other row, and a visible warning is printed -- never a silent drop.
+    # UNCLASSIFIED sentinel on every axis it could not salvage, scoring
+    # continues for every other row, and a visible warning is printed --
+    # never a silent drop. This error carries NO payload (`result=None`), the
+    # legacy shape, so nothing is salvageable and all three axes sentinel --
+    # the conservative fallback.
     def flaky_classify(client, text, model=None, system_prompt=None):
         if text == "bad row":
             raise optimize.InvalidLabelError("category 'cyber' is not one of [...]")
-        return {"category": "policy", "operational_domain": "air"}
+        return {"category": "policy", "operational_domain": "air", "region": "europe"}
 
     monkeypatch.setattr(optimize, "classify", flaky_classify)
 
@@ -976,12 +987,13 @@ def test_anthropic_backend_score_survives_persistent_invalid_label(monkeypatch, 
     bad_row = outcome.merged[outcome.merged["id"] == 2].iloc[0]
     assert bad_row["pred_category"] == optimize.UNCLASSIFIED
     assert bad_row["pred_operational_domain"] == optimize.UNCLASSIFIED
+    assert bad_row["pred_region"] == optimize.UNCLASSIFIED
     good_rows = outcome.merged[outcome.merged["id"] != 2]
     assert (good_rows["pred_category"] == "policy").all()  # everyone else unaffected
 
     out = capsys.readouterr().out
     assert "row 2" in out
-    assert "unclassified after retries, counting as a miss" in out
+    assert "invalid label on category, operational_domain, region" in out
 
 
 def test_run_optimization_surfaces_unclassified_count_in_iteration_record(tmp_path):
@@ -1562,6 +1574,286 @@ def test_goodhart_guard_best_iteration_reads_b_not_c(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Region guard (v3.0.0 / decisions/014). The loop optimizes `category` but
+# rewrites the WHOLE classifier prompt, which carries a region rubric it must
+# not damage. Three defenses, one section: the proposer is told the rubric is
+# frozen, split C is scored on region every iteration so damage is visible,
+# and a region-only invalid label no longer books a phantom category miss.
+# ---------------------------------------------------------------------------
+
+
+REGIONS = ["indo-pacific", "europe", "middle-east", "africa", "americas", "global"]
+
+
+def _region_df(marker, n, start_id=0, region="europe"):
+    """A `_marker_df` with a gold-style `region` column (one label, like C)."""
+    df = _marker_df(marker, n, start_id=start_id)
+    df["region"] = region
+    return df
+
+
+class _RegionScriptedBackend(_ScriptedBackend):
+    """`_ScriptedBackend` that also predicts a `region`, scriptable on split C.
+
+    Category behavior is inherited unchanged, so a test can hold the
+    optimized axis completely fixed and vary ONLY region -- which is what
+    proves the guardrail is inert with respect to the loop's decisions.
+    """
+
+    def __init__(self, *args, c_region=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._c_region = c_region  # region label predicted on C, per iteration
+
+    def score(self, prompt, df):
+        outcome = super().score(prompt, df)
+        if "region" not in df.columns:
+            return outcome
+        merged = outcome.merged.copy()
+        if df is self._c_df and self._c_region is not None:
+            idx = min(self._iteration, len(self._c_region) - 1)
+            merged["pred_region"] = self._c_region[idx]
+        else:
+            merged["pred_region"] = merged["region"]
+        return optimize.ScoreOutcome(merged=merged, tokens=outcome.tokens)
+
+
+def test_optimizer_prompt_tells_the_proposer_the_classifier_has_three_axes():
+    prompt = optimize.OPTIMIZER_SYSTEM_PROMPT
+    assert "region" in prompt
+    for label in REGIONS:
+        assert label in prompt, f"region label {label!r} missing from optimizer prompt"
+
+
+def test_optimizer_prompt_freezes_the_region_rubric_verbatim():
+    # The load-bearing instruction. If this assertion ever fails, the
+    # proposer is free to silently delete the hardest-won axis in the
+    # classifier prompt and the run log would show only a category delta.
+    prompt = optimize.OPTIMIZER_SYSTEM_PROMPT
+    assert "VERBATIM" in prompt
+    assert "FROZEN" in prompt
+    # Names each of the four places region material actually lives in
+    # SYSTEM_PROMPT, since "preserve the region rubric" alone is ambiguous
+    # about the worked examples and the tie-breaking clause.
+    assert "Region rules:" in prompt
+    assert "Worked examples:" in prompt
+    assert "Tie-breaking, in order:" in prompt
+    # And forbids the specific failure modes short of outright deletion.
+    for forbidden in ("paraphrase", "reorder", "shorten", "summarize"):
+        assert forbidden in prompt, f"optimizer prompt does not forbid {forbidden!r}"
+
+
+def test_optimizer_prompt_scopes_the_proposer_to_the_category_axis():
+    assert "category` axis ONLY" in optimize.OPTIMIZER_SYSTEM_PROMPT
+
+
+def test_region_only_invalid_label_does_not_mark_category_as_a_miss(monkeypatch):
+    # THE bug this section exists for: classify() raising on `region` alone
+    # used to sentinel category and domain too, injecting a phantom category
+    # miss into the exact metric that drives the done-signal.
+    def region_only_bad(client, text, model=None, system_prompt=None):
+        if text == "bad region":
+            raise optimize.InvalidLabelError(
+                "region 'atlantic' is not one of [...]",
+                result={
+                    "category": "policy",
+                    "operational_domain": "air",
+                    "region": "atlantic",
+                },
+            )
+        return {"category": "policy", "operational_domain": "air", "region": "europe"}
+
+    monkeypatch.setattr(optimize, "classify", region_only_bad)
+
+    df = pd.DataFrame(
+        [
+            {"id": 1, "text": "t1", "category": "policy", "operational_domain": "air"},
+            {
+                "id": 2,
+                "text": "bad region",
+                "category": "policy",
+                "operational_domain": "air",
+            },
+        ]
+    )
+    backend = optimize.AnthropicBackend(client=object(), model="claude-sonnet-4-6")
+    outcome = backend.score("MY PROMPT", df)
+
+    bad_row = outcome.merged[outcome.merged["id"] == 2].iloc[0]
+    assert bad_row["pred_category"] == "policy"  # salvaged, NOT a miss
+    assert bad_row["pred_operational_domain"] == "air"  # salvaged, NOT a miss
+    assert bad_row["pred_region"] == optimize.UNCLASSIFIED  # the axis that failed
+    # The row is still surfaced as affected, so the run log never hides it.
+    assert outcome.unclassified_ids == [2]
+    # And the metric the done-signal reads is untouched: a perfect category
+    # score, exactly as if the region field had come back clean.
+    cat_f1 = evalmod.macro_average(evalmod.compute_metrics(outcome.merged, "category"))
+    assert cat_f1["f1"] == 1.0
+
+
+def test_salvage_labels_rechecks_every_axis_not_just_the_reported_one():
+    # `_validate` short-circuits on the first bad field, so an error naming
+    # `category` certifies nothing about domain/region. Salvage must re-check
+    # each axis against its own enum rather than trusting the message.
+    exc = optimize.InvalidLabelError(
+        "category 'cyber' is not one of [...]",
+        result={
+            "category": "cyber",  # invalid category (a domain value)
+            "operational_domain": "air",  # valid
+            "region": "atlantis",  # ALSO invalid, and never reported
+        },
+    )
+    assert optimize._salvage_labels(exc) == (
+        optimize.UNCLASSIFIED,
+        "air",
+        optimize.UNCLASSIFIED,
+    )
+
+
+def test_salvage_labels_falls_back_to_all_sentinels_without_a_payload():
+    exc = optimize.InvalidLabelError("no payload at all")
+    assert optimize._salvage_labels(exc) == (
+        optimize.UNCLASSIFIED,
+        optimize.UNCLASSIFIED,
+        optimize.UNCLASSIFIED,
+    )
+
+
+def test_region_guardrail_scores_the_region_axis():
+    merged = pd.DataFrame(
+        [
+            {"id": 1, "region": "europe", "pred_region": "europe"},
+            {"id": 2, "region": "europe", "pred_region": "europe"},
+            {"id": 3, "region": "europe", "pred_region": "global"},
+            {"id": 4, "region": "europe", "pred_region": "global"},
+        ]
+    )
+    guard = optimize.region_guardrail(merged)
+    assert guard is not None
+    assert guard["accuracy"] == 0.5
+    assert 0.0 < guard["macro_f1"] < 1.0
+    assert "europe" in guard["per_class_f1"]
+
+
+def test_region_guardrail_is_none_when_region_is_not_scoreable():
+    # Ground truth without a region column (the synthetic splits A and B --
+    # data/synthetic_articles.csv has no region column) and predictions
+    # without pred_region both mean "not measured", never 0.0.
+    assert (
+        optimize.region_guardrail(pd.DataFrame([{"id": 1, "category": "policy"}]))
+        is None
+    )
+    assert (
+        optimize.region_guardrail(pd.DataFrame([{"id": 1, "region": "europe"}])) is None
+    )
+
+
+def test_region_guardrail_is_recorded_every_iteration(tmp_path):
+    a_df, b_df = _marker_df("A", 8), _marker_df("B", 8, start_id=100)
+    c_df = _region_df("C", 8, start_id=200, region="europe")
+    split = optimize.Split(
+        a=a_df, b=b_df, c=c_df, hashes={"A": "h", "B": "h", "C": "h"}
+    )
+    backend = _RegionScriptedBackend(a_df, b_df, c_df, a_correct=4, b_correct=4)
+    config = optimize.OptimizationConfig(
+        start_prompt="BASE",
+        max_iterations=2,
+        target_f1=0.999,
+        plateau_n=100,
+        token_budget=10_000_000,
+    )
+
+    path = optimize.run_optimization(
+        backend, split, config, run_log_path=str(tmp_path / "run.jsonl")
+    )
+    iters = optimize.iteration_records(optimize.read_run_log(path))
+
+    assert len(iters) == 3  # baseline + 2
+    for rec in iters:
+        assert rec["region_guardrail"] is not None
+        assert rec["region_guardrail"]["macro_f1"] == 1.0
+        # It is a SIBLING of `scores`, never a member: `scores` holds what
+        # the loop optimizes and reads, and this is neither.
+        for split_name in ("A", "B", "C"):
+            assert "region_macro_f1" not in rec["scores"][split_name]
+
+
+def test_region_damage_is_visible_but_never_moves_the_done_signal(tmp_path):
+    # The guardrail's whole contract in one test: two runs identical on every
+    # category score, differing ONLY in whether the region axis collapses.
+    # The loop's decisions (done-signal, best iteration, B history) must be
+    # bit-for-bit identical; only the reported region numbers may differ.
+    def run(c_region, name):
+        a_df, b_df = _marker_df("A", 8), _marker_df("B", 8, start_id=100)
+        c_df = _region_df("C", 8, start_id=200, region="europe")
+        split = optimize.Split(
+            a=a_df, b=b_df, c=c_df, hashes={"A": "h", "B": "h", "C": "h"}
+        )
+        backend = _RegionScriptedBackend(
+            a_df,
+            b_df,
+            c_df,
+            a_correct=4,
+            b_correct=[2, 4, 6],
+            c_correct=8,
+            c_region=c_region,
+        )
+        config = optimize.OptimizationConfig(
+            start_prompt="BASE",
+            max_iterations=2,
+            target_f1=0.999,
+            plateau_n=100,
+            token_budget=10_000_000,
+        )
+        path = optimize.run_optimization(
+            backend, split, config, run_log_path=str(tmp_path / f"{name}.jsonl")
+        )
+        return optimize.read_run_log(path)
+
+    # Healthy: region predicted correctly throughout.
+    healthy = run(["europe", "europe", "europe"], "healthy")
+    # Damaged: the proposer's iteration-1 edit wipes the region rubric, so
+    # every C row collapses onto the catch-all label from then on.
+    damaged = run(["europe", "global", "global"], "damaged")
+
+    healthy_iters = optimize.iteration_records(healthy)
+    damaged_iters = optimize.iteration_records(damaged)
+
+    # 1. The loop behaved identically -- the guardrail steered nothing.
+    assert [r["scores"] for r in healthy_iters] == [r["scores"] for r in damaged_iters]
+    assert [r["done_signal"] for r in healthy_iters] == [
+        r["done_signal"] for r in damaged_iters
+    ]
+    assert healthy[-1]["best_iteration"] == damaged[-1]["best_iteration"]
+
+    # 2. But the damage is unmissable in the log.
+    assert [r["region_guardrail"]["macro_f1"] for r in healthy_iters] == [1.0, 1.0, 1.0]
+    assert damaged_iters[0]["region_guardrail"]["macro_f1"] == 1.0
+    assert damaged_iters[-1]["region_guardrail"]["macro_f1"] == 0.0
+    assert damaged[-1]["region_guardrail_delta"] < 0
+    assert healthy[-1]["region_guardrail_delta"] == 0.0
+
+
+def test_run_summary_region_delta_is_none_when_region_was_not_measured():
+    records = [
+        {
+            "iteration": 0,
+            "tokens_spent": 0,
+            "scores": {s: {"macro_f1": 0.5} for s in "ABC"},
+        },
+        {
+            "iteration": 1,
+            "tokens_spent": 0,
+            "scores": {s: {"macro_f1": 0.6} for s in "ABC"},
+        },
+    ]
+    summary = optimize.make_run_summary(records, "threshold")
+    # Records predating the guardrail (no key at all) must not crash the
+    # summary, and must report "not measured" rather than a fake 0.0.
+    assert summary["region_guardrail_delta"] is None
+    assert summary["region_guardrail_macro_f1"] == {"baseline": None, "best": None}
+
+
+# ---------------------------------------------------------------------------
 # CLI (--dry-run and the live-path wiring), both offline
 # ---------------------------------------------------------------------------
 
@@ -1631,3 +1923,127 @@ def test_cli_live_path_constructs_anthropic_backend_with_client_and_model(
 
     assert captured["client"] == "FAKE_CLIENT"
     assert captured["model"] == optimize.MODEL
+
+
+# --- Region rubric enforcement (the offline half of the region guard) --------
+#
+# `region_guardrail` measures whether region accuracy moved, but only after a
+# full scoring pass on split C. These cover the cheap deterministic check that
+# rejects a mangled rubric the instant the proposal comes back, before any
+# scoring call is spent.
+
+
+def _prompt_with_region_block(extra: str = "") -> str:
+    return (
+        "You are a defense-news analyst.\n"
+        "Category rules:\n- something about categories\n\n"
+        "Region rules:\n"
+        "- Label the theater, not the actor's nationality.\n"
+        "- Do not guess a region the text does not name; unnamed is global.\n\n"
+        "Worked examples:\n"
+        '- "Army awards contract" -> procurement / land / global\n'
+        '- "Carrier transits strait" -> operations / sea / indo-pacific\n' + extra
+    )
+
+
+def test_extract_region_block_returns_none_without_markers():
+    assert optimize.extract_region_block("no region section here") is None
+    assert optimize.extract_region_block("Region rules:\n- unterminated") is None
+
+
+def test_unchanged_prompt_has_no_region_violations():
+    p = _prompt_with_region_block()
+    assert optimize.region_rubric_violations(p, p) == []
+
+
+def test_category_only_edit_is_not_punished():
+    current = _prompt_with_region_block()
+    revised = current.replace(
+        "- something about categories", "- a sharper rule about categories"
+    )
+    assert optimize.region_rubric_violations(current, revised) == []
+
+
+def test_adding_an_example_that_mentions_a_theater_is_not_punished():
+    # Counts use `fewer`, not `different`, so a new category example that
+    # happens to carry a region must not trip the guard.
+    current = _prompt_with_region_block()
+    revised = current + '- "Budget line moves" -> policy / multi / global\n'
+    assert optimize.region_rubric_violations(current, revised) == []
+
+
+def test_deleted_region_block_is_a_violation():
+    current = _prompt_with_region_block()
+    revised = current[: current.find("Region rules:")] + "Worked examples:\n"
+    problems = optimize.region_rubric_violations(current, revised)
+    assert problems
+    assert any("Region rules:" in p for p in problems)
+
+
+def test_reworded_region_block_is_a_violation():
+    current = _prompt_with_region_block()
+    revised = current.replace(
+        "- Label the theater, not the actor's nationality.",
+        "- Label the theater rather than the nationality of the actor.",
+    )
+    problems = optimize.region_rubric_violations(current, revised)
+    assert any("frozen" in p for p in problems)
+
+
+def test_region_dropped_from_a_worked_example_is_a_violation():
+    current = _prompt_with_region_block()
+    revised = current.replace(
+        '- "Carrier transits strait" -> operations / sea / indo-pacific',
+        '- "Carrier transits strait" -> operations / sea',
+    )
+    problems = optimize.region_rubric_violations(current, revised)
+    assert any("indo-pacific" in p for p in problems)
+
+
+def test_pre_v3_prompt_without_a_region_section_is_not_a_violation():
+    current = "Category rules:\n- old two-axis prompt\n"
+    assert optimize.region_rubric_violations(current, current) == []
+
+
+def test_propose_retries_then_raises_when_every_revision_mangles_region():
+    """Enforcement, not just detection.
+
+    A persistently mangled rubric aborts the run rather than reaching a
+    scoring pass.
+    """
+    current = _prompt_with_region_block()
+    mangled = current.replace("Region rules:", "Regions (rewritten):")
+    payload = {
+        "revised_prompt": mangled,
+        "rationale": "r",
+        "edit_summary": "e",
+    }
+
+    client = _FakeProposeSequenceClient([payload])
+    backend = optimize.AnthropicBackend(client=client, model="m")
+
+    with pytest.raises(optimize.ProposalError) as exc:
+        backend.propose(current, "feedback", max_retries=3)
+
+    assert "region" in str(exc.value).lower()
+    assert client.messages.calls == 3, "should retry before giving up"
+
+
+def test_propose_accepts_a_revision_that_leaves_region_alone():
+    current = _prompt_with_region_block()
+    revised = current.replace(
+        "- something about categories", "- a sharper rule about categories"
+    )
+    payload = {
+        "revised_prompt": revised,
+        "rationale": "r",
+        "edit_summary": "e",
+    }
+
+    client = _FakeProposeSequenceClient([payload])
+    backend = optimize.AnthropicBackend(client=client, model="m")
+
+    outcome = backend.propose(current, "feedback", max_retries=3)
+
+    assert outcome.revised_prompt == revised
+    assert client.messages.calls == 1, "a clean proposal must not retry"

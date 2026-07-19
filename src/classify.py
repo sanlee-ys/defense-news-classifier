@@ -239,7 +239,23 @@ class InvalidLabelError(ValueError):
     this rather than silently trusting the wire, in case that guarantee is
     ever violated (e.g. an API regression) -- but it no longer re-samples on
     failure, since there is nothing left for a re-sample to routinely fix.
+
+    ``result`` carries the raw, unvalidated payload the model returned (or
+    ``None`` when a caller raises this without one). It exists because the
+    output is now THREE independent axes (v3.0.0, decisions/014): a payload
+    can be valid on ``category``/``operational_domain`` and invalid on
+    ``region`` alone, and a caller that scores the axes separately -- the
+    prompt-optimization loop -- must not be forced to throw away two good
+    labels because a third was bad. Callers should re-check each field
+    against its own enum rather than assuming which one failed: ``_validate``
+    short-circuits on the FIRST invalid field, so the error names one axis
+    but does not certify the others.
     """
+
+    def __init__(self, message: str, result: dict | None = None) -> None:
+        """Store the offending payload (if any) alongside the message."""
+        super().__init__(message)
+        self.result = result
 
 
 class ClassificationRefusalError(RuntimeError):
@@ -309,13 +325,17 @@ def _validate(result: dict) -> dict:
     domain = result.get("operational_domain")
     region = result.get("region")
     if category not in CATEGORIES:
-        raise InvalidLabelError(f"category {category!r} is not one of {CATEGORIES}")
+        raise InvalidLabelError(
+            f"category {category!r} is not one of {CATEGORIES}", result=result
+        )
     if domain not in DOMAINS:
         raise InvalidLabelError(
-            f"operational_domain {domain!r} is not one of {DOMAINS}"
+            f"operational_domain {domain!r} is not one of {DOMAINS}", result=result
         )
     if region not in REGIONS:
-        raise InvalidLabelError(f"region {region!r} is not one of {REGIONS}")
+        raise InvalidLabelError(
+            f"region {region!r} is not one of {REGIONS}", result=result
+        )
     return result
 
 
