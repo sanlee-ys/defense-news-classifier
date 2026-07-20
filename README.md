@@ -565,6 +565,18 @@ Either command writes an append-only JSONL run log to `evals/optimize/run_<UTC-t
 schema documented in [`evals/optimize/README.md`](evals/optimize/README.md), which also explains
 why the committed `sample_dryrun_run.jsonl` there is a mock, not a result.
 
+**What three real runs measured: the loop overfits, and the split catches it.** Every completed
+live run (2026-07-11, 2026-07-12) improved category macro-F1 on the tuned split **A** while
+*losing* ground on held-out gold **C** — ΔA `+0.153 / +0.082 / +0.179` against ΔC
+`−0.066 / −0.023 / −0.025`, for A−C gaps of `+0.219 / +0.105 / +0.204`. Three runs, two different
+stop signals, same direction every time. So the honest read of rung 1 is *not* "an agent improved
+the prompt": it is that an agent reliably improves the prompt **against the only set it can see**,
+and that the value of the build is the guard that made this visible rather than the optimizer
+itself. C is directional at n≈54 — but 3-for-3 is a pattern, not noise. Per-run detail and the
+table are in [`evals/optimize/README.md`](evals/optimize/README.md); the
+[loop-replay viewer](https://sanlee.me/lab/loop-replay.html) steps through `run_20260712T003435Z`
+iteration by iteration.
+
 ---
 
 ## Tests
