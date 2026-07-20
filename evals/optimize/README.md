@@ -6,19 +6,38 @@ ladder](../../docs/specs/autonomy-ladder.md), spec'd in
 [docs/specs/prompt-optimization-loop.md](../../docs/specs/prompt-optimization-loop.md),
 decision recorded in [ADR-005](../../decisions/005-agentic-prompt-optimization-loop.md)).
 
-## `sample_dryrun_run.jsonl` is a mock, not a result
+## Real runs have landed -- and they all overfit
 
-**This file was produced by `uv run python src/optimize.py --dry-run` --
-zero API calls, a deterministic offline backend simulating "prompt edits
-improve accuracy." It proves the loop mechanics end-to-end (split, score,
-feedback, propose, re-score, done-signal, run log) and gives a downstream
-replay/viewer a real artifact to build against. It is not a measurement of
-the classifier and must never be read, cited, or plotted as one.** The
-`agent_rationale` field on every mock iteration says so explicitly
-(prefixed `[dry-run]`).
+Three live runs completed (2026-07-11 and 2026-07-12). **All three moved
+category macro-F1 up on the tuned split A and *down* on held-out gold C:**
 
-The real run lands when San runs the live command from the project
-[README](../../README.md#rung-1-the-prompt-optimization-loop) himself:
+| Run | Stop | ΔA | ΔC | Gap (A−C) | Tokens |
+|---|---|---|---|---|---|
+| `run_20260711T143640Z` | `threshold` | +0.153 | **−0.066** | +0.219 | 2,641,918 |
+| `run_20260711T185723Z` | `budget_tokens` | +0.082 | **−0.023** | +0.105 | 2,376,187 |
+| `run_20260712T003435Z` | `threshold` | +0.179 | **−0.025** | +0.204 | 1,524,937 |
+
+That consistency is the finding, not a single run's number: three
+independent runs, two different stop signals, and the held-out set moved
+backwards every time. The loop reliably improves the prompt *against the
+set it can see* while giving back a little ground on real gold text --
+which is exactly the failure mode the 3-way split exists to expose, caught
+by the split rather than by hindsight. Treat any single C movement as
+directional (n≈54, see the spec's "Known Limitations"); treat 3-for-3 in
+the same direction as a pattern worth designing against.
+
+`run_20260712T003435Z` is the one replayed on the portfolio's
+[loop-replay viewer](https://sanlee.me/lab/loop-replay.html) -- picked
+because it stopped on `threshold` and spent the least to get there.
+
+Two logs here are **incomplete** (`run_20260711T025015Z`,
+`run_20260711T132027Z`): they have iteration records but no trailing
+`run_summary`, so a run was interrupted. They are readable but should not
+be summarized; `read_run_log` will return their iterations and a `None`
+summary.
+
+To produce another, run the live command from the project
+[README](../../README.md#rung-1-the-prompt-optimization-loop):
 
 ```bash
 uv run --env-file .env python src/optimize.py --max-iterations 8
@@ -29,7 +48,25 @@ uv run --env-file .env python src/optimize.py --max-iterations 8
 the token budget the runaway backstop -- see `DEFAULT_TOKEN_BUDGET`'s
 comment in `src/optimize.py`.)
 
-That produces a new `run_<UTC-timestamp>.jsonl` here alongside the sample.
+## Mocks in this directory, and one that is named like a result
+
+**`sample_dryrun_run.jsonl` was produced by `uv run python src/optimize.py
+--dry-run` -- zero API calls, a deterministic offline backend simulating
+"prompt edits improve accuracy." It proves the loop mechanics end-to-end
+(split, score, feedback, propose, re-score, done-signal, run log) and gives
+a downstream replay/viewer a real artifact to build against. It is not a
+measurement of the classifier and must never be read, cited, or plotted as
+one.** The `agent_rationale` field on every mock iteration says so
+explicitly (prefixed `[dry-run]`).
+
+**`run_20260711T014612Z.jsonl` is also a dry run**, despite the
+`run_<timestamp>` name -- a second `--dry-run` invocation that wrote to the
+normal run path. Its `total_tokens_spent` is `0` and its rationales carry
+the `[dry-run]` prefix, but the filename alone does not say so. It is kept
+rather than renamed so this note has something to point at: **the filename
+is not the provenance check -- `total_tokens_spent: 0` and a `[dry-run]`
+rationale prefix are.** A mock that scores +0.396 on A can look like the
+best run in the directory to anyone sorting by headline delta.
 
 ## File naming
 
