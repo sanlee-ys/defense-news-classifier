@@ -9,8 +9,8 @@ name: claude-review
 #
 # `opened` only, deliberately NOT `synchronize`: re-reviewing on every push to a PR
 # branch is both a per-push API charge and a stream of near-duplicate comments on
-# work still in progress. Ask for a re-review by commenting @claude on the PR, which
-# the action already handles as a trigger phrase.
+# work still in progress. Re-review on demand by commenting @claude -- see the
+# issue_comment trigger below, which is what makes that phrase actually fire.
 #
 # Like evals.yml's paid lane, this deliberately does NOT use pull_request_target --
 # that trigger runs untrusted fork code in the base repo's context WITH secrets. The
@@ -20,6 +20,12 @@ name: claude-review
 on:
   pull_request:
     types: [opened]
+  # On-demand re-review. This is what makes `opened`-only affordable rather than
+  # limiting: one automatic pass, then ask for another when the branch is actually
+  # ready. WITHOUT this trigger the @claude phrase does nothing -- trigger_phrase only
+  # matches once an event delivers the comment.
+  issue_comment:
+    types: [created]
 
 # pull-requests: write is what lets the action post the review; contents/issues are read
 # scopes it needs for diff and PR context. No `contents: write` -- this lane comments,
@@ -37,14 +43,32 @@ permissions:
 
 jobs:
   review:
-    # Fork PRs get no secrets from GitHub, so the API key would be empty and the run
-    # would fail on authentication rather than on anything about the code. Skipping
-    # outright keeps a contributor's first PR from greeting them with a red X they
-    # cannot fix and did not cause.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # Two events, two different guards.
+    #
+    # pull_request: fork PRs get no secrets from GitHub, so the API key would be empty
+    # and the run would fail on authentication rather than on anything about the code.
+    # Skipping outright keeps a contributor's first PR from greeting them with a red X
+    # they cannot fix and did not cause.
+    #
+    # issue_comment: the asymmetric one, and the reason for the author_association
+    # check. Comment events ALWAYS run in the base repo's context WITH secrets --
+    # unlike fork pull_request runs, GitHub does not withhold them. On a public repo
+    # that means any stranger commenting "@claude" would spend this repo's API key.
+    # OWNER-only fails closed before a runner is even allocated. (The action also has
+    # an allowed_non_write_users input, but a guard here costs nothing and does not
+    # depend on the action behaving correctly.)
+    if: >-
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       github.event.comment.author_association == 'OWNER')
     runs-on: ubuntu-latest
+    # Keyed on the PR number, NOT github.ref: on issue_comment events github.ref is the
+    # default branch, so a ref-keyed group would put every @claude comment across every
+    # PR into one group and let them cancel each other.
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
       cancel-in-progress: true
     # "Advisory" has to be enforced, not just intended. Without this, an infrastructure
     # failure in this lane (expired key, action outage, rate limit) posts a red X on a PR
@@ -63,7 +87,7 @@ jobs:
             conventions in CLAUDE.md.
 
             REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
 
             This repo's headline claim is its measured eval numbers, so weight the
             review accordingly:
