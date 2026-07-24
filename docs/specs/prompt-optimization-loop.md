@@ -6,7 +6,7 @@
 **Last updated:** 2026-06-27
 **Roadmap fit:** new **MINOR** (backward-compatible; the `{category, operational_domain}` output contract is untouched). Proposed to sequence **after v2.1.0** — see §11.
 **Related:** ADR 005 (decision record, to be written) · [master PRD](../PRD.md) · [autonomy-ladder roadmap](autonomy-ladder.md) (this loop is **Level 3** of that spine)
-**Portfolio framing:** this is the repo-side implementation of the "loop engineering demo," which is **Level 3** of the [autonomy ladder](autonomy-ladder.md). The repo calls it a *prompt-optimization loop* (what it does); the portfolio calls it *loop engineering* (the skill it demonstrates). The outward showcase is the **classifier's project page** (`/projects/defense-news-classifier.html`), not `/lab` — `/lab` stays a pure front-end sandbox (decided 2026-07-04).
+**Portfolio framing:** this is the repo-side implementation of the "loop engineering demo," which is **Level 3** of the [autonomy ladder](autonomy-ladder.md). The repo calls it a *prompt-optimization loop* (what it does); the portfolio calls it *loop engineering* (the skill it demonstrates). The outward showcase is the **classifier's project page** (`/projects/defense-news-classifier.html`), with the replay viewer alongside it at `/projects/loop-replay.html`. (The old "`/lab` stays a pure front-end sandbox" rule from 2026-07-04 is superseded: the portfolio retired `/lab` as a section and stopped confining interactive work to it — portfolio `ADR-004`.)
 
 ---
 
@@ -254,7 +254,7 @@ Adapted from the usual leading/lagging frame — this is a portfolio artifact, n
 
 ## 12. Showcase & Cascade
 
-- **Showcase:** recorded replay on the **classifier's project page** (`/projects/defense-news-classifier.html`), **step-through-on-click** for v1 (auto-play is P1). Backend (loop) + frontend (player) in one artifact. `/lab` is **not** the home — it stays a pure front-end sandbox (decided 2026-07-04); the player's front-end technique may earn a `/lab` learning-log entry, but the demo lives on the project page.
+- **Showcase:** recorded replay at **`/projects/loop-replay.html`**, cited as evidence from the **classifier's project page** (`/projects/defense-news-classifier.html`), **step-through-on-click** for v1 (auto-play is P1). Backend (loop) + frontend (player) in one artifact. *(Shipped 2026-07-19 and promoted out of `/lab` on 2026-07-23 when the portfolio retired that section — portfolio `ADR-004`. The old rule barring the demo from `/lab` is moot: there is no `/lab` to bar it from, and the page it argues for is the one it now sits beside.)*
 - **Cascade (one body of work, transformed per surface):**
   - **This repo** — the loop code, this spec, ADR 005, the run log (ground truth).
   - **architecture repo** — the cross-repo "how we build loop demos" pattern + portal link (SYS layer).

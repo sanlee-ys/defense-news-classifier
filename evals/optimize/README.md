@@ -27,7 +27,7 @@ directional (n≈54, see the spec's "Known Limitations"); treat 3-for-3 in
 the same direction as a pattern worth designing against.
 
 `run_20260712T003435Z` is the one replayed on the portfolio's
-[loop-replay viewer](https://sanlee.me/lab/loop-replay.html) -- picked
+[loop-replay viewer](https://sanlee.me/projects/loop-replay.html) -- picked
 because it stopped on `threshold` and spent the least to get there.
 
 Two logs here are **incomplete** (`run_20260711T025015Z`,

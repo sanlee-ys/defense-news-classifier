@@ -159,10 +159,13 @@ The ladder is the organizing story for the outward surfaces. Each level, as it l
   Each level's recorded demo + a Decision → Why → Tradeoff writeup lands here, so the classifier's
   whole ladder is told on one page. This page already covers L1 (the single call) and L2 (the BM25
   grounding result); L3 and L4 extend the same page as they ship.
-- **portfolio `/lab`** — front-end craft only, **not** the demo's home. `/lab` stays a pure
-  front-end sandbox (decided 2026-07-04). The replay player's front-end *techniques* (e.g. SVG
-  accuracy curves, a step-through UI) may earn a `/lab` learning-log entry as a technique, but the
-  demo itself is showcased on the project page above.
+- ~~**portfolio `/lab`** — front-end craft only, not the demo's home.~~ **Superseded
+  2026-07-23.** The portfolio retired `/lab` as a section and stopped confining interactive
+  work to it (portfolio `ADR-004`), on the grounds that the split was discounting its own best
+  evidence: the replay viewer was the only interactive proof of L3 and sat under a heading that
+  told readers to expect rough edges. The viewer now lives at `/projects/loop-replay.html`,
+  beside the claim it supports. Nothing about the ladder's rungs changed — only where the
+  evidence is displayed.
 - **learning-notes** — concept-first notes (loop engineering, Goodhart in eval-driven
   optimization, multi-agent handoff), not a project changelog.
 - Aggregated surfaces (portal, portfolio nav, learning-notes index/map) are wired by a **single
