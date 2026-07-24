@@ -1,0 +1,116 @@
+name: claude-review
+
+# Agentic PR review via anthropics/claude-code-action. Full rationale in
+# decisions/016-claude-code-action-pr-review.md.
+#
+# This is an ADVISORY lane, not a gate: it posts review comments and never fails the
+# build. tests.yml and evals.yml are the gates; a model's opinion is not one, and a
+# red X from a non-deterministic reviewer would train the habit of ignoring red Xs.
+#
+# `opened` only, deliberately NOT `synchronize`: re-reviewing on every push to a PR
+# branch is both a per-push API charge and a stream of near-duplicate comments on
+# work still in progress. Re-review on demand by commenting @claude -- see the
+# issue_comment trigger below, which is what makes that phrase actually fire.
+#
+# Like evals.yml's paid lane, this deliberately does NOT use pull_request_target --
+# that trigger runs untrusted fork code in the base repo's context WITH secrets. The
+# plain `pull_request` trigger is safe precisely because GitHub withholds secrets from
+# fork-originated runs; the `if` guard below turns that safety property into a clean
+# skip instead of a confusing red failure on a missing key.
+on:
+  pull_request:
+    types: [opened]
+  # On-demand re-review. This is what makes `opened`-only affordable rather than
+  # limiting: one automatic pass, then ask for another when the branch is actually
+  # ready. WITHOUT this trigger the @claude phrase does nothing -- trigger_phrase only
+  # matches once an event delivers the comment.
+  issue_comment:
+    types: [created]
+
+# pull-requests: write is what lets the action post the review; contents/issues are read
+# scopes it needs for diff and PR context. No `contents: write` -- this lane comments,
+# it never pushes.
+#
+# id-token: write is NOT optional: the action exchanges a GitHub OIDC token for its App
+# token, and without this scope it fails at setupGitHubToken with "Unable to get
+# ACTIONS_ID_TOKEN_REQUEST_URL" before ever reaching the model. It grants the ability to
+# mint an OIDC identity token for this repo, not write access to repo contents.
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+  id-token: write
+
+jobs:
+  review:
+    # Two events, two different guards.
+    #
+    # pull_request: fork PRs get no secrets from GitHub, so the API key would be empty
+    # and the run would fail on authentication rather than on anything about the code.
+    # Skipping outright keeps a contributor's first PR from greeting them with a red X
+    # they cannot fix and did not cause.
+    #
+    # issue_comment: the asymmetric one, and the reason for the author_association
+    # check. Comment events ALWAYS run in the base repo's context WITH secrets --
+    # unlike fork pull_request runs, GitHub does not withhold them. On a public repo
+    # that means any stranger commenting "@claude" would spend this repo's API key.
+    # OWNER-only fails closed before a runner is even allocated. (The action also has
+    # an allowed_non_write_users input, but a guard here costs nothing and does not
+    # depend on the action behaving correctly.)
+    if: >-
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       github.event.comment.author_association == 'OWNER')
+    runs-on: ubuntu-latest
+    # Keyed on the PR number, NOT github.ref: on issue_comment events github.ref is the
+    # default branch, so a ref-keyed group would put every @claude comment across every
+    # PR into one group and let them cancel each other.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: true
+    # "Advisory" has to be enforced, not just intended. Without this, an infrastructure
+    # failure in this lane (expired key, action outage, rate limit) posts a red X on a PR
+    # whose actual gates are green -- which is exactly the "learn to ignore red" failure
+    # ADR-016 adopts this lane to avoid. continue-on-error makes the job's result
+    # advisory at the CI level, not merely by convention.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this pull request for correctness, security, and adherence to the
+            conventions in CLAUDE.md.
+
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+
+            This repo's headline claim is its measured eval numbers, so weight the
+            review accordingly:
+              - Changes to src/classify.py, src/gold_eval.py, or src/eval_gate.py that
+                could move a published metric without a corresponding evals/ update.
+              - Hardcoded model IDs that bypass the pinned constants (SYS-002 requires
+                exact pinned IDs, no date suffixes). Two deliberate exceptions, do
+                NOT flag them: src/classify_rag.py's RAG_MODEL and src/generate.py's
+                MODEL both stay on claude-sonnet-4-6. That code is dormant, kept as
+                the record after decisions/012 retired BM25 grounding; its old pin is
+                what keeps the frozen comparison honest.
+              - Eval numbers typed by hand into README.md or docs instead of coming
+                from evals/metrics.json via the generator scripts.
+              - New ADRs missing a "## Downstream surfaces" section.
+              - Anything that would put non-public-domain text into data/ (ADR-015).
+
+            Be specific and actionable. If the change is clean, say so briefly rather
+            than manufacturing findings -- a review that always finds something trains
+            the reader to skip it.
+          # --model pinned per SYS-002 (exact ID, no date suffix). --max-turns bounds
+          # the agentic loop so a pathological diff cannot run up an unbounded bill.
+          claude_args: |
+            --model claude-sonnet-5
+            --max-turns 8
+          use_sticky_comment: true
+          classify_inline_comments: true

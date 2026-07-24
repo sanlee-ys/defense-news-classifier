@@ -19,6 +19,7 @@ Decisions are recorded here as they are made. Each ADR captures the context, the
 | [013](013-decline-tiered-routing.md) | Decline tiered model routing — measured, it buys nothing at ~2x the cost | Accepted |
 | [014](014-region-field-design.md) | Region field design — six labels with a `global` catch-all, gold-first scope | Accepted |
 | [015](015-public-domain-data-sourcing.md) | All text is public-domain or synthetic — DVIDS + SEC + generated, never scraped or licensed | Accepted |
+| [016](016-claude-code-action-pr-review.md) | Agentic PR review as an advisory lane, not a gate — comments only, never fails the build | Accepted |
 
 ## Format
 
