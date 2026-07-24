@@ -21,13 +21,19 @@ on:
   pull_request:
     types: [opened]
 
-# pull-requests: write is what lets the action post the review; the other two are read
+# pull-requests: write is what lets the action post the review; contents/issues are read
 # scopes it needs for diff and PR context. No `contents: write` -- this lane comments,
 # it never pushes.
+#
+# id-token: write is NOT optional: the action exchanges a GitHub OIDC token for its App
+# token, and without this scope it fails at setupGitHubToken with "Unable to get
+# ACTIONS_ID_TOKEN_REQUEST_URL" before ever reaching the model. It grants the ability to
+# mint an OIDC identity token for this repo, not write access to repo contents.
 permissions:
   contents: read
   pull-requests: write
   issues: read
+  id-token: write
 
 jobs:
   review:
@@ -40,6 +46,12 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
+    # "Advisory" has to be enforced, not just intended. Without this, an infrastructure
+    # failure in this lane (expired key, action outage, rate limit) posts a red X on a PR
+    # whose actual gates are green -- which is exactly the "learn to ignore red" failure
+    # ADR-016 adopts this lane to avoid. continue-on-error makes the job's result
+    # advisory at the CI level, not merely by convention.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
 

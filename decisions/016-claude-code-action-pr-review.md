@@ -32,13 +32,13 @@ Concretely, in `.github/workflows/claude-review.yml`:
 
 | Choice | Value | Why |
 |---|---|---|
-| Authority | Advisory — no gating step | A non-deterministic reviewer that can turn CI red trains the habit of ignoring red. The gates stay deterministic. |
+| Authority | Advisory, enforced by `continue-on-error: true` | A non-deterministic reviewer that can turn CI red trains the habit of ignoring red. The gates stay deterministic. Enforced at the CI level, not by convention — see Consequences. |
+| Permissions | `contents: read`, `pull-requests: write`, `issues: read`, `id-token: write` | Comment-only. `id-token: write` is required: the action exchanges a GitHub OIDC token for its App token and fails before reaching the model without it. |
 | Trigger | `pull_request: [opened]` only | `synchronize` re-reviews on every push: a charge per push and a stream of near-duplicate comments on unfinished work. Re-review on demand via the `@claude` trigger phrase. |
 | Fork PRs | Skipped via `head.repo.full_name == github.repository` | GitHub withholds secrets from fork runs, so the job would fail on a missing key — a red X a contributor cannot fix and did not cause. |
 | `pull_request_target` | **Not used** | Runs untrusted fork code in the base repo's context *with* secrets. Same reasoning already recorded in `evals.yml`'s header. |
 | Model | `claude-sonnet-5`, pinned | [SYS-002](https://github.com/sanlee-ys/architecture/blob/main/decisions/SYS-002-model-tier-standard.md): exact IDs, no date suffixes. Review is not a task an eval has shown needs the escalation tier. |
 | Cost bound | `--max-turns 8` | Caps the agentic loop so a pathological diff cannot run an unbounded bill. |
-| Permissions | `contents: read`, `pull-requests: write`, `issues: read` | Comment-only. No `contents: write`. |
 
 The prompt is aimed at this repo's actual failure modes rather than generic code review: metric
 drift without an artifact regen, hand-typed eval numbers, unpinned model IDs, ADRs missing
@@ -55,6 +55,13 @@ downstream surfaces, non-public-domain text ([ADR-015](015-public-domain-data-so
   the person who just wrote the code.
 - **Advisory means ignorable, and that is the point.** A comment that is wrong costs one dismissal.
   A gate that is wrong costs a blocked merge and, eventually, a habit of merging past red.
+- **"Advisory" needed enforcing, not just intending.** The first run of this lane failed — a
+  missing `id-token: write` scope — and posted a red X on a PR whose real gates were all green.
+  That is precisely the failure this ADR set out to avoid, produced by the lane meant to avoid it.
+  `continue-on-error: true` on the job is the fix: infrastructure failures here (expired key,
+  action outage, rate limit) now surface without turning the PR red. Recorded because the gap
+  between "we intend this to be advisory" and "CI treats it as advisory" is invisible until
+  something breaks.
 - **The prompt is a maintained surface.** It names specific files and ADRs; when those move, the
   prompt goes stale and starts asking for things that no longer apply. It is listed below.
 - **Reviews will sometimes be shallow or wrong.** No eval backs this lane's output quality — it
