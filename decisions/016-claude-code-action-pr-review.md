@@ -94,19 +94,42 @@ downstream surfaces, non-public-domain text ([ADR-015](015-public-domain-data-so
   turn cap reached, nothing posted.** Widened here as a fast-follow before a `src/` PR found it.
   The lesson generalises past the flag: **a lane validated only on its easy case is not validated.**
   Both test PRs here were doc-only, which is exactly the shape that exercises the least.
-- **Dependabot PRs are not reviewed, and the run still says "success".** The action refuses
+- **Dependabot PRs are not reviewed. ~~And the run still says "success".~~** The action refuses
   bot-authored PRs by default — *"Workflow initiated by non-human actor: dependabot (type: Bot).
-  Add bot to allowed_bots list or use `*` to allow all bots."* The step exits 1, but
-  `continue-on-error: true` means the job reports success and the PR stays green. **Accepted, not
-  fixed:** a dependency bump is a lockfile and version pins, `tests.yml` and `evals.yml` are the
-  real gate on it, and reviewing every bump would cost $0.14–0.41 each for close to no signal.
-  Recorded because the alternative is a reader assuming every PR gets reviewed when a recurring
-  class of them never does — the lane's coverage is smaller than its presence suggests. An
-  `allowed_bots` input exists if that judgement ever changes.
+  Add bot to allowed_bots list or use `*` to allow all bots."* **Accepted, not fixed:** a
+  dependency bump is a lockfile and version pins, `tests.yml` and `evals.yml` are the real gate on
+  it, and reviewing every bump would cost $0.14–0.41 each for close to no signal. Recorded because
+  the alternative is a reader assuming every PR gets reviewed when a recurring class of them never
+  does — the lane's coverage is smaller than its presence suggests. An `allowed_bots` input exists
+  if that judgement ever changes.
 
-  Worth noting what this proved incidentally: it is the first time the advisory design was tested
-  by something nobody staged. An infrastructure-level failure inside the lane left a PR with all
-  its real gates green — which is exactly what `continue-on-error` was added for.
+  **Correction, 2026-07-25 (same-day).** The strikethrough above was wrong, and the paragraph that
+  followed it — claiming this incidentally validated the advisory design — was wrong for the same
+  reason. Both said `continue-on-error: true` meant "the job reports success and the PR stays
+  green." It does not. `continue-on-error` was on the **job**, which greens the *workflow run*; the
+  *check run* — the thing the PR displays and `gh pr checks` reads — still concluded `failure`.
+  Measured on this repo's PR #123, run `30141009937`:
+
+  | Surface | Conclusion |
+  |---|---|
+  | Workflow run | `success` |
+  | Check run `review` | **`failure`** |
+
+  So rather than proving the advisory design worked, this was the first case of it **not** working:
+  every Dependabot PR wore a red X, which is the precise habit-forming failure the design exists to
+  prevent. Found by the weekly repo sweep hours after this note was merged.
+
+  **Fixed here, two changes.** `continue-on-error` moved to the action step (job-level kept as a
+  backstop for failures with no step to attach to); and bot-authored PRs are now skipped at the
+  `if`, so the accepted "not reviewed" outcome is a clean skip rather than a runner that boots,
+  authenticates, and fails. The `@claude` owner-comment path is deliberately left ungated — asking
+  for a review on a bump is a human decision and still works.
+
+  **How this got written wrong:** the claim was checked against `gh run view`, which reports the
+  run conclusion, and never against `gh pr checks`, which reports the check run. One command
+  agreed with the belief and was treated as confirmation. `SYS-021` Amendment 1 generalises it —
+  including that the run-level green made the defect invisible to `gh run list --branch main`, the
+  surface a session pre-flight reads.
 - **The lane cannot review changes to itself, by design.** A PR that edits
   `.github/workflows/claude-review.yml` makes the head-ref copy differ from the default branch's,
   and the action refuses to run: *"The workflow file must exist and have identical content to the
