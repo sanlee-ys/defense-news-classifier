@@ -77,6 +77,14 @@ downstream surfaces, non-public-domain text ([ADR-015](015-public-domain-data-so
   deliverable. Worth internalizing beyond this lane: **this repo's other CI jobs fail loudly when
   they do nothing; an agentic job succeeds quietly.** The check to trust is a posted comment, not
   a green tick.
+- **The lane cannot review changes to itself, by design.** A PR that edits
+  `.github/workflows/claude-review.yml` makes the head-ref copy differ from the default branch's,
+  and the action refuses to run: *"The workflow file must exist and have identical content to the
+  version on the repository's default branch."* That guard is correct — it stops a PR from
+  rewriting the reviewer that is about to review it — but the consequence is that **workflow
+  changes are exactly the class of change this lane will never see.** They get human review only.
+  Verifying a change to this lane therefore means merging it and then triggering `@claude` from
+  the default branch, not opening a PR and watching for a comment that structurally cannot come.
 
 ## Downstream surfaces
 
@@ -84,7 +92,7 @@ Surfaces this decision touches, and their state as of 2026-07-24:
 
 | Surface | State |
 |---|---|
-| `.github/workflows/claude-review.yml` | **New.** The lane itself. |
+| `.github/workflows/claude-review.yml` | **New.** The lane itself. Note it cannot review its own changes (see Consequences) — edits here need human review and post-merge `@claude` verification. |
 | `ANTHROPIC_API_KEY` repo secret | Already set (2026-07-11, for `evals.yml`'s live lane). Reused, not re-provisioned. |
 | The review prompt inside the workflow | **Maintained surface.** Names `src/classify.py`, `src/gold_eval.py`, `src/eval_gate.py`, `src/classify_rag.py`, `evals/metrics.json`, ADR-010, ADR-015, and the `## Downstream surfaces` rule. Update it when any of those move or retire. |
 | [ADR-007](007-evals-as-ci-gate.md) | Unchanged. That ADR governs the *gates*; this one adds a lane that deliberately is not one. |
