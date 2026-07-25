@@ -143,6 +143,23 @@ def test_an_empty_waiver_block_cannot_wave_anything_through():
     assert not ok
 
 
+def test_the_consequence_defaults_to_the_publish_wording():
+    """gen_metrics_artifact.py passes nothing and must keep its original message."""
+    _, message = provenance.check(_record(), _fp("edited prompt"))
+    assert provenance.PUBLISH_CONSEQUENCE in message
+
+
+def test_a_caller_can_name_its_own_consequence():
+    """eval_gate.py refuses to GRADE, not to publish -- same remedy, different cause."""
+    _, message = provenance.check(
+        _record(), _fp("edited prompt"), consequence="Grading now would lie."
+    )
+    assert "Grading now would lie." in message
+    assert provenance.PUBLISH_CONSEQUENCE not in message
+    # The shared remedy survives whatever consequence the caller supplies.
+    assert "src/gold_eval.py" in message and "waiver" in message
+
+
 # ---------------------------------------------------------------------------
 # load / write round trip
 # ---------------------------------------------------------------------------

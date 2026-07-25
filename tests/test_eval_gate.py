@@ -5,13 +5,16 @@ ANTHROPIC_API_KEY, so every test here runs against monkeypatched fixtures or the
 committed snapshot in evals/ and data/gold/gold.csv -- no network, no key needed.
 """
 
+import json
 import sys
 
 import pandas as pd
 import pytest
 
+import classify
 import eval_gate
 import gold_eval
+import provenance
 
 # --- gold_eval.metrics() extraction ------------------------------------------
 # This feeds eval_gate.py's gated numbers directly, so its contract is tested
@@ -366,6 +369,113 @@ def test_baseline_merged_honors_a_preds_path_override(tmp_path):
     # The six gated v2 keys are present AND the ungated region numbers ride along.
     assert m["category_accuracy"] == 1.0
     assert m["region_accuracy"] == 1.0
+
+
+# --- check_provenance ---------------------------------------------------------
+# The gate grades a FROZEN snapshot, so "the shipped numbers still clear the bar" is
+# only true while that snapshot still describes the shipped classifier. Without this,
+# editing classify.SYSTEM_PROMPT and skipping the paid gold re-run leaves the offline
+# gate reporting the measured floors as met for a classifier that never made those
+# predictions -- the same hole scripts/gen_metrics_artifact.py already refuses.
+
+
+def test_provenance_passes_on_the_real_committed_snapshot():
+    """The committed sidecar must match the prompt and models on disk today."""
+    assert eval_gate.check_provenance() is True
+
+
+def test_an_edited_prompt_stops_the_gate(monkeypatch, capsys):
+    """The headline case: a prompt edit with no gold re-run must not grade green."""
+    monkeypatch.setattr(classify, "SYSTEM_PROMPT", classify.SYSTEM_PROMPT + "\nedit")
+
+    assert eval_gate.check_provenance() is False
+    assert "STALE SNAPSHOT" in capsys.readouterr().err
+
+
+def test_a_model_swap_stops_the_gate(monkeypatch, capsys):
+    """A model migration invalidates the snapshot as thoroughly as a prompt edit."""
+    monkeypatch.setattr(gold_eval, "WORKHORSE_MODEL", "claude-sonnet-6")
+
+    assert eval_gate.check_provenance() is False
+    assert "workhorse_model" in capsys.readouterr().err
+
+
+def test_the_failure_names_grading_not_publishing(monkeypatch, capsys):
+    """Wrong consequence sends the reader to gen_metrics_artifact.py for a gate bug."""
+    monkeypatch.setattr(classify, "SYSTEM_PROMPT", classify.SYSTEM_PROMPT + "\nedit")
+
+    eval_gate.check_provenance()
+
+    err = capsys.readouterr().err
+    assert "Grading now" in err
+    assert "Publishing now" not in err
+    # The remedy is the shared one -- re-run the eval, or waive it on the record.
+    assert "src/gold_eval.py" in err and "waiver" in err
+
+
+def test_a_waiver_accepting_the_current_fingerprint_lets_the_gate_run(
+    monkeypatch, tmp_path, capsys
+):
+    """A prompt edit must be waivable on the record, or the guard gets deleted."""
+    monkeypatch.setattr(classify, "SYSTEM_PROMPT", "reworded")
+    live = provenance.fingerprint(
+        "reworded", gold_eval.WORKHORSE_MODEL, gold_eval.JUDGE_MODEL
+    )
+    sidecar = tmp_path / "p.json"
+    record = json.loads(
+        provenance.render(provenance.fingerprint("old", "m1", "m2"), "x")
+    )
+    record["waiver"] = {"accepts": live, "reason": "comment-only reword"}
+    sidecar.write_text(json.dumps(record), encoding="utf-8")
+    monkeypatch.setattr(provenance, "PROVENANCE_PATH", str(sidecar))
+
+    assert eval_gate.check_provenance() is True
+    assert "WAIVED" in capsys.readouterr().out
+
+
+def test_a_missing_sidecar_fails_rather_than_skipping(monkeypatch, tmp_path, capsys):
+    """Otherwise deleting one file is a one-command bypass of the whole guard."""
+    monkeypatch.setattr(provenance, "PROVENANCE_PATH", str(tmp_path / "absent.json"))
+
+    assert eval_gate.check_provenance() is False
+    assert "is missing" in capsys.readouterr().err
+
+
+def test_a_non_default_preds_file_is_reported_unpinned_not_failed(tmp_path, capsys):
+    """Only PREDS_PATH has a sidecar; --preds elsewhere is unpinned, not broken.
+
+    The frozen v2 snapshot is the reason this must not hard-fail -- it has no record
+    and must never acquire a hand-written one.
+    """
+    assert eval_gate.check_provenance(str(tmp_path / "experiment.csv")) is True
+
+    out = capsys.readouterr().out
+    assert "UNPINNED" in out
+    assert "No prompt/model pairing" in out
+
+
+def test_the_live_jobs_explicit_default_path_is_still_checked(capsys):
+    """The live job names the default file explicitly; it must still be checked.
+
+    CI passes --preds evals/gold_predictions_v3.csv, which is the default path by
+    another spelling and must not slip through as UNPINNED.
+    """
+    assert eval_gate.check_provenance("evals/gold_predictions_v3.csv") is True
+    assert "UNPINNED" not in capsys.readouterr().out
+
+
+def test_main_exits_nonzero_on_a_stale_snapshot(monkeypatch, capsys):
+    """And says it is a pairing failure, not a breached floor."""
+    monkeypatch.setattr(classify, "SYSTEM_PROMPT", classify.SYSTEM_PROMPT + "\nedit")
+    monkeypatch.setattr(sys, "argv", ["eval_gate.py"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        eval_gate.main()
+
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "not pinned to the classifier on disk" in err
+    assert "below its floor" not in err
 
 
 # --- against the real committed snapshot -------------------------------------
