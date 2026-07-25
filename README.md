@@ -650,7 +650,10 @@ gold-set evals into CI as two gates, split by API cost (full design rationale in
   committed in `evals/` against the floors in
   [`evals/thresholds.toml`](evals/thresholds.toml), via `src/eval_gate.py`. It proves the
   shipped numbers still clear the bar and that the scoring code itself still computes them
-  correctly. It never calls the API.
+  correctly. It never calls the API. Because it grades a *frozen* snapshot, it first
+  checks that snapshot is still pinned to the prompt and models on disk (see below) —
+  otherwise "the shipped numbers clear the bar" quietly stops being a claim about the
+  shipped classifier.
 - **Live capability gate** (`workflow_dispatch` + a weekly schedule only — **never** on
   `pull_request`) — deletes the cached predictions, re-runs `gold_eval.py` against the
   real models, then runs the same gate against the fresh numbers. This is the actual
@@ -705,19 +708,44 @@ it would never report on the PR being merged and there is nothing to require.
 No key needed — it grades whatever is already committed:
 
 ```bash
-uv run python src/eval_gate.py    # grades the frozen v2 baseline snapshot
+uv run python src/eval_gate.py    # grades the committed v3 snapshot
 ```
 
 To exercise the same sequence the live job runs (needs `ANTHROPIC_API_KEY`, costs real
 money, ~108 calls — San only, not something to run casually). The frozen v2 snapshot
 (`evals/gold_predictions.csv`) is a record — never delete it; the fresh run writes the
-v3 file and the gate grades that via `--preds`:
+v3 file and its provenance sidecar, and the gate grades that via `--preds`:
 
 ```bash
-rm -f evals/gold_predictions_v3.csv                    # force a fresh run
+rm -f evals/gold_predictions_v3.csv evals/gold_predictions_v3.provenance.json
+```
+
+```bash
 uv run --env-file .env python src/gold_eval.py
+```
+
+```bash
 uv run python src/eval_gate.py --preds evals/gold_predictions_v3.csv   # no key needed
 ```
+
+### When the gate refuses to grade
+
+`src/eval_gate.py` grades a frozen snapshot, so it first checks that snapshot against
+[`evals/gold_predictions_v3.provenance.json`](evals/gold_predictions_v3.provenance.json)
+— the record of which prompt and models produced it, written by `src/gold_eval.py` on
+the path that actually makes API calls (see `src/provenance.py`). Edit
+`classify.SYSTEM_PROMPT` or swap a model without re-running the gold eval, and the gate
+exits `1` with `STALE SNAPSHOT` **before printing any floors**, rather than reporting the
+measured floors as met for a classifier that never produced those predictions. The same
+guard runs in `scripts/gen_metrics_artifact.py` before publishing.
+
+Two remedies, both on the record: re-run the gold eval so the numbers describe the
+shipped classifier, or add a `waiver` to the sidecar naming the exact new fingerprint and
+the reason it still stands (a reworded comment, say). The waiver auto-expires the moment
+anything changes again, so it can never become a standing skip. Do **not** hand-create a
+sidecar for a snapshot that lacks one — the frozen v2 file has no record and must not
+acquire a fabricated one; `--preds` pointed anywhere other than the v3 snapshot reports
+`UNPINNED` and grades without asserting a pairing.
 
 ---
 

@@ -47,6 +47,35 @@ Versions are tagged by milestone; individual commits are noted where relevant.
   since the finished file would be a blend of two classifiers that no single fingerprint
   could honestly describe. 26 tests across `tests/test_provenance.py` and
   `tests/test_metrics_artifact.py`.
+- **The CI gate can no longer report the measured floors as met for a classifier that
+  never produced the predictions** (`src/eval_gate.py`, `src/provenance.py`). The guard
+  above closed the *publishing* path; the identical failure was still reachable one file
+  over. `src/eval_gate.py` grades the same frozen `evals/gold_predictions_v3.csv` against
+  `evals/thresholds.toml` as the `offline-gate` job on every push and PR, and had no
+  pairing check — so editing `SYSTEM_PROMPT` and skipping the paid gold re-run left the
+  gate printing eight green floors for a classifier that is not the one shipped. The
+  gate's own claim is "the shipped numbers still clear the bar"; *shipped* is the word
+  that had stopped being true.
+
+  `main()` now runs `provenance.check()` before grading and exits `1` on divergence,
+  **before printing any floors**. Its own exit path, deliberately: folding it into the
+  floor result would report a stale snapshot as "a metric is below its floor" and send
+  the reader hunting a regression that never happened. `provenance.check()` grew one
+  optional `consequence` argument so each caller names its own failure (publish vs.
+  grade) while sharing the identical remedy — the wrong consequence would send someone
+  debugging the gate to `gen_metrics_artifact.py`.
+
+  **Scoped to the default v3 snapshot, on purpose.** `gold_eval.py` writes exactly one
+  sidecar, describing `PREDS_PATH`, so that is the only file whose pairing is *knowable*;
+  deriving a per-preds sidecar path would invent a convention nothing produces. `--preds`
+  pointed elsewhere reports `UNPINNED` rather than failing — an ad-hoc predictions file
+  legitimately has no record, and the frozen v2 snapshot must never acquire a hand-written
+  one, since a fabricated fingerprint asserts a pairing nobody verified. A *missing*
+  sidecar for the v3 path is a hard failure, not a skip, or `rm` on one file would be a
+  one-command bypass. The live CI leg is unaffected: it deletes the CSV and the sidecar,
+  re-runs `gold_eval.py` to rewrite both, then grades. 10 new tests in
+  `tests/test_eval_gate.py` and `tests/test_provenance.py`, including a real
+  `SYSTEM_PROMPT` edit turning the gate red.
 
 ---
 
