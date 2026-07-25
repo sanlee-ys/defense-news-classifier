@@ -23,7 +23,7 @@ Decisions are recorded here as they are made. Each ADR captures the context, the
 | [017](017-classical-baseline-bakeoff.md) | Classical ML baseline bake-off — TF-IDF+logreg measured; the LLM wins by 20+ points, the spend is justified with a number | Accepted |
 | [018](018-agent-driven-ml-loop.md) | Rung 2: agent-driven ML loop on the bake-off substrate — rung 1's A/B/C + done-signal architecture reused as shared code | Accepted |
 | [019](019-knn-exemplar-fewshot.md) | kNN-exemplar few-shot — measured and declined as a clean null (n=300 paired, p=0.70); completes the three-shape retrieval series | Accepted |
-| [020](020-l4-multi-agent-pipeline.md) | L4 built: triage → classify → critic with a one-bounce backward edge, fail-closed challenge gate; verdict pending the live runs | Accepted |
+| [020](020-l4-multi-agent-pipeline.md) | L4 built + measured: the backward edge fixed 6/7 of the named cluster, but the over-challenging critic did net harm (scale domain p=0.016) at 4× cost — declined as configured | Accepted |
 
 ## Format
 
