@@ -41,6 +41,11 @@ dev = [
     # direct import in api.py, not just a fastapi transitive.
     "fastapi",
     "pydantic",
+    # ML baseline bake-off (docs/specs/ml-baseline-bakeoff.md): sklearn MODELS the
+    # baseline; metrics stay hand-rolled in eval.py (ADR-004's amended scope).
+    # Dev/eval group only -- the shipped classifier's runtime deps are unchanged.
+    "scikit-learn",
+    "joblib",
 ]
 # Optional analysis extras — installed with `uv sync --group notebook`.
 notebook = [
