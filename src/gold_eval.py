@@ -13,6 +13,11 @@ Reuses the metric functions from eval.py. Resume-safe: predictions are appended 
 evals/gold_predictions_v3.csv as they complete, so a crash costs at most one snippet.
 Writes the report to evals/gold_eval_v3.txt.
 
+A run that makes API calls also records WHICH prompt and models produced the snapshot
+to evals/gold_predictions_v3.provenance.json (see src/provenance.py). That sidecar is
+what stops scripts/gen_metrics_artifact.py from later publishing these numbers under a
+version whose prompt never produced them.
+
 The ``_v3`` filenames are deliberate (ADR-014 migration note): the v2 snapshots
 (``gold_predictions.csv``, ``gold_eval.txt``) are the record the published
 two-axis numbers were graded from and are never overwritten -- ``eval_gate.py``
@@ -37,10 +42,12 @@ import time
 import anthropic
 import pandas as pd
 
+import provenance
 from classify import (
     CATEGORIES,
     DOMAINS,
     REGIONS,
+    SYSTEM_PROMPT,
     BatchItemError,
     InvalidLabelError,
     build_batch_request,
@@ -450,12 +457,40 @@ def main() -> None:
     else:
         done_ids = set()
 
+    live = provenance.fingerprint(SYSTEM_PROMPT, WORKHORSE_MODEL, JUDGE_MODEL)
+
     if set(gold["id"]) - done_ids:
+        # Resuming appends to rows an EARLIER run produced. If the prompt or a model
+        # has changed since, the finished file would be a silent blend of two
+        # classifiers and no single fingerprint could honestly describe it -- so stop
+        # rather than record a half-truth. A fresh run (no rows yet) has nothing to
+        # blend and proceeds normally.
+        if done_ids and os.path.exists(provenance.PROVENANCE_PATH):
+            drift = provenance.divergences(
+                provenance.load()["recorded"],
+                live,
+            )
+            if drift:
+                raise ValueError(
+                    f"Cannot resume {PREDS_PATH}: the {len(done_ids)} existing rows "
+                    "were produced by a different prompt or model.\n"
+                    + "\n".join(drift)
+                    + f"\n\nResuming would mix two classifiers in one snapshot. "
+                    f"Delete {PREDS_PATH} and {provenance.PROVENANCE_PATH} and "
+                    "re-run from scratch."
+                )
+
         client = make_client()
         if args.batch:
             run_predictions_batch(client, gold, done_ids)
         else:
             run_predictions(client, gold, done_ids)
+
+        # Written only on the path that actually made API calls. A report-only rerun
+        # must not re-stamp this file, or it would assert that today's prompt
+        # produced yesterday's rows.
+        provenance.write(live, PREDS_PATH)
+        print(f"Recorded run provenance to {provenance.PROVENANCE_PATH}\n")
     else:
         print("All predictions already present -- skipping API calls.\n")
 

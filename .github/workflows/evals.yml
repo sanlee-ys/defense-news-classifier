@@ -103,8 +103,11 @@ jobs:
       # v2 snapshot (evals/gold_predictions.csv) is a record and is never deleted. This job
       # never commits the refreshed numbers back; updating the checked-in snapshot stays a
       # deliberate, reviewed human PR.
+      # The provenance sidecar goes with it: it names the prompt and models behind the
+      # CSV, so leaving it behind would briefly describe a file that no longer exists.
+      # gold_eval.py rewrites it at the end of the fresh pass.
       - name: Delete cached v3 predictions to force a fresh live run
-        run: rm -f evals/gold_predictions_v3.csv
+        run: rm -f evals/gold_predictions_v3.csv evals/gold_predictions_v3.provenance.json
 
       - name: Re-run the baseline + judge eval (~108 API calls)
         env:
