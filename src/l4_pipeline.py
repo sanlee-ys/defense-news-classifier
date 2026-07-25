@@ -578,7 +578,7 @@ def build_report() -> str:
         )
         n = len(merged)
         lines.append("== SECONDARY: scale (n=300) do-no-harm vs judge labels ==")
-        lines.append("   (region has no scale answer key until v3.1.0 -- not scored;")
+        lines.append("   (region has no scale answer key yet -- not scored;")
         lines.append("    baseline = ADR-019's fresh same-prompt arm, zero re-spend)")
         for axis in ("category", "operational_domain"):
             base_ok = merged[axis] == merged[f"base_{axis}"]

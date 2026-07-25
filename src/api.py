@@ -37,7 +37,7 @@ app = FastAPI(
     description=(
         "Classify a defense-news snippet into a category, operational domain, and region."
     ),
-    version="3.0.0",
+    version="3.1.0",
     lifespan=lifespan,
 )
 

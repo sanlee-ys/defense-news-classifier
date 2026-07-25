@@ -21,7 +21,7 @@ Design constraints (from the spec, non-negotiable):
   (ADR-004: sklearn may model, it may not measure).
 
 Covers category and operational_domain only: the scaled set has no region labels
-(the scaled region eval is v3.1.0, unscheduled). Train labels are judge-generated,
+(the scaled region eval is unscheduled). Train labels are judge-generated,
 so the baseline inherits the judge's ~5-6% disagreement-with-human ceiling and is
 then tested against human labels -- the direction that handicaps the baseline, not
 flatters it.
@@ -235,7 +235,8 @@ def main() -> None:
     out("Train : 300 DVIDS snippets, Opus-JUDGE labels (not human; the")
     out("        baseline inherits the judge's ~5-6% human-disagreement ceiling).")
     out("Test  : the 54-row human gold set, touched once. Region is NOT covered")
-    out("        (no region labels exist in the training data until v3.1.0).")
+    out("        (the training data has no region labels until the scaled")
+    out("        region eval ships).")
     out("Config: word 1-2 grams, english stop words, min_df=2,")
     out("        LogisticRegression(class_weight='balanced') per axis.")
     out("Caveat: 'industry' has n=1 training row -- structurally unlearnable.")
