@@ -1,7 +1,7 @@
 # Feature Spec — L4: Multi-Agent Classification (triage → classify → critic)
 
-**Version:** 0.1 (Draft — three open questions in §9 need San's call before the build session)
-**Status:** Proposed
+**Version:** 1.0 (all §9 forks resolved 2026-07-25 — ready to build)
+**Status:** Accepted
 **Author:** San Lee
 **Last updated:** 2026-07-25
 **Roadmap fit:** new **MINOR** when built (additive pipeline + measurement; the shipped single-call classifier and its `{category, operational_domain, region}` contract are untouched — L4 *wraps* the classifier, it never modifies it).
@@ -115,17 +115,16 @@ Gold: 54 × (triage + critic) + ~7-10 bounces ≈ **~120 extra workhorse calls**
 free stored baseline. Scale do-no-harm pass: 300 × 2 + bounces ≈ **~630**. Total ≈ **750
 calls**, same order as ADR-019's runs. No premium-tier calls anywhere.
 
-## 9. Open questions — San's call before the build session
+## 9. Design forks — RESOLVED (San, 2026-07-25)
 
-1. **Does `classify()` see triage's evidence, or stay blind?** Recommended: **blind** (as
-   specced above) — the pipeline then measures the *critic's* marginal value cleanly, and the
-   shipped call stays byte-identical to production. The alternative (evidence-augmented
-   classify) tests a different, bigger claim and muddies attribution.
-2. **Bounce cap 1 vs 2.** Recommended: **1**. The known failure mode is a single rubric miss;
-   a second bounce only matters if the first re-classify ignores the challenge, and that case
-   is more honestly surfaced as `contested` in the log than argued down by repetition.
-3. **Does the critic cover all three axes from day one, or region-only first?** Recommended:
-   **all three, with the rubric-checkable-claims charter doing the narrowing** — a
-   region-only critic would bake the hypothesis into the harness and make the do-no-harm
-   claim on category/domain vacuous (an actor that can't touch an axis can't break it, but
-   also can't be credited for restraint).
+1. **`classify()` stays blind to triage's evidence.** The pipeline measures the *critic's*
+   marginal value cleanly, and the shipped call stays byte-identical to production. The
+   alternative (evidence-augmented classify) tests a different, bigger claim and muddies
+   attribution.
+2. **Bounce cap = 1.** The known failure mode is a single rubric miss; a re-classify that
+   ignores the challenge is surfaced honestly as `contested` in the log, not argued down by
+   repetition.
+3. **The critic covers all three axes**, with the rubric-checkable-claims charter doing the
+   narrowing — a region-only critic would bake the hypothesis into the harness and make the
+   do-no-harm claim on category/domain vacuous (an actor that can't touch an axis can't
+   break it, but also can't be credited for restraint).

@@ -25,7 +25,7 @@ This roadmap is the map. The per-level specs and ADRs are the territory.
 | **L1 — Single call** | Prompt + structured `{category, operational_domain}` + eval | Human runs each item | **Shipped** (v1) |
 | **L2 — Augmented** | BM25 retrieval grounds the label in a corpus | Human runs it; the model reaches for a tool | **Shipped** (v2.0.0), then **retired** ([ADR-012](../../decisions/012-retire-bm25-grounding.md)) |
 | **L3 — Autonomous loop** | Wrapped in a loop that iterates to an explicit done-signal | The system decides when it is done | **Built** — rung 1 ([ADR-005](../../decisions/005-agentic-prompt-optimization-loop.md)) rode the `v2.1.0` tag; rung 2 ([ADR-018](../../decisions/018-agent-driven-ml-loop.md), `src/ml_loop.py`) built 2026-07-25 on the [ML bake-off](ml-baseline-bakeoff.md) substrate — first live run pending |
-| **L4 — Multi-agent** | Decomposed: triage → classify → critic that can hand work *backward* | Multiple agents coordinate | **Spec'd** ([l4-multi-agent](l4-multi-agent.md), Proposed 2026-07-25 — three §9 forks await San's call); build-vs-adopt decided in [§7](#7-l4-build-vs-adopt-decision-2026-07-11) |
+| **L4 — Multi-agent** | Decomposed: triage → classify → critic that can hand work *backward* | Multiple agents coordinate | **Spec'd, ready to build** ([l4-multi-agent](l4-multi-agent.md), Accepted 2026-07-25, all forks resolved); build-vs-adopt decided in [§7](#7-l4-build-vs-adopt-decision-2026-07-11) |
 
 ## 3. Vocabulary (avoid the collision)
 
@@ -106,8 +106,9 @@ the critic is what catches the classifier gaming its own metric.
   the one named error cluster (the 7× `global`-pulled-to-a-region rows) — the honest
   hypothesis that gives the critic a measurable target instead of vibes. Inherits §7's
   hand-roll decision and the governance primitives (bounce cap = circuit breaker,
-  fail-closed accept, evidence-claims-only charter = confidence × risk). Three open forks
-  (its §9) need San's call; then the build is its own session and earns ADR-020.
+  fail-closed accept, evidence-claims-only charter = confidence × risk). All §9 forks
+  resolved 2026-07-25 (classify blind, cap 1, all-axes critic); the build is its own
+  session and earns ADR-020.
 
 ## 7. L4 build-vs-adopt decision (2026-07-11)
 
