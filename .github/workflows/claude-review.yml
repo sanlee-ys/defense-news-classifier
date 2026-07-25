@@ -107,10 +107,22 @@ jobs:
             Be specific and actionable. If the change is clean, say so briefly rather
             than manufacturing findings -- a review that always finds something trains
             the reader to skip it.
+
+            Post the review with `gh pr comment` for top-level findings, and
+            mcp__github_inline_comment__create_inline_comment (with confirmed: true)
+            for anything tied to a specific line. Reviewing without posting is a
+            no-op -- the comment IS the deliverable.
           # --model pinned per SYS-002 (exact ID, no date suffix). --max-turns bounds
           # the agentic loop so a pathological diff cannot run up an unbounded bill.
+          #
+          # --allowedTools is NOT optional and its absence fails SILENTLY. Without it the
+          # first live run went green in 36s, spent $0.14 over 7 turns, and posted
+          # nothing: every attempt to comment became one of 6 permission denials, which
+          # are not job failures. A review lane that reviews and cannot speak looks
+          # exactly like a healthy one from the checks list.
           claude_args: |
             --model claude-sonnet-5
-            --max-turns 8
+            --max-turns 15
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           use_sticky_comment: true
           classify_inline_comments: true

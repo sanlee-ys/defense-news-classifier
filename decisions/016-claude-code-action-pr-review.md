@@ -39,7 +39,8 @@ Concretely, in `.github/workflows/claude-review.yml`:
 | Fork PRs | Skipped via `head.repo.full_name == github.repository` | GitHub withholds secrets from fork runs, so the job would fail on a missing key — a red X a contributor cannot fix and did not cause. |
 | `pull_request_target` | **Not used** | Runs untrusted fork code in the base repo's context *with* secrets. Same reasoning already recorded in `evals.yml`'s header. |
 | Model | `claude-sonnet-5`, pinned | [SYS-002](https://github.com/sanlee-ys/architecture/blob/main/decisions/SYS-002-model-tier-standard.md): exact IDs, no date suffixes. Review is not a task an eval has shown needs the escalation tier. |
-| Cost bound | `--max-turns 8` | Caps the agentic loop so a pathological diff cannot run an unbounded bill. |
+| Cost bound | `--max-turns 15` | Caps the agentic loop so a pathological diff cannot run an unbounded bill. Measured: a real run costs ~$0.14 at 7 turns. |
+| Tool grant | `--allowedTools` naming the comment tools | Required, and it fails **silently** without them — see Consequences. |
 
 The prompt is aimed at this repo's actual failure modes rather than generic code review: metric
 drift without an artifact regen, hand-typed eval numbers, unpinned model IDs, ADRs missing
@@ -68,6 +69,14 @@ downstream surfaces, non-public-domain text ([ADR-015](015-public-domain-data-so
 - **Reviews will sometimes be shallow or wrong.** No eval backs this lane's output quality — it
   ships on judgment, unlike every capability claim this repo makes. If it produces noise, the
   honest response is to tighten the prompt or remove the lane, not to leave it running and unread.
+- **A green run does not mean a review happened.** The second live run passed in 36 seconds,
+  spent $0.14 across 7 turns, and posted nothing. `--allowedTools` had not been set, so the
+  action denied every attempt to comment — `permission_denials_count: 6` — and tool denials are
+  not job failures. From the checks list it was indistinguishable from a healthy run. The
+  workflow now names the comment tools explicitly, and the prompt states that posting *is* the
+  deliverable. Worth internalizing beyond this lane: **this repo's other CI jobs fail loudly when
+  they do nothing; an agentic job succeeds quietly.** The check to trust is a posted comment, not
+  a green tick.
 
 ## Downstream surfaces
 
