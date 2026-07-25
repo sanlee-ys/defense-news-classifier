@@ -63,6 +63,46 @@ agent could not beat a fixed configuration," which would be a publishable negati
 in this repo's voice — is recorded when it exists. No version bump until then; the
 capability sits in `[Unreleased]` per the project's precedent (rung 1 waited for v2.1.0).
 
+## Amendment — live-run verdict (2026-07-25)
+
+San ran the first live loop the day the code merged (Sonnet proposer, 8-iteration cap,
+100k token budget; log `run_20260725T153551Z.jsonl`, gitignored per policy — the numbers
+below are the record). Six iterations, stopped on **plateau**. The verdict:
+
+**The agent improved the metric it could see and degraded the one that matters — and the
+harness caught it.**
+
+| | B (validation, judge-labeled) | C (held-out human gold) |
+|---|---|---|
+| baseline (iter 0) | 0.639 | 0.631 |
+| best-by-B (iter 2) | **0.699** (+6.0) | **0.545** (−8.6) |
+
+The mechanism is distribution shift, not classic peeking: the agent never sees B, but A
+and B are both judge-labeled DVIDS wire text, so the keyword features it mined from A's
+errors (platform names, service designators) genuinely generalize *within* that
+distribution and B rewards them. C is the human-labeled gold set — different labeler,
+different text mix (it includes the SEC-filing snippets) — and the same DVIDS-shaped
+keywords mislead there. This is exactly the B-vs-C gap the ADR-005 split design predicted
+("fit the judge's labeling style" vs "agreement with humans"), now observed live. Every
+guard behaved: plateau fired after three non-improving B iterations, best-iteration
+selection read B alone, and C exposed the trade precisely because nothing was allowed to
+optimize it.
+
+Two secondary observations for the writeup:
+
+- **Prompt adherence:** iteration 1 dumped ten keyword groups at once despite the
+  one-coherent-change-per-iteration instruction. It passed validation (the bounds
+  deliberately don't encode experimental discipline), but it makes that iteration's B gain
+  unattributable — the same species of proposer drift rung 1 documented.
+- **The overfit tail is visible in the trace:** iterations 3–5 show A flat, B declining,
+  the agent mining ever-narrower signals (`command_change_ops`) that were already noise.
+
+Standing verdict: rung 2's live result is a **measured negative-transfer finding**, the
+Goodhart centerpiece demonstrated end-to-end rather than merely designed for. It is
+arguably the stronger portfolio artifact than a win: the loop's value was proven by the
+held-out set vetoing the loop's own best iteration. The shipped classifier is, as ever,
+unchanged. This verdict unblocks the portfolio surfaces listed under Downstream surfaces.
+
 ## Consequences
 
 - **L3 of the autonomy ladder is now fully built** (both rungs); the remaining L3 work is
