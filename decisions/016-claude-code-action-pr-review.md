@@ -39,8 +39,8 @@ Concretely, in `.github/workflows/claude-review.yml`:
 | Fork PRs | Skipped via `head.repo.full_name == github.repository` | GitHub withholds secrets from fork runs, so the job would fail on a missing key — a red X a contributor cannot fix and did not cause. |
 | `pull_request_target` | **Not used** | Runs untrusted fork code in the base repo's context *with* secrets. Same reasoning already recorded in `evals.yml`'s header. |
 | Model | `claude-sonnet-5`, pinned | [SYS-002](https://github.com/sanlee-ys/architecture/blob/main/decisions/SYS-002-model-tier-standard.md): exact IDs, no date suffixes. Review is not a task an eval has shown needs the escalation tier. |
-| Cost bound | `--max-turns 15` | Caps the agentic loop so a pathological diff cannot run an unbounded bill. Measured: a real run costs ~$0.14 at 7 turns. |
-| Tool grant | `--allowedTools` naming the comment tools | Required, and it fails **silently** without them — see Consequences. |
+| Cost bound | `--max-turns 20` | Caps the agentic loop so a pathological diff cannot run an unbounded bill. Measured here: ~$0.14 on small doc-only diffs; kb-agent's larger prompt runs ~$0.37. |
+| Tool grant | `--allowedTools` naming `Read,Grep,Glob` + the comment tools | Required, and it fails **silently** without them — see Consequences. |
 
 The prompt is aimed at this repo's actual failure modes rather than generic code review: metric
 drift without an artifact regen, hand-typed eval numbers, unpinned model IDs, ADRs missing
@@ -77,6 +77,15 @@ downstream surfaces, non-public-domain text ([ADR-015](015-public-domain-data-so
   deliverable. Worth internalizing beyond this lane: **this repo's other CI jobs fail loudly when
   they do nothing; an agentic job succeeds quietly.** The check to trust is a posted comment, not
   a green tick.
+- **This lane shipped with a latent version of kb-agent's failure, and got away with it.**
+  Until 2026-07-25 the grant named only the comment and `gh pr` tools — no `Read`/`Grep`/`Glob` —
+  while the prompt asks about `src/classify.py`, `evals/metrics.json` and the dormant model pins.
+  Both PRs that exercised it happened to be small and doc-only, so it never needed to open a file
+  and never hit the wall. [kb-agent's ADR-008](https://github.com/sanlee-ys/kb-agent/blob/main/decisions/ADR-008-claude-code-action-pr-review.md)
+  hit it immediately on a prompt that did require reading source: **12 denials, 16 turns, $0.50,
+  turn cap reached, nothing posted.** Widened here as a fast-follow before a `src/` PR found it.
+  The lesson generalises past the flag: **a lane validated only on its easy case is not validated.**
+  Both test PRs here were doc-only, which is exactly the shape that exercises the least.
 - **The lane cannot review changes to itself, by design.** A PR that edits
   `.github/workflows/claude-review.yml` makes the head-ref copy differ from the default branch's,
   and the action refuses to run: *"The workflow file must exist and have identical content to the
