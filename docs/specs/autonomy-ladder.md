@@ -25,7 +25,7 @@ This roadmap is the map. The per-level specs and ADRs are the territory.
 | **L1 — Single call** | Prompt + structured `{category, operational_domain}` + eval | Human runs each item | **Shipped** (v1) |
 | **L2 — Augmented** | BM25 retrieval grounds the label in a corpus | Human runs it; the model reaches for a tool | **Shipped** (v2.0.0), then **retired** ([ADR-012](../../decisions/012-retire-bm25-grounding.md)) |
 | **L3 — Autonomous loop** | Wrapped in a loop that iterates to an explicit done-signal | The system decides when it is done | **Built** — rung 1 ([ADR-005](../../decisions/005-agentic-prompt-optimization-loop.md)) rode the `v2.1.0` tag; rung 2 ([ADR-018](../../decisions/018-agent-driven-ml-loop.md), `src/ml_loop.py`) built 2026-07-25 on the [ML bake-off](ml-baseline-bakeoff.md) substrate — first live run pending |
-| **L4 — Multi-agent** | Decomposed: triage → classify → critic that can hand work *backward* | Multiple agents coordinate | **To spec** — build-vs-adopt decided, see [§7](#7-l4-build-vs-adopt-decision-2026-07-11) |
+| **L4 — Multi-agent** | Decomposed: triage → classify → critic that can hand work *backward* | Multiple agents coordinate | **Spec'd** ([l4-multi-agent](l4-multi-agent.md), Proposed 2026-07-25 — three §9 forks await San's call); build-vs-adopt decided in [§7](#7-l4-build-vs-adopt-decision-2026-07-11) |
 
 ## 3. Vocabulary (avoid the collision)
 
@@ -101,12 +101,13 @@ the critic is what catches the classifier gaming its own metric.
   [ML baseline bake-off](ml-baseline-bakeoff.md) ([ADR-017](../../decisions/017-classical-baseline-bakeoff.md))
   with the same A/B/C + done-signal honesty architecture as rung 1. What remains for the
   full L3 story is a recorded **live** run (San drives; the dry-run path is CI-covered).
-- **L4 is a new level stacked on the two loop rungs (both now built).** Per one-concern-per-session,
-  L4 gets its own spec + branch **after** L3's rungs land. "Cover all four" is the destination,
-  not a single build. When L4 is picked up, it earns its own feature spec and an ADR. The one L4
-  decision already settled — *build the multi-agent orchestration by hand vs. adopt a managed-agent
-  framework* — is recorded in [§7](#7-l4-build-vs-adopt-decision-2026-07-11) so the eventual spec
-  inherits it rather than re-litigating it.
+- **L4 is spec'd** ([l4-multi-agent](l4-multi-agent.md), Proposed 2026-07-25): triage →
+  classify → critic with the backward edge as a rubric-checkable evidence review, aimed at
+  the one named error cluster (the 7× `global`-pulled-to-a-region rows) — the honest
+  hypothesis that gives the critic a measurable target instead of vibes. Inherits §7's
+  hand-roll decision and the governance primitives (bounce cap = circuit breaker,
+  fail-closed accept, evidence-claims-only charter = confidence × risk). Three open forks
+  (its §9) need San's call; then the build is its own session and earns ADR-020.
 
 ## 7. L4 build-vs-adopt decision (2026-07-11)
 
