@@ -23,6 +23,10 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from gen_metrics_artifact import ARTIFACT_PATH, build_artifact  # noqa: E402
 
+import classify  # noqa: E402
+import gold_eval  # noqa: E402
+import provenance  # noqa: E402
+
 
 def _committed() -> dict:
     return json.loads(ARTIFACT_PATH.read_text(encoding="utf-8"))
@@ -89,3 +93,40 @@ def test_region_keys_present_on_the_v3_snapshot():
 def test_artifact_is_marked_generated():
     """A hand-edit is the one way this drifts; say so in the file itself."""
     assert "do not hand-edit" in _committed()["$comment"]
+
+
+def test_the_snapshot_still_matches_the_prompt_that_produced_it():
+    """Edit SYSTEM_PROMPT without re-running the gold eval, and this fails.
+
+    The version test above pins a literal, which catches nothing about the *inputs*:
+    evals/gold_predictions_v3.csv is a frozen paid run, and until this existed
+    nothing connected it to the prompt behind it. A prompt edit plus a version bump
+    would have published the old classifier's numbers as the new version's.
+
+    Backfilled on evidence, not assumption: the SYSTEM_PROMPT literal at ad449db
+    (the commit that froze the snapshot) and at HEAD hash identically, so the
+    recorded fingerprint states a verified fact.
+    """
+    ok, message = provenance.check(
+        provenance.load(str(REPO_ROOT / provenance.PROVENANCE_PATH)),
+        provenance.fingerprint(
+            classify.SYSTEM_PROMPT,
+            gold_eval.WORKHORSE_MODEL,
+            gold_eval.JUDGE_MODEL,
+        ),
+    )
+    assert ok, message
+
+
+def test_artifact_publishes_the_recorded_fingerprint_not_a_live_one():
+    """Recomputing this from the live prompt would make the guard self-satisfying.
+
+    The artifact's job here is to say which prompt produced these numbers. If
+    build_artifact() hashed classify.SYSTEM_PROMPT instead of reading the sidecar,
+    the published value would silently re-stamp itself on every regeneration — the
+    exact hole this closes, one file further along.
+    """
+    recorded = provenance.load(str(REPO_ROOT / provenance.PROVENANCE_PATH))["recorded"]
+    assert _committed()["provenance"] == recorded
+    for key in ("prompt_sha256", "workhorse_model", "judge_model"):
+        assert key in recorded

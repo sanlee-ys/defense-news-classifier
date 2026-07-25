@@ -17,6 +17,14 @@ Computed via ``gold_eval.metrics()`` — the same function ``eval_gate.py`` grad
 against ``thresholds.toml`` — so the artifact, the CI gate and the printed report
 cannot disagree with each other.
 
+One input is not computed, though: ``evals/gold_predictions_v3.csv`` is a frozen
+snapshot of a paid live run. Nothing used to tie it to the prompt behind it, so
+editing ``classify.SYSTEM_PROMPT`` and bumping the version — without paying for a
+gold re-run — would have this script stamp the NEW version onto the OLD prompt's
+predictions, with ``--check`` green throughout. ``src/provenance.py`` closes that:
+both modes now refuse to run when the snapshot's recorded fingerprint no longer
+matches the prompt and models on disk.
+
 Run locally:
     uv run python scripts/gen_metrics_artifact.py          # rewrite the artifact
     uv run python scripts/gen_metrics_artifact.py --check  # exit 1 if stale
@@ -34,11 +42,16 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 import pandas as pd  # noqa: E402
 
+import classify  # noqa: E402
 import gold_eval  # noqa: E402
+import provenance  # noqa: E402
 
 ARTIFACT_PATH = REPO_ROOT / "evals" / "metrics.json"
 GOLD_PATH = REPO_ROOT / "data" / "gold" / "gold.csv"
 PREDS_PATH = REPO_ROOT / "evals" / "gold_predictions_v3.csv"
+# Absolute, like its siblings above: this script is run from CI, from the repo root
+# and from a worktree, and a guard that silently no-ops on a bad cwd is not a guard.
+PROVENANCE_PATH = REPO_ROOT / provenance.PROVENANCE_PATH
 
 # Rounded to one decimal because that is how the numbers are quoted everywhere —
 # publishing more precision than any consumer uses invites a mismatch that is real
@@ -84,6 +97,13 @@ def build_artifact() -> dict:
             "applied to wire contracts."
         ),
         "version": _project_version(),
+        # Published from the RECORDED fingerprint, never recomputed from the live
+        # SYSTEM_PROMPT. That direction is the whole point: the artifact must say
+        # which prompt actually produced these numbers, so it stays truthful even
+        # when the code has since moved on. main() is what refuses to publish in
+        # that case -- keeping the two jobs separate means a divergence surfaces as
+        # a pairing failure rather than as a silent re-stamp.
+        "provenance": provenance.load(str(PROVENANCE_PATH))["recorded"],
         "gold": gold_block,
     }
 
@@ -106,6 +126,23 @@ def main() -> int:
         help="Verify the committed artifact is current; do not write.",
     )
     args = parser.parse_args()
+
+    # Gate BOTH modes, not just --check. The reported failure was the generator
+    # stamping a new version onto old-prompt predictions, so refusing to *write* is
+    # the half that actually closes it; --check only catches it after the fact.
+    ok, message = provenance.check(
+        provenance.load(str(PROVENANCE_PATH)),
+        provenance.fingerprint(
+            classify.SYSTEM_PROMPT,
+            gold_eval.WORKHORSE_MODEL,
+            gold_eval.JUDGE_MODEL,
+        ),
+    )
+    if not ok:
+        print(message, file=sys.stderr)
+        return 1
+    if message:
+        print(message)
 
     rendered = json.dumps(build_artifact(), indent=2) + "\n"
 
