@@ -1,7 +1,7 @@
 # Feature Spec — Classical ML Baseline Bake-Off
 
-**Version:** 0.1 (Draft)
-**Status:** Proposed — not started
+**Version:** 1.0
+**Status:** Executed 2026-07-25 — verdict in [ADR-017](../../decisions/017-classical-baseline-bakeoff.md) (the "next free ADR is 016" note in §6 was stale; 016 went to the PR-review lane)
 **Author:** San Lee
 **Last updated:** 2026-07-19
 **Roadmap fit:** new **MINOR** (additive measurement harness; the `{category, operational_domain, region}` output contract is untouched, and nothing is swapped into the shipped classifier).

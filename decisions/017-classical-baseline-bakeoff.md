@@ -78,3 +78,25 @@ settling the spec's §9 question in favor of the shipped default.
   feature engineering. Building the manual version first was the spec's point.
 - The spec said "next free ADR is 016"; 016 was taken by the PR-review lane in the
   interim, so the verdict lands here as 017.
+
+## Downstream surfaces
+
+Touched by this change (all updated in the same PR):
+
+- `src/baseline_ml.py`, `tests/test_baseline_ml.py` — the harness and its guards (new).
+- `evals/baseline_eval.txt`, `evals/baseline_predictions.csv` — the record (new);
+  `evals/baseline_model.joblib` is gitignored (binary, reproducible offline).
+- `pyproject.toml` + `uv.lock` — sklearn/joblib in the dev group only.
+- `README.md` — "Why an LLM at all" section; LLM figures carry SYS-019 metric markers,
+  baseline figures are a frozen experiment record like routing's.
+- `CHANGELOG.md` `[Unreleased]`, `decisions/README.md` index row.
+- `docs/specs/ml-baseline-bakeoff.md` — status flips to Executed; its "next ADR is 016"
+  note is superseded by this ADR's existence.
+
+To sweep later, deliberately NOT in this PR:
+
+- `docs/specs/autonomy-ladder.md` — rung 2's substrate now exists; the rung-2 build
+  session updates its status line.
+- Portfolio project page / architecture narrative — the bake-off verdict is new
+  portfolio material; quoting it there follows SYS-019 (add keys or cite the frozen
+  report), handled when that content is written.
