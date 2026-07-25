@@ -48,10 +48,18 @@ downstream surfaces, non-public-domain text ([ADR-015](015-public-domain-data-so
 
 ## Consequences
 
-- **Cost is real but small and bounded.** One review per PR opened, `--max-turns 8`, Sonnet
-  pricing. At this repo's PR volume that is single-digit dollars a month, and the `opened`-only
-  trigger means it does not scale with pushes. This is a smaller and more predictable spend than
-  `evals.yml`'s live lane, which ADR-007 already accepted.
+- **Cost is real but small and bounded.** One review per PR opened, `--max-turns 20`, Sonnet
+  pricing. Measured across four live runs: **$0.14** on a small doc-only diff, **$0.41** on a
+  review that actually reads source. At this repo's PR volume that is single-digit dollars a
+  month, and the `opened`-only trigger means it does not scale with pushes. This is a smaller and
+  more predictable spend than `evals.yml`'s live lane, which ADR-007 already accepted.
+
+  *This bullet said `--max-turns 8` until 2026-07-25, two bumps after the value changed — and it
+  was **the review lane itself that caught it**, on the first run under the widened grant. A
+  worked example of the drift SYS-019 is about: a number restated in prose beside a table that
+  owns it, with nothing comparing the two. Left as an anecdote rather than wired to a check, since
+  a workflow flag is not a published artifact and SYS-019's tier 3 ("list, when neither is
+  possible") is the honest tier here.*
 - **A second reader exists where there was none.** This is a solo repo; every merge to date has
   been self-reviewed. The value is not that the model is a better engineer, it is that it is not
   the person who just wrote the code.
