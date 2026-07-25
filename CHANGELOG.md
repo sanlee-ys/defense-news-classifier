@@ -10,6 +10,19 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 ## [Unreleased]
 
 ### Added
+- **Rung 2 of the autonomy ladder: the agent-driven ML loop**
+  ([ADR-018](decisions/018-agent-driven-ml-loop.md), `src/ml_loop.py`) — an agentic outer
+  loop (read out-of-fold errors on split A → propose the next experiment: vectorizer
+  changes, regularization, error-driven keyword features) wrapping the mechanical sklearn
+  inner loop of the ADR-017 bake-off baseline. Reuses rung 1's honesty architecture as
+  shared code: `check_done_signal` / `select_best_iteration` imported from `optimize.py`
+  (B-only decisions, C reported never read), same append-only JSONL run-log format
+  (`evals/ml_loop/`, gitignored), and a deterministic pre-scoring proposal guard
+  (`validate_experiment` — the rung-2 counterpart of the region-rubric freeze). Feedback is
+  built from 5-fold out-of-fold predictions inside A, never fit-on-self (a test pins it).
+  Only the proposer spends tokens; scoring is local. `--dry-run` runs the full loop offline
+  with a canned proposer; the first live run is pending and its verdict (either direction)
+  will be recorded when it exists. Two axes, per ADR-017's disclosed region limit.
 - **Classical ML baseline bake-off** ([ADR-017](decisions/017-classical-baseline-bakeoff.md),
   [spec](docs/specs/ml-baseline-bakeoff.md)): `src/baseline_ml.py` trains TF-IDF + logistic
   regression on the 300 judge-graded snippets (`judge_*` labels only) and scores it once

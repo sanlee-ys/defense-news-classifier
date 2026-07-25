@@ -24,7 +24,7 @@ This roadmap is the map. The per-level specs and ADRs are the territory.
 |-------|---------------------------|-----------|-------|
 | **L1 — Single call** | Prompt + structured `{category, operational_domain}` + eval | Human runs each item | **Shipped** (v1) |
 | **L2 — Augmented** | BM25 retrieval grounds the label in a corpus | Human runs it; the model reaches for a tool | **Shipped** (v2.0.0), then **retired** ([ADR-012](../../decisions/012-retire-bm25-grounding.md)) |
-| **L3 — Autonomous loop** | Wrapped in a loop that iterates to an explicit done-signal | The system decides when it is done | **Partly shipped** — rung 1 ([ADR-005](../../decisions/005-agentic-prompt-optimization-loop.md)) rode the `v2.1.0` tag; rung 2 ([ML bake-off](ml-baseline-bakeoff.md)) spec'd, unbuilt |
+| **L3 — Autonomous loop** | Wrapped in a loop that iterates to an explicit done-signal | The system decides when it is done | **Built** — rung 1 ([ADR-005](../../decisions/005-agentic-prompt-optimization-loop.md)) rode the `v2.1.0` tag; rung 2 ([ADR-018](../../decisions/018-agent-driven-ml-loop.md), `src/ml_loop.py`) built 2026-07-25 on the [ML bake-off](ml-baseline-bakeoff.md) substrate — first live run pending |
 | **L4 — Multi-agent** | Decomposed: triage → classify → critic that can hand work *backward* | Multiple agents coordinate | **To spec** — build-vs-adopt decided, see [§7](#7-l4-build-vs-adopt-decision-2026-07-11) |
 
 ## 3. Vocabulary (avoid the collision)
@@ -89,10 +89,13 @@ the critic is what catches the classifier gaming its own metric.
   retired arc is the honest L2 story and the writeup should tell it that way.
 - **L3 is in progress**, delivered as the loop spec's rung 1 then rung 2. Rung 1 was sequenced
   after v2.1.0 for the reason in the loop spec (v2.1.0 shrinks the held-out noise floor the
-  loop's honest number depends on) and **shipped on the `v2.1.0` tag**. **Rung 2 is next** —
-  the agent-driven ML loop, whose substrate is the [ML baseline bake-off](ml-baseline-bakeoff.md)
-  (spec'd, unbuilt). L3 is not complete until rung 2 lands.
-- **L4 is a new level stacked on two loop rungs that are not built yet.** Per one-concern-per-session,
+  loop's honest number depends on) and **shipped on the `v2.1.0` tag**. **Rung 2 is built**
+  (2026-07-25, [ADR-018](../../decisions/018-agent-driven-ml-loop.md)) — the agent-driven ML
+  loop in `src/ml_loop.py`, wrapping the executed
+  [ML baseline bake-off](ml-baseline-bakeoff.md) ([ADR-017](../../decisions/017-classical-baseline-bakeoff.md))
+  with the same A/B/C + done-signal honesty architecture as rung 1. What remains for the
+  full L3 story is a recorded **live** run (San drives; the dry-run path is CI-covered).
+- **L4 is a new level stacked on the two loop rungs (both now built).** Per one-concern-per-session,
   L4 gets its own spec + branch **after** L3's rungs land. "Cover all four" is the destination,
   not a single build. When L4 is picked up, it earns its own feature spec and an ADR. The one L4
   decision already settled — *build the multi-agent orchestration by hand vs. adopt a managed-agent
