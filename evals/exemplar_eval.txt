@@ -1,0 +1,39 @@
+==============================================================
+kNN-EXEMPLAR FEW-SHOT EXPERIMENT (k=3, ADR-019)
+==============================================================
+
+Pool: 300 judge-labeled scale rows (category+domain only; no region
+labels exist in the pool). Prior going in is double-negative:
+ADR-012 (neighbor docs) and ADR-018's amendment (keyword features).
+
+== PRIMARY: scale set vs judge labels, paired, LOO retrieval ==
+   (baseline arm re-run fresh under the current prompt/model;
+    the stored scale_predictions workhorse column predates v3)
+-- category (n=300) --------------------------------
+  baseline :  90.0%  [86.1%, 92.9%]  (270/300)
+  exemplar :  91.0%  [87.2%, 93.7%]  (273/300)
+  paired: exemplar fixed 15, broke 12; McNemar exact p=0.7011
+
+-- operational_domain (n=300) ----------------------
+  baseline :  91.3%  [87.6%, 94.0%]  (274/300)
+  exemplar :  91.0%  [87.2%, 93.7%]  (273/300)
+  paired: exemplar fixed 10, broke 11; McNemar exact p=1.0000
+
+== SECONDARY (directional, n=54): gold vs human labels ==
+   (baseline = stored v3 run, same prompt/model -- fair anchor)
+-- category (n=54) --------------------------------
+  baseline :  92.6%  [82.5%, 97.1%]  (50/54)
+  exemplar :  88.9%  [77.8%, 94.8%]  (48/54)
+  paired: exemplar fixed 2, broke 4; McNemar exact p=0.6875
+
+-- operational_domain (n=54) ----------------------
+  baseline :  92.6%  [82.5%, 97.1%]  (50/54)
+  exemplar :  90.7%  [80.1%, 96.0%]  (49/54)
+  paired: exemplar fixed 0, broke 1; McNemar exact p=1.0000
+
+-- region GUARDRAIL (exemplars carry no region labels) ----
+  baseline :  87.0%  [75.6%, 93.6%]  (47/54)
+  exemplar :  87.0%  [75.6%, 93.6%]  (47/54)
+  pass = no degradation; region is reported, not optimized
+
+==============================================================

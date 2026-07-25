@@ -127,6 +127,16 @@ The v1 `industry` fix holds: recall stays at 1.000 on the real SEC snippets (v1 
 On the refreshed run the Opus judge agrees with the human labels on 94.4% of category calls and
 94.4% of domain calls.
 
+**Retrieval augmentation is now a completed, three-shape measured series.** After the
+grounding retirement below, two further shapes were measured: lexically-mined keyword
+features (via the rung-2 agent loop — harmful off-distribution, [ADR-018](decisions/018-agent-driven-ml-loop.md))
+and k=3 BM25-retrieved **labeled exemplars** as few-shot examples
+([ADR-019](decisions/019-knn-exemplar-fewshot.md)) — a clean null: category 91.0% vs 90.0%
+baseline on the n=300 paired scale eval (McNemar p=0.70), domain flat, region guardrail
+unmoved, at roughly double the prompt size. Three shapes, three distinct failure modes
+(harmful / harmful off-distribution / inert); the single-call classifier remains the
+measured optimum. Full report: [`evals/exemplar_eval.txt`](evals/exemplar_eval.txt).
+
 **Grounding was measured and retired — a negative result.** The BM25 retrieval-grounding layer
 that shipped in v2.0.0 no longer beats the ungrounded classifier now that the prompt is
 stronger: neutral on category, a domain regression (0 domain calls fixed, 4 broken across a

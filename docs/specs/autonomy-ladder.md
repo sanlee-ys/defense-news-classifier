@@ -86,7 +86,13 @@ the critic is what catches the classifier gaming its own metric.
   after a fair same-prompt re-measure — 0 domain calls fixed, 4 broken across 162 grounded
   classifications. The rung stands: the axis is *who drives*, and L2's question (can the model
   reach for a tool?) was answered yes. The tool just did not earn its place. The climbed-then-
-  retired arc is the honest L2 story and the writeup should tell it that way.
+  retired arc is the honest L2 story and the writeup should tell it that way. **Addendum
+  (2026-07-25):** the L2 question is now fully closed as a three-shape measured series —
+  neighbor docs harmful ([ADR-012](../../decisions/012-retire-bm25-grounding.md)), mined
+  keyword features harmful off-distribution ([ADR-018](../../decisions/018-agent-driven-ml-loop.md)
+  amendment), labeled few-shot exemplars inert ([ADR-019](../../decisions/019-knn-exemplar-fewshot.md),
+  null at n=300 paired). The writeup gets to say "every retrieval shape was tried and
+  measured," which is a stronger L2 close than one retirement.
 - **L3 is in progress**, delivered as the loop spec's rung 1 then rung 2. Rung 1 was sequenced
   after v2.1.0 for the reason in the loop spec (v2.1.0 shrinks the held-out noise floor the
   loop's honest number depends on) and **shipped on the `v2.1.0` tag**. **Rung 2 is built**
