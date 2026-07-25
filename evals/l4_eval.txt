@@ -1,0 +1,53 @@
+==============================================================
+L4 MULTI-AGENT PIPELINE -- triage -> classify -> critic (ADR-020)
+==============================================================
+
+Hypothesis under test: the 7 gold rows where region=global was
+pulled to a specific theater are rubric-checkable, critic-shaped
+misses. All agents run the workhorse; classify is the shipped call.
+
+== PRIMARY: gold (n=54) vs human labels, paired vs stored v3 run ==
+-- category --------------------------------------
+  baseline :  92.6%  [82.5%, 97.1%]  (50/54)
+  L4       :  90.7%  [80.1%, 96.0%]  (49/54)
+  paired: L4 fixed 1, broke 2; McNemar exact p=1.0000
+
+-- operational_domain ----------------------------
+  baseline :  92.6%  [82.5%, 97.1%]  (50/54)
+  L4       :  81.5%  [69.2%, 89.6%]  (44/54)
+  paired: L4 fixed 1, broke 7; McNemar exact p=0.0703
+
+-- region ----------------------------------------
+  baseline :  87.0%  [75.6%, 93.6%]  (47/54)
+  L4       :  75.9%  [63.0%, 85.4%]  (41/54)
+  paired: L4 fixed 6, broke 12; McNemar exact p=0.2379
+
+-- NAMED-CLUSTER ACCOUNTING (the headline; small-n, stated) --
+  cluster size 7 (gold=global, baseline pulled to a region)
+  fixed by L4  : 6  ['g013', 'g017', 'g019', 'g026', 'g048', 'g054']
+  still missed : 1  ['g047']
+
+-- gold pipeline flow / cost ------------------------------
+  statuses     : {'contested': 27, 'accepted': 23, 'fixed': 4}
+  challenge rate: 31/54 (57.4%)
+  calls per row : 4.15 (baseline 1.00)
+
+== SECONDARY: scale (n=300) do-no-harm vs judge labels ==
+   (region has no scale answer key until v3.1.0 -- not scored;
+    baseline = ADR-019's fresh same-prompt arm, zero re-spend)
+-- category --------------------------------------
+  baseline :  90.0%  [86.1%, 92.9%]  (270/300)
+  L4       :  88.0%  [83.8%, 91.2%]  (264/300)
+  paired: L4 fixed 20, broke 26; McNemar exact p=0.4614
+
+-- operational_domain ----------------------------
+  baseline :  91.3%  [87.6%, 94.0%]  (274/300)
+  L4       :  86.7%  [82.3%, 90.0%]  (260/300)
+  paired: L4 fixed 8, broke 22; McNemar exact p=0.0161
+
+-- scale pipeline flow / cost ------------------------------
+  statuses     : {'accepted': 147, 'contested': 117, 'fixed': 36}
+  challenge rate: 153/300 (51.0%)
+  calls per row : 4.02 (baseline 1.00)
+
+==============================================================

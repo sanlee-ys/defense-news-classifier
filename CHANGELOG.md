@@ -20,8 +20,13 @@ Versions are tagged by milestone; individual commits are noted where relevant.
   critic's region rubric is extracted from the live prompt, never retyped; every step lands
   in an append-only audit JSONL (`evals/l4/`, gitignored). All three agents run the
   workhorse — no premium tier (ADR-013's constraint). Dry-run backend covers all four
-  terminal statuses offline; live gold + scale runs (~750 calls) are San's to drive, verdict
-  amended into ADR-020 either way. **The autonomy ladder is now fully built, L1–L4.**
+  terminal statuses offline. **The autonomy ladder is now fully built, L1–L4. Verdict
+  (same day, live runs): hypothesis CONFIRMED — the backward edge fixed 6/7 of the named
+  region cluster — but the pipeline is DECLINED as configured: the all-axes critic
+  over-challenged (57% vs ~13% expected; the spec's red-flag rule fired), did net harm on
+  every other measure (scale domain 91.3→86.7, McNemar p=0.016 — the repo's first
+  statistically significant harm) at ~4× calls per row. The shipped single call stays
+  production. Record: `evals/l4_eval.txt` + both prediction CSVs.**
 - **kNN-exemplar few-shot experiment harness** ([ADR-019](decisions/019-knn-exemplar-fewshot.md),
   `src/exemplar_eval.py`) — the third and last untried retrieval-augmentation shape: k=3
   BM25-retrieved **labeled** exemplars appended to the system prompt (boundary placement,

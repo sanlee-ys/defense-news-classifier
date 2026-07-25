@@ -1,6 +1,6 @@
 # ADR-020: L4 built — triage → classify → critic with a one-bounce backward edge
 
-**Status:** Accepted (build; verdict to be amended after San's live runs)
+**Status:** Accepted — verdict recorded 2026-07-25: **hypothesis confirmed, pipeline declined as configured**
 **Date:** 2026-07-25
 **Deciders:** San Lee
 
@@ -64,9 +64,49 @@ is amended below after San drives the live runs. Expected challenge rate on gold
   correct label. The `fail_closed` and `contested` counts in the report exist to make that
   cost visible rather than averaged away.
 
-## Verdict
+## Verdict (2026-07-25)
 
-*To be amended after the live runs.*
+San ran both live passes the day the code merged (`evals/l4_eval.txt` + the two prediction
+CSVs are the committed record). The result splits cleanly in two, and both halves matter:
+
+**The hypothesis was CONFIRMED.** Of the 7 named cluster rows (gold `global` pulled to a
+specific region by US-actor inference), the critic challenged and the bounce fixed **6**
+(g013, g017, g019, g026, g048, g054; g047 still missed). The one rubric-checkable error
+class the pipeline was aimed at, it corrected almost completely. The backward edge works.
+
+**The pipeline as configured is DECLINED.** The critic's charter did not hold in practice:
+
+| | Gold (n=54) | Scale (n=300) |
+|---|---|---|
+| challenge rate | **57.4%** (expected ~13%) | **51.0%** |
+| category | 92.6 → 90.7 (1 fixed / 2 broke) | 90.0 → 88.0 (20/26, p=0.46) |
+| domain | 92.6 → **81.5** (1 fixed / 7 broke) | 91.3 → **86.7** (8/22, **p=0.016**) |
+| region | 87.0 → 75.9 (6 fixed / 12 broke) | not scored (no answer key) |
+| calls per row | 4.15× | 4.02× |
+
+The spec's own red-flag rule fired: a challenge rate 4× the expectation means the
+prompt-level narrowing ("rubric-checkable evidence claims only") leaked — the critic
+challenged judgment calls it was chartered to leave alone, and every needless bounce was a
+chance to break a correct label. Region tells the story in one line: the critic fixed the 6
+cluster rows and broke 12 others, mostly by over-applying the no-guessing rule to rows whose
+evidence it second-guessed. The scale domain regression clears significance (p=0.016) — the
+first *statistically significant harm* any experiment in this repo has produced. Half the
+gold rows ended `contested` (27/54): the critic frequently disputed even the re-classified
+label, which is the trigger-happiness made visible exactly as the audit design intended.
+
+**Standing verdict:** the L4 honesty test is passed — a critic that bounces labels backward,
+built and demonstrated, with the targeted error class measurably fixed — but the
+whole-pipeline configuration is a measured negative result: an all-axes critic whose
+restraint lives only in its prompt does net damage at 4× cost. The shipped classifier
+remains the production path, unchanged.
+
+**What this does and does not license next:** fork 3 chose an all-axes critic precisely so
+the do-no-harm claim would be non-vacuous — it was, and it measured harm. The obvious
+follow-up (a *structurally* narrowed critic: challenge routing gated in code on triage's
+`none stated` signal rather than on prompt discipline, region axis only) is a NEW
+experiment with its own measurement if ever picked up — recorded here as an option, not a
+rescue of this verdict. The ladder's build story is complete either way: L4's demo is the
+backward edge catching the named cluster, and the writeup tells both halves.
 
 ## Downstream surfaces
 

@@ -137,6 +137,16 @@ unmoved, at roughly double the prompt size. Three shapes, three distinct failure
 (harmful / harmful off-distribution / inert); the single-call classifier remains the
 measured optimum. Full report: [`evals/exemplar_eval.txt`](evals/exemplar_eval.txt).
 
+**The multi-agent pipeline was measured the same way** ([ADR-020](decisions/020-l4-multi-agent-pipeline.md)):
+a triage → classify → critic pipeline whose critic can bounce a label *backward* fixed 6 of
+the 7 known rubric-checkable region misses — the backward edge works — but the critic
+over-challenged far beyond its charter (57% challenge rate vs ~13% expected) and did net
+harm everywhere else (domain 91.3% → 86.7% on the n=300 paired eval, McNemar p=0.016) at
+~4× the calls. Declined as configured; both halves reported in
+[`evals/l4_eval.txt`](evals/l4_eval.txt). The single-model, single-call classifier remains
+the measured optimum of *everything* tried against it — retrieval three ways, routing,
+and now multi-agent review.
+
 **Grounding was measured and retired — a negative result.** The BM25 retrieval-grounding layer
 that shipped in v2.0.0 no longer beats the ungrounded classifier now that the prompt is
 stronger: neutral on category, a domain regression (0 domain calls fixed, 4 broken across a
