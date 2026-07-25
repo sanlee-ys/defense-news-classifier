@@ -405,7 +405,7 @@ def build_report(merged: pd.DataFrame) -> str:
         "-- Judge validation: judge vs human labels ----------------",
         "High agreement => the judge tracks human judgment, so it can",
         "serve as a scalable answer key where hand-labeling doesn't reach.",
-        "The REGION agreement is the v3.1.0 gate: the scaled region eval",
+        "The REGION agreement is the gate: the scaled region eval",
         "runs only if the judge validates on this axis (ADR-014).",
         "",
         f"Category agreement           : {m['judge_category_agreement']:.1%}",

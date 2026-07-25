@@ -79,7 +79,7 @@ separates it from re-running the classifier twice and keeping the disagreement.
 - **Cost axis:** calls per row (1.0 baseline vs ~2 + challenge-rate × 1 for L4) and the
   measured challenge rate. The ADR-013 lesson: report the multiplier next to every accuracy
   delta.
-- **Scale read (secondary):** the n=300 scale set has no region judge-labels yet (v3.1.0), so
+- **Scale read (secondary):** the n=300 scale set has no region judge-labels yet, so
   the scale pass reports **category/domain do-no-harm + challenge rate** only, stated as such.
 - **Audit log:** append-only JSONL per run — every triage note, label, challenge (with cited
   rule + evidence), bounce, and final label. The replay viewer's third data source.
@@ -107,7 +107,7 @@ separates it from re-running the classifier twice and keeping the disagreement.
 
 Bake-off spec §8 applies verbatim: every figure carries its n; a delta is not a finding
 without the paired test; report the direction that hurts; name what is uncovered (region has
-no scale-set answer key until v3.1.0; the named cluster is 7 rows).
+no scale-set answer key until the scaled region eval ships; the named cluster is 7 rows).
 
 ## 8. Cost estimate (up front, per house rules)
 
