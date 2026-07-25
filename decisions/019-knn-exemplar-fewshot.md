@@ -1,6 +1,6 @@
 # ADR-019: kNN-exemplar few-shot — the last untried retrieval shape, measured
 
-**Status:** Accepted (design; verdict to be amended after the live runs)
+**Status:** Accepted — verdict recorded 2026-07-25: **null result, exemplars declined**
 **Date:** 2026-07-25
 **Deciders:** San Lee
 
@@ -68,9 +68,40 @@ verdict here — whichever way it falls.** Design constraints:
 - If the verdict is negative, the harness stays dormant with its tests as the
   reproducible record — the ADR-013 pattern.
 
-## Verdict
+## Verdict (2026-07-25)
 
-*To be amended after the live runs.*
+San ran all three arms the same day (`evals/exemplar_eval.txt` + the three arm CSVs are
+the committed record). **A clean null: labeled exemplars neither help nor hurt, and they
+are declined.**
+
+| Measurement | Baseline | Exemplar | Paired (fixed/broke, McNemar p) |
+|---|---|---|---|
+| scale category (n=300, vs judge) | 90.0% | 91.0% | 15 / 12, p=0.70 |
+| scale domain (n=300, vs judge) | 91.3% | 91.0% | 10 / 11, p=1.00 |
+| gold category (n=54, directional) | 92.6% | 88.9% | 2 / 4, p=0.69 |
+| gold domain (n=54, directional) | 92.6% | 90.7% | 0 / 1, p=1.00 |
+| gold region (guardrail) | 87.0% | 87.0% | — pass, zero movement |
+
+Reading it honestly: every delta is inside its interval; the discordant pairs are
+near-symmetric (15/12, 10/11) — exemplars *churn* individual calls without moving the
+totals. The gold direction is mildly negative but at n=54 that is noise, not a finding.
+The region guardrail passed exactly (47/47 both arms), so the withheld-labels disclaimer
+did its job.
+
+This completes the three-shape retrieval-augmentation series with three distinct
+outcomes, which is the real product of the series:
+
+1. **Neighbor documents** (ADR-012) — actively harmful (0 fixed / 4 broken on domain).
+2. **Lexically-mined features** (ADR-018 amendment) — harmful *off-distribution*
+   (B +6.0, C −8.6).
+3. **Labeled exemplars** (this ADR) — **inert**: no measurable effect at roughly double
+   the prompt size and the retrieval machinery's complexity.
+
+The 92%+ single-model, single-call classifier remains the measured optimum of everything
+tried against it — now including the last retrieval shape. The harness stays dormant with
+its tests as the reproducible record (the ADR-013 pattern). Exemplar retrieval should not
+be revisited unless the eval ruler changes materially (e.g. a much larger human-labeled
+set) — a null at n=300 paired is a stronger "no" than ADR-012's n=54 ever was.
 
 ## Downstream surfaces
 
@@ -79,11 +110,12 @@ Touched by this change (all in this PR):
 - `src/exemplar_eval.py`, `tests/test_exemplar_eval.py` — harness + guards (new).
 - `CHANGELOG.md` `[Unreleased]`, `decisions/README.md` index row.
 
-To sweep when the verdict lands, deliberately NOT in this PR:
+Swept with the verdict (same day, verdict PR): this ADR's Verdict section;
+`evals/exemplar_eval.txt` + the three arm CSVs committed as the record;
+`README.md` three-shape series paragraph; `docs/specs/autonomy-ladder.md` §6 L2 addendum;
+`CHANGELOG.md` + `decisions/README.md` rows updated.
 
-- This ADR's Verdict section + `evals/exemplar_eval.txt` and the three arm CSVs
-  (committed as the record, like `route_eval.txt`).
-- `README.md` — one paragraph in the grounding/negative-results narrative, either way.
-- The L2 story in `docs/specs/autonomy-ladder.md` §6 and the eventual portfolio writeup —
-  this is the "new L2 finding" thread; SYS-019 markers if any number is quoted on a
-  guarded surface.
+Still deliberately open:
+
+- The eventual portfolio L2 writeup — the "every retrieval shape tried and measured"
+  framing; SYS-019 markers if any number is quoted on a guarded surface.

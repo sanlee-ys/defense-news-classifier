@@ -16,8 +16,12 @@ Versions are tagged by milestone; individual commits are noted where relevant.
   not topical context). Paired exact McNemar on the scale set vs judge labels with a
   fresh same-prompt baseline arm (the PR #81 fair-baseline lesson applied up front);
   gold read directionally with region as a guardrail. Stated prior going in is negative
-  (ADR-012, ADR-018 amendment). Resume-safe per-row runs; offline-testable; verdict to be
-  amended into ADR-019 after the live runs.
+  (ADR-012, ADR-018 amendment). Resume-safe per-row runs; offline-testable. **Verdict
+  (same day): a clean null — category 91.0% vs 90.0% (p=0.70), domain flat, gold
+  directionally unmoved, region guardrail exact — exemplars declined; the three-shape
+  retrieval series is complete (harmful / harmful off-distribution / inert) and the
+  single-call classifier stays the measured optimum. Record: `evals/exemplar_eval.txt`
+  + the three arm CSVs.**
 - **Rung 2 of the autonomy ladder: the agent-driven ML loop**
   ([ADR-018](decisions/018-agent-driven-ml-loop.md), `src/ml_loop.py`) — an agentic outer
   loop (read out-of-fold errors on split A → propose the next experiment: vectorizer
