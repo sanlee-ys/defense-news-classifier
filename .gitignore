@@ -28,3 +28,7 @@ graphify-out/
 
 # Fitted bake-off artifacts: binary, reproducible offline from committed data
 evals/baseline_model.joblib
+
+# Rung-2 ML-loop run logs (src/ml_loop.py writes one per run), same policy
+# as the rung-1 optimize logs above.
+evals/ml_loop/run_*.jsonl
