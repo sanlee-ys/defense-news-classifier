@@ -1,0 +1,72 @@
+==============================================================
+CLASSICAL ML BASELINE BAKE-OFF -- TF-IDF + logistic regression
+==============================================================
+
+Train : 300 DVIDS snippets, Opus-JUDGE labels (not human; the
+        baseline inherits the judge's ~5-6% human-disagreement ceiling).
+Test  : the 54-row human gold set, touched once. Region is NOT covered
+        (no region labels exist in the training data until v3.1.0).
+Config: word 1-2 grams, english stop words, min_df=2,
+        LogisticRegression(class_weight='balanced') per axis.
+Caveat: 'industry' has n=1 training row -- structurally unlearnable.
+
+-- category: accuracy vs human gold (n=54), 95% Wilson CI --------
+  baseline :  72.2%  [59.1%, 82.4%]  (39/54)
+  LLM      :  92.6%  [82.5%, 97.1%]  (50/54)
+  McNemar (paired, exact): baseline-only-wrong=14, LLM-only-wrong=3, p=0.0127
+
+  Per-label (baseline vs human), macro-F1 0.530:
+               precision  recall     f1  support
+  label                                         
+  industry         0.000   0.000  0.000        5
+  operations       0.677   0.955  0.792       22
+  policy           1.000   0.167  0.286        6
+  procurement      0.636   0.875  0.737        8
+  technology       0.909   0.769  0.833       13
+
+  Confusion (true rows x predicted cols):
+  predicted    industry  operations  policy  procurement  technology
+  true                                                              
+  industry            0           1       0            4           0
+  operations          0          21       0            0           1
+  policy              0           5       1            0           0
+  procurement         0           1       0            7           0
+  technology          0           3       0            0          10
+
+-- operational_domain: accuracy vs human gold (n=54), 95% Wilson CI --------
+  baseline :  66.7%  [53.4%, 77.8%]  (36/54)
+  LLM      :  92.6%  [82.5%, 97.1%]  (50/54)
+  McNemar (paired, exact): baseline-only-wrong=15, LLM-only-wrong=1, p=0.0005
+
+  Per-label (baseline vs human), macro-F1 0.714:
+         precision  recall     f1  support
+  label                                   
+  air        0.520   0.867  0.650       15
+  cyber      0.833   0.833  0.833        6
+  land       0.750   0.273  0.400       11
+  multi      0.600   0.600  0.600       10
+  sea        1.000   0.667  0.800        9
+  space      1.000   1.000  1.000        3
+
+  Confusion (true rows x predicted cols):
+  predicted  air  cyber  land  multi  sea  space
+  true                                          
+  air         13      0     1      1    0      0
+  cyber        1      5     0      0    0      0
+  land         6      0     3      2    0      0
+  multi        3      1     0      6    0      0
+  sea          2      0     0      1    6      0
+  space        0      0     0      0    0      3
+
+-- Second number (spec §9): 5-fold CV within the 300 train rows -----
+   Measures agreement with the JUDGE labels, not with humans; larger n,
+   different question. Also the class_weight experiment (spec §9):
+  category             balanced:  83.7%   unweighted:  75.7%
+  operational_domain   balanced:  73.3%   unweighted:  68.3%
+
+-- Cost / latency (half the comparison) ----------------------------
+  baseline : $0.00 per article, 4.8 ms wall-clock for all 54 rows (0.09 ms/article, local CPU)
+  LLM      : 1.00x workhorse-call units (the route_eval cost unit);
+             per-call API latency is network-bound (order of seconds)
+             and has not been separately measured in this repo.
+==============================================================

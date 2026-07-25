@@ -70,6 +70,28 @@ routing experiment measured (adding one field moved 2/54 there) and inside n=54 
 The **100.0% judge-vs-human region agreement** is the load-bearing number: it clears ADR-014's
 gate for scaling the region eval to n=300 with the Opus judge as answer key (v3.1.0).
 
+### Why an LLM at all — the classical baseline, finally measured
+
+Every measurement above prices a spend *on top of* an LLM. This one baselines the LLM itself:
+TF-IDF + logistic regression, the standard zero-dollar stack, trained on the 300 judge-graded
+snippets and scored once against the same human gold set
+([ADR-017](decisions/017-classical-baseline-bakeoff.md), full report in
+[`evals/baseline_eval.txt`](evals/baseline_eval.txt)):
+
+| Axis | Classical baseline | LLM (v3 run) | McNemar (paired, exact) |
+|---|---|---|---|
+| Category | 72.2% [59.1, 82.4] | <!-- metric:category_accuracy -->92.6% | p=0.013 |
+| Operational domain | 66.7% [53.4, 77.8] | <!-- metric:domain_accuracy -->92.6% | p=0.0005 |
+
+Unlike the grounding and routing deltas, this gap clears significance even at n=54 — the LLM
+spend is justified with a number instead of an assumption, for the first time. The honest
+fine print: the training labels are judge-generated (the baseline inherits the judge's ~5–6%
+human-disagreement ceiling — the direction that handicaps the baseline, not flatters it),
+region is uncovered (no region labels exist until v3.1.0), and `industry` has a single
+training row, so it is structurally unlearnable here. On cost the baseline wins by orders of
+magnitude ($0.00, ~0.1 ms/article locally vs one API call per article); at a ~70% accuracy
+bar that trade would flip, and now it's priced either way.
+
 #### The road here — Sonnet 5 on the v2 gold set (two-axis record)
 
 The section below is the v2.2.0-era record: the two-axis contract graded against the same 54

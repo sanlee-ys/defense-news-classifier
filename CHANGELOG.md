@@ -9,6 +9,18 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
+### Added
+- **Classical ML baseline bake-off** ([ADR-017](decisions/017-classical-baseline-bakeoff.md),
+  [spec](docs/specs/ml-baseline-bakeoff.md)): `src/baseline_ml.py` trains TF-IDF + logistic
+  regression on the 300 judge-graded snippets (`judge_*` labels only) and scores it once
+  against the human gold set through the existing hand-rolled metrics. Verdict: the LLM wins
+  decisively (category 92.6% vs 72.2%, McNemar p=0.013; domain 92.6% vs 66.7%, p=0.0005) —
+  the first measured justification of the foundational LLM spend. Report in
+  `evals/baseline_eval.txt`, per-row predictions in `evals/baseline_predictions.csv`, offline
+  tests in `tests/test_baseline_ml.py`. scikit-learn enters the dev/eval dependency group
+  only; the shipped classifier's runtime deps and behavior are unchanged. This harness is the
+  substrate the autonomy ladder's rung-2 agent loop will wrap.
+
 ### Fixed
 - **The prompt-optimization loop can no longer silently destroy the `region` axis**
   (`src/optimize.py`, `src/classify.py`). `src/optimize.py` had not been touched since

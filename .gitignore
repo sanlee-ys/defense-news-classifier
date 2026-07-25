@@ -25,3 +25,6 @@ evals/runs/
 evals/optimize/run_*.jsonl
 
 graphify-out/
+
+# Fitted bake-off artifacts: binary, reproducible offline from committed data
+evals/baseline_model.joblib
