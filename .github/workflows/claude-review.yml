@@ -57,9 +57,24 @@ jobs:
     # OWNER-only fails closed before a runner is even allocated. (The action also has
     # an allowed_non_write_users input, but a guard here costs nothing and does not
     # depend on the action behaving correctly.)
+    #
+    # The bot check is the third guard, added 2026-07-25. The action refuses
+    # bot-authored PRs outright ("Workflow initiated by non-human actor:
+    # dependabot (type: Bot)") and exits 1, so before this guard every Dependabot
+    # bump allocated a runner, authenticated, and failed -- a red X on a PR nobody
+    # intended to review. ADR-016 accepts that dependency bumps go unreviewed;
+    # this makes that acceptance a clean skip instead of a recurring failure, the
+    # same way the fork guard above turns withheld secrets into a skip. Checking
+    # `user.type` rather than the dependabot login covers every bot the action
+    # would refuse for the same reason.
+    #
+    # Deliberately NOT applied to the issue_comment path: an OWNER commenting
+    # @claude on a Dependabot PR is a human explicitly asking for the review, and
+    # that escape hatch keeps working.
     if: >-
       (github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository) ||
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.user.type != 'Bot') ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
        github.event.comment.author_association == 'OWNER')
@@ -70,16 +85,27 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
       cancel-in-progress: true
-    # "Advisory" has to be enforced, not just intended. Without this, an infrastructure
-    # failure in this lane (expired key, action outage, rate limit) posts a red X on a PR
-    # whose actual gates are green -- which is exactly the "learn to ignore red" failure
-    # ADR-016 adopts this lane to avoid. continue-on-error makes the job's result
-    # advisory at the CI level, not merely by convention.
+    # Backstop only -- this greens the RUN, not the CHECK. See the step-level
+    # continue-on-error below, which is the one that actually enforces advisory
+    # status. Kept because it still covers a failure with no step to attach to
+    # (runner death, a failing checkout).
+    #
+    # SYS-021 req. 3 as originally written named only this placement, and this
+    # repo was recorded as compliant on that basis. It was not: measured on PR
+    # #123 (run 30141009937) the run concluded `success` while the `review` check
+    # run concluded `failure`, so the red X reached the PR anyway. SYS-021
+    # Amendment 1 corrects the requirement; this is the fix.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v7
 
+      # THE placement that enforces advisory status. `jobs.<id>.continue-on-error`
+      # stops a failing job from failing the RUN; `steps[*].continue-on-error`
+      # stops a failing step from failing the JOB -- and the job's conclusion is
+      # what GitHub publishes as the check run the PR displays. Only this one
+      # keeps a non-deterministic reviewer's bad day off the checks list.
       - uses: anthropics/claude-code-action@v1
+        continue-on-error: true
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
