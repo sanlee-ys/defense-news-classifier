@@ -94,6 +94,19 @@ downstream surfaces, non-public-domain text ([ADR-015](015-public-domain-data-so
   turn cap reached, nothing posted.** Widened here as a fast-follow before a `src/` PR found it.
   The lesson generalises past the flag: **a lane validated only on its easy case is not validated.**
   Both test PRs here were doc-only, which is exactly the shape that exercises the least.
+- **Dependabot PRs are not reviewed, and the run still says "success".** The action refuses
+  bot-authored PRs by default — *"Workflow initiated by non-human actor: dependabot (type: Bot).
+  Add bot to allowed_bots list or use `*` to allow all bots."* The step exits 1, but
+  `continue-on-error: true` means the job reports success and the PR stays green. **Accepted, not
+  fixed:** a dependency bump is a lockfile and version pins, `tests.yml` and `evals.yml` are the
+  real gate on it, and reviewing every bump would cost $0.14–0.41 each for close to no signal.
+  Recorded because the alternative is a reader assuming every PR gets reviewed when a recurring
+  class of them never does — the lane's coverage is smaller than its presence suggests. An
+  `allowed_bots` input exists if that judgement ever changes.
+
+  Worth noting what this proved incidentally: it is the first time the advisory design was tested
+  by something nobody staged. An infrastructure-level failure inside the lane left a PR with all
+  its real gates green — which is exactly what `continue-on-error` was added for.
 - **The lane cannot review changes to itself, by design.** A PR that edits
   `.github/workflows/claude-review.yml` makes the head-ref copy differ from the default branch's,
   and the action refuses to run: *"The workflow file must exist and have identical content to the
