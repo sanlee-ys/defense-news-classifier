@@ -10,6 +10,18 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 ## [Unreleased]
 
 ### Added
+- **L4: the multi-agent pipeline** ([ADR-020](decisions/020-l4-multi-agent-pipeline.md),
+  [spec](docs/specs/l4-multi-agent.md), `src/l4_pipeline.py`) — triage (verbatim evidence
+  spans) → the untouched shipped `classify()` (blind to triage) → a critic whose narrow
+  charter allows challenges only on rubric-checkable evidence claims, with the ladder's
+  honesty test built in: a valid challenge bounces the label **backward** for exactly one
+  re-classify (structural cap; a second challenge lands `contested`, never loops). The
+  challenge gate is deterministic code (`challenge_violations`, fail-closed to accept); the
+  critic's region rubric is extracted from the live prompt, never retyped; every step lands
+  in an append-only audit JSONL (`evals/l4/`, gitignored). All three agents run the
+  workhorse — no premium tier (ADR-013's constraint). Dry-run backend covers all four
+  terminal statuses offline; live gold + scale runs (~750 calls) are San's to drive, verdict
+  amended into ADR-020 either way. **The autonomy ladder is now fully built, L1–L4.**
 - **kNN-exemplar few-shot experiment harness** ([ADR-019](decisions/019-knn-exemplar-fewshot.md),
   `src/exemplar_eval.py`) — the third and last untried retrieval-augmentation shape: k=3
   BM25-retrieved **labeled** exemplars appended to the system prompt (boundary placement,

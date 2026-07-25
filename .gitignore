@@ -32,3 +32,7 @@ evals/baseline_model.joblib
 # Rung-2 ML-loop run logs (src/ml_loop.py writes one per run), same policy
 # as the rung-1 optimize logs above.
 evals/ml_loop/run_*.jsonl
+
+# L4 pipeline audit trails (src/l4_pipeline.py, one per run), same policy
+# as the loop run logs above.
+evals/l4/audit_*.jsonl
