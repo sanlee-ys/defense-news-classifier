@@ -10,6 +10,14 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 ## [Unreleased]
 
 ### Added
+- **kNN-exemplar few-shot experiment harness** ([ADR-019](decisions/019-knn-exemplar-fewshot.md),
+  `src/exemplar_eval.py`) — the third and last untried retrieval-augmentation shape: k=3
+  BM25-retrieved **labeled** exemplars appended to the system prompt (boundary placement,
+  not topical context). Paired exact McNemar on the scale set vs judge labels with a
+  fresh same-prompt baseline arm (the PR #81 fair-baseline lesson applied up front);
+  gold read directionally with region as a guardrail. Stated prior going in is negative
+  (ADR-012, ADR-018 amendment). Resume-safe per-row runs; offline-testable; verdict to be
+  amended into ADR-019 after the live runs.
 - **Rung 2 of the autonomy ladder: the agent-driven ML loop**
   ([ADR-018](decisions/018-agent-driven-ml-loop.md), `src/ml_loop.py`) — an agentic outer
   loop (read out-of-fold errors on split A → propose the next experiment: vectorizer

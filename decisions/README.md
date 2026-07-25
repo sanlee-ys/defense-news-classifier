@@ -22,6 +22,7 @@ Decisions are recorded here as they are made. Each ADR captures the context, the
 | [016](016-claude-code-action-pr-review.md) | Agentic PR review as an advisory lane, not a gate — comments only, never fails the build | Accepted |
 | [017](017-classical-baseline-bakeoff.md) | Classical ML baseline bake-off — TF-IDF+logreg measured; the LLM wins by 20+ points, the spend is justified with a number | Accepted |
 | [018](018-agent-driven-ml-loop.md) | Rung 2: agent-driven ML loop on the bake-off substrate — rung 1's A/B/C + done-signal architecture reused as shared code | Accepted |
+| [019](019-knn-exemplar-fewshot.md) | kNN-exemplar few-shot — the last untried retrieval shape, measured against a fresh fair baseline; stated prior is negative | Accepted |
 
 ## Format
 
