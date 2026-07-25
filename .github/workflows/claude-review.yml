@@ -89,6 +89,12 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
 
+            Start by reading the diff (`gh pr diff`). Work out which files it actually
+            touches, then check ONLY the items below that this diff could plausibly
+            break -- open a file when the diff gives you a reason to, not to complete a
+            checklist. A doc-only change needs almost none of them. Do not narrate the
+            checks you skipped.
+
             This repo's headline claim is its measured eval numbers, so weight the
             review accordingly:
               - Changes to src/classify.py, src/gold_eval.py, or src/eval_gate.py that
@@ -120,9 +126,16 @@ jobs:
           # nothing: every attempt to comment became one of 6 permission denials, which
           # are not job failures. A review lane that reviews and cannot speak looks
           # exactly like a healthy one from the checks list.
+          #
+          # Read/Grep/Glob added 2026-07-25 as a fast-follow from kb-agent (its ADR-008).
+          # The prompt above asks about src/classify.py, evals/metrics.json and the
+          # dormant model pins, so it needs file access. This lane had only ever been
+          # exercised on small doc-only PRs, which is why the gap had not surfaced --
+          # on kb-agent the same narrow grant produced 12 denials, a hit turn cap and
+          # nothing posted the first time a prompt actually required reading source.
           claude_args: |
             --model claude-sonnet-5
-            --max-turns 15
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --max-turns 20
+            --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           use_sticky_comment: true
           classify_inline_comments: true
