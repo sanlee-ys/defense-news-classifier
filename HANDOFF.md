@@ -66,6 +66,12 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   the old slot were swept to version-free phrasing, so the reference cannot rot
   at the next move. ADRs were deliberately left as written — correct on their
   date.
+- **The bake-off is published** (portfolio PR #132, 2026-07-26). The project page
+  now carries a "Why an LLM at all" section with the 72.2%/66.7% vs 92.6%
+  comparison, both p-values, the failure shape, and the two disclosed handicaps.
+  This was job 1 in the previous revision of this file and is done; the numbers
+  there deliberately carry no `data-metric` markers, because a frozen paired
+  comparison must not drift with the live artifact.
 - **In flight, not yours unless it stalls:** PR #137 (`pin-predictions-to-prompt`)
   fingerprints the gold predictions snapshot against the prompt that produced it,
   closing a gap where a prompt edit plus a version bump could re-stamp stale
@@ -75,29 +81,21 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 
 ## Next jobs, in order (each its own branch → PR)
 
-1. **The bake-off is missing from the portfolio project page.** Verified absent
-   on 2026-07-25: `portfolio/projects/defense-news-classifier.html` contains no
-   mention of the classical baseline, TF-IDF, or the 72.2%/66.7% figures. This is
-   the strongest unpublished artifact in the repo — "I built the LLM version,
-   then measured the free alternative" is the whole thesis in one section, and
-   the ladder narrative already shipped without it. Quoting numbers there follows
-   SYS-019 (metric markers, or cite the frozen report). Portfolio repo, separate
-   session.
-2. **SYS-007's AI-skill map has no line for any of this.** Checked 2026-07-25:
+1. **SYS-007's AI-skill map has no line for any of this.** Checked 2026-07-25:
    `architecture/decisions/SYS-007-engineering-substrate-and-ai-skills.md` says
    nothing about the classical baseline or the ladder's measured results, though
    ADR-017 named it a downstream surface. Architecture repo, separate session.
-3. **`v3.2.0` scaled region eval — unblocked, unscheduled.** n=300 DVIDS snippets
+2. **`v3.2.0` scaled region eval — unblocked, unscheduled.** n=300 DVIDS snippets
    graded on region by the validated Opus judge (100.0% judge-vs-human on the
    gold 54 cleared the gate), same Wilson-CI reporting as v2.1.0. This needs a
    decision to start, not a measurement. Owner's call.
-4. **The named `global` cluster still wants a prompt clause.** All 7 misses are
+3. **The named `global` cluster still wants a prompt clause.** All 7 misses are
    gold-`global` rows the model pulls to a specific region by inferring a theater
    from the US *actor*. L4 established the cluster is genuinely fixable by
    evidence checking (it fixed 6 of 7) — but at 4× cost through a pipeline that
    was declined. A prompt clause is the cheap alternative to test, measure-first
    like PR #79.
-5. **Option, explicitly NOT a commitment: a structurally narrowed critic.** L4's
+4. **Option, explicitly NOT a commitment: a structurally narrowed critic.** L4's
    failure was a charter that lived only in the prompt. A critic code-gated to
    fire *only* where triage reports `none stated`, on region alone, is a
    different experiment with a different cost profile — and it is a **new
@@ -156,7 +154,7 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 ## Owner-only actions pending
 
 - Scheduling the `v3.2.0` scaled region eval, which is unblocked but deliberately
-  unscheduled (job 3).
-- Deciding whether the narrowed-critic experiment (job 5) is worth a spec at all.
-  The honest default is no: the ladder is complete and the portfolio debt in jobs
-  1–2 is worth more than another rung.
+  unscheduled (job 2).
+- Deciding whether the narrowed-critic experiment (job 4) is worth a spec at all.
+  The honest default is no: the ladder is complete and measured, and the one
+  remaining publication gap (job 1) is worth more than another rung.
