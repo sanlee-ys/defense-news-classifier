@@ -3,7 +3,7 @@
 **Version:** 0.1 (Living roadmap)
 **Status:** Accepted direction
 **Author:** San Lee
-**Last updated:** 2026-07-11
+**Last updated:** 2026-07-25
 **Decision record:** [ADR-006](../../decisions/006-autonomy-ladder-portfolio-spine.md)
 **Related:** [prompt-optimization-loop spec](prompt-optimization-loop.md) (implements Level 3) · [master PRD](../PRD.md)
 
@@ -93,24 +93,41 @@ the critic is what catches the classifier gaming its own metric.
   amendment), labeled few-shot exemplars inert ([ADR-019](../../decisions/019-knn-exemplar-fewshot.md),
   null at n=300 paired). The writeup gets to say "every retrieval shape was tried and
   measured," which is a stronger L2 close than one retirement.
-- **L3 is in progress**, delivered as the loop spec's rung 1 then rung 2. Rung 1 was sequenced
+- **L3 is complete**, delivered as the loop spec's rung 1 then rung 2. Rung 1 was sequenced
   after v2.1.0 for the reason in the loop spec (v2.1.0 shrinks the held-out noise floor the
-  loop's honest number depends on) and **shipped on the `v2.1.0` tag**. **Rung 2 is built**
-  (2026-07-25, [ADR-018](../../decisions/018-agent-driven-ml-loop.md)) — the agent-driven ML
-  loop in `src/ml_loop.py`, wrapping the executed
+  loop's honest number depends on) and **shipped on the `v2.1.0` tag**. **Rung 2 is built and
+  run** (2026-07-25, [ADR-018](../../decisions/018-agent-driven-ml-loop.md)) — the agent-driven
+  ML loop in `src/ml_loop.py`, wrapping the executed
   [ML baseline bake-off](ml-baseline-bakeoff.md) ([ADR-017](../../decisions/017-classical-baseline-bakeoff.md))
-  with the same A/B/C + done-signal honesty architecture as rung 1. What remains for the
-  full L3 story is a recorded **live** run (San drives; the dry-run path is CI-covered).
-- **L4 is spec'd** ([l4-multi-agent](l4-multi-agent.md), Proposed 2026-07-25): triage →
+  with the same A/B/C + done-signal honesty architecture as rung 1. Its first live run is the
+  rung's real deliverable: the agent improved the split it could see and degraded the held-out
+  one (B 0.699, +6.0; C 0.545, −8.6), and the split design caught it. The Goodhart story is now
+  demonstrated end-to-end rather than merely designed for.
+- **L4 is built and measured** ([l4-multi-agent](l4-multi-agent.md), Accepted;
+  [ADR-020](../../decisions/020-l4-multi-agent-pipeline.md), 2026-07-25): triage →
   classify → critic with the backward edge as a rubric-checkable evidence review, aimed at
   the one named error cluster (the 7× `global`-pulled-to-a-region rows) — the honest
-  hypothesis that gives the critic a measurable target instead of vibes. Inherits §7's
+  hypothesis that gave the critic a measurable target instead of vibes. Inherits §7's
   hand-roll decision and the governance primitives (bounce cap = circuit breaker,
-  fail-closed accept, evidence-claims-only charter = confidence × risk). All §9 forks
-  resolved 2026-07-25 (classify blind, cap 1, all-axes critic); the build is its own
-  session and earns ADR-020.
+  fail-closed accept, evidence-claims-only charter = confidence × risk); the §9 forks resolved
+  2026-07-25 to classify blind, cap 1, all-axes critic. **The verdict splits:** the hypothesis
+  held (the bounce fixed 6 of the 7 cluster rows) but the pipeline is declined as configured —
+  the all-axes critic challenged 57.4% of rows against an expected ~13% and did net harm at
+  ~4× cost. The all-axes fork is where it broke, which is worth remembering before anyone
+  re-opens §9.
+
+**The ladder is now fully climbed.** No level is owed further build work. The remaining spine
+work is writeup and publication, not implementation — and three of the four measured levels
+came back negative, which is the honest shape of the story rather than a gap in it.
 
 ## 7. L4 build-vs-adopt decision (2026-07-11)
+
+> **Status note (2026-07-25):** L4 has since been spec'd, built, and measured
+> ([ADR-020](../../decisions/020-l4-multi-agent-pipeline.md)). The hand-roll decision below
+> stands and was honored — `src/l4_pipeline.py` is a plain Python driver against the Messages
+> API. The section is preserved as written on 2026-07-11, including its "still to spec"
+> framing, because it is a dated decision record and its reasoning is what a future
+> framework-adoption question should be argued against.
 
 L4 is still "to spec" — no triage/classify/critic prompts or control flow are designed yet. But one
 question that would otherwise get re-argued *during* that spec is already answerable from Anthropic's
@@ -168,8 +185,12 @@ The ladder is the organizing story for the outward surfaces. Each level, as it l
 - **architecture repo** — the cross-repo "how we build the autonomy ladder" pattern (SYS layer).
 - **portfolio project page** (`/projects/defense-news-classifier.html`) — the outward showcase.
   Each level's recorded demo + a Decision → Why → Tradeoff writeup lands here, so the classifier's
-  whole ladder is told on one page. This page already covers L1 (the single call) and L2 (the BM25
-  grounding result); L3 and L4 extend the same page as they ship.
+  whole ladder is told on one page. **As of 2026-07-25 the page covers all four levels** — the
+  ladder visual and the closing narrative carry L1 through L4, and the L3 paragraph links the
+  run replay at `/projects/loop-replay.html`, which now steps through both recorded runs. The
+  outstanding gap on that page is not a level: it is the classical-baseline bake-off
+  ([ADR-017](../../decisions/017-classical-baseline-bakeoff.md)), which answers "why an LLM at
+  all" and is still unpublished there.
 - ~~**portfolio `/lab`** — front-end craft only, not the demo's home.~~ **Superseded
   2026-07-23.** The portfolio retired `/lab` as a section and stopped confining interactive
   work to it (portfolio `ADR-004`), on the grounds that the split was discounting its own best
