@@ -146,43 +146,6 @@ pencilled in at this number, moves to `v3.2.0`.
   evals-CI gate in v2.1.0) it earned no version bump on its own; it rides the `v3.1.0` tag.
 
 ### Fixed
-- **The published metrics can no longer be stamped with a version whose prompt never
-  produced them** (`src/provenance.py`, `scripts/gen_metrics_artifact.py`,
-  `src/gold_eval.py`). `evals/gold_predictions_v3.csv` is a frozen snapshot of a paid
-  live run, and nothing tied it to the prompt behind it. `--check` only ever compared
-  the artifact against the gold set, that snapshot, and the version string — so editing
-  `SYSTEM_PROMPT` and bumping the version, without paying for a gold re-run, left CI
-  green while regeneration stamped the **new** version onto the **old** prompt's
-  predictions. That is the same retyped-number drift the artifact was built on
-  2026-07-18 to prevent, arriving through the generator instead of through a human,
-  which makes it worse: a generated number carries the authority of having been computed.
-
-  A run that makes API calls now records its identity — `prompt_sha256` plus both model
-  ids, `hashlib` only, no new dependency — to a sidecar
-  `evals/gold_predictions_v3.provenance.json`, and `gen_metrics_artifact.py` refuses to
-  publish **or** to verify when that record no longer matches the code on disk. Models
-  are fingerprinted alongside the prompt because a model swap invalidates a snapshot
-  just as thoroughly (commit `6efbddf` migrated the workhorse to Sonnet 5).
-
-  Three design points worth their record. **The sidecar, not `metrics.json`**: putting
-  both the live and the recorded value in the artifact would be no guard at all, since
-  `build_artifact()` would recompute both from the same live prompt and they could never
-  disagree — the record has to be written by the producer, not the consumer. **The
-  sidecar, not the CSV header**: twelve call sites read these prediction files with a
-  plain `pd.read_csv`, where a `#` metadata line does not raise but silently collapses
-  the frame to one garbage column. **The waiver**: a prompt edit otherwise hard-blocks
-  CI until someone pays for a full gold re-run, and a guard that expensive gets deleted;
-  a waiver must name the exact new fingerprint and carry a reason, so it converts the
-  staleness from *silent* to *on the record* and auto-expires on the next change.
-
-  The backfilled fingerprint states a verified fact, not an assumption: the
-  `SYSTEM_PROMPT` literal was AST-extracted at `ad449db` (the commit that froze the
-  snapshot) and at `HEAD` and hashes identically — `a59689e8…`, 9584 chars. The one
-  `classify.py` commit in between (`cd7f6df`) touched only `InvalidLabelError` and
-  `_validate`. Resuming a partial snapshot under a changed prompt is now refused too,
-  since the finished file would be a blend of two classifiers that no single fingerprint
-  could honestly describe. 26 tests across `tests/test_provenance.py` and
-  `tests/test_metrics_artifact.py`.
 - **The prompt-optimization loop can no longer silently destroy the `region` axis**
   (`src/optimize.py`, `src/classify.py`). `src/optimize.py` had not been touched since
   2026-07-11 and knew nothing about the `region` axis that shipped in `v3.0.0`
