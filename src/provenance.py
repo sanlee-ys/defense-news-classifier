@@ -26,6 +26,13 @@ So the record is written by the *producer* (``src/gold_eval.py``, at run time) i
 sidecar named after the data it describes. The generator can read it and cannot
 launder it.
 
+TWO READERS, ONE PAIRING. ``src/eval_gate.py`` grades that same frozen snapshot against
+``evals/thresholds.toml`` on every push and PR, so the identical failure was reachable one
+file over: edit the prompt, skip the paid re-run, and the offline gate reports the measured
+floors as met for a classifier that is not the one shipped. Both readers therefore call
+``check()`` before doing their work — the generator before publishing, the gate before
+grading. The remedy is shared; only ``consequence`` differs.
+
 WHAT IS FINGERPRINTED. The prompt and both model ids. A model swap invalidates a
 snapshot exactly as thoroughly as a prompt edit — commit 6efbddf migrated the
 workhorse to Sonnet 5 — so pinning only the prompt would leave an equivalent hole
@@ -160,8 +167,24 @@ def divergences(recorded: dict[str, str], live: dict[str, str]) -> list[str]:
     return out
 
 
-def check(record: dict, live: dict[str, str]) -> tuple[bool, str]:
-    """Decide whether the snapshot may still be published against the current code.
+# What goes wrong if a stale snapshot is used anyway. Caller-supplied because the two
+# guards fail for different reasons: the generator would publish numbers under a version
+# whose prompt never produced them, while the CI gate would report the measured floors as
+# met for a classifier that is not the one on disk. The remedy below is shared -- it is
+# the same re-run either way -- but naming the wrong consequence sends the reader to the
+# wrong file.
+PUBLISH_CONSEQUENCE = (
+    "Publishing now would stamp the current version onto predictions the "
+    "current classifier never made."
+)
+
+
+def check(
+    record: dict,
+    live: dict[str, str],
+    consequence: str = PUBLISH_CONSEQUENCE,
+) -> tuple[bool, str]:
+    """Decide whether the snapshot may still be used against the current code.
 
     Passes when the recorded fingerprint matches ``live``, or when a waiver in the
     record explicitly accepts exactly this ``live`` fingerprint and says why.
@@ -177,6 +200,9 @@ def check(record: dict, live: dict[str, str]) -> tuple[bool, str]:
     Args:
         record: A loaded provenance record.
         live: A ``fingerprint()`` of the current values.
+        consequence: One sentence naming what using the stale snapshot would cause,
+            interpolated into the failure message ahead of the shared remedy.
+            Defaults to the publish wording (``PUBLISH_CONSEQUENCE``).
 
     Returns:
         ``(ok, message)``. The message explains the failure, or names the waiver in
@@ -196,8 +222,7 @@ def check(record: dict, live: dict[str, str]) -> tuple[bool, str]:
         "STALE SNAPSHOT: evals/gold_predictions_v3.csv was produced by a different "
         "prompt or model than the code on disk.\n\n"
         f"{detail}\n\n"
-        "Publishing now would stamp the current version onto predictions the "
-        "current classifier never made. Either:\n"
+        f"{consequence} Either:\n"
         "  1. Re-run the gold eval so the numbers describe the shipped classifier:\n"
         "       uv run --env-file .env python src/gold_eval.py\n"
         "       uv run python scripts/gen_metrics_artifact.py\n"

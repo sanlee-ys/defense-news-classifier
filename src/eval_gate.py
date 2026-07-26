@@ -20,6 +20,14 @@ Two callers wrap this same script around the same floors (see
   cached prediction CSV and re-runs gold_eval.py against the real models first, then
   runs this exact script -- the "did the model or prompt actually get worse" check.
 
+Because the offline gate grades a FROZEN snapshot, it also has to prove that snapshot
+still describes the classifier on disk. Otherwise the gate's own claim -- "the shipped
+numbers still clear the bar" -- silently stops being about the shipped classifier the
+moment someone edits classify.SYSTEM_PROMPT without paying for a gold re-run: the floors
+would be reported as met by predictions the current prompt never made. src/provenance.py
+records that pairing at run time and main() refuses to grade when it no longer holds
+(the same guard scripts/gen_metrics_artifact.py applies before publishing).
+
 BM25 retrieval grounding was retired in decisions/012-retire-bm25-grounding.md (it
 stopped paying under the improved prompt), so the gate grades only the ungrounded
 baseline -- the classifier that actually ships.
@@ -37,10 +45,13 @@ from __future__ import annotations
 import argparse
 import sys
 import tomllib
+from pathlib import Path
 
 import pandas as pd
 
+import classify
 import gold_eval
+import provenance
 
 THRESHOLDS_PATH = "evals/thresholds.toml"
 
@@ -153,6 +164,70 @@ def _print_table(title: str, rows: list[tuple[str, float, float]]) -> bool:
     return all_pass
 
 
+def check_provenance(preds_path: str = PREDS_PATH) -> bool:
+    """Refuse to grade the committed snapshot against a prompt that never produced it.
+
+    Scoped deliberately to the default v3 snapshot. ``gold_eval.py`` writes exactly one
+    sidecar, at ``provenance.PROVENANCE_PATH``, describing ``PREDS_PATH`` -- so that is
+    the only file whose pairing is *knowable*. Deriving a per-preds sidecar path would
+    invent a convention nothing produces, and the frozen v2 snapshot
+    (``evals/gold_predictions.csv``) must never acquire a hand-written one: a fabricated
+    fingerprint asserts a pairing nobody verified, which is worse than no record at all.
+
+    Anything else passed via ``--preds`` is therefore reported as UNPINNED rather than
+    failed -- an ad-hoc or experimental predictions file legitimately has no record, and
+    hard-failing would make the flag unusable. The notice is loud because "no pairing was
+    asserted" must not read like "the pairing was checked".
+
+    A missing sidecar for ``PREDS_PATH`` itself IS a failure, not a skip. Treating absence
+    as acceptable would make ``rm evals/gold_predictions_v3.provenance.json`` a one-command
+    bypass of the whole guard.
+
+    Note the CI live job is unaffected: it deletes the CSV *and* the sidecar, re-runs
+    gold_eval.py (which rewrites both from the live prompt), and only then grades -- so it
+    checks a fresh record against the code that just produced it and passes.
+
+    Args:
+        preds_path: The predictions CSV about to be graded (``--preds``).
+
+    Returns:
+        True if the snapshot may be graded. Prints the reason to stderr and returns
+        False when the recorded pairing no longer holds.
+    """
+    if Path(preds_path).resolve() != Path(PREDS_PATH).resolve():
+        print(
+            f"UNPINNED -- grading {preds_path}, which is not the snapshot the "
+            f"provenance sidecar describes ({PREDS_PATH}). No prompt/model pairing "
+            "is asserted for these numbers."
+        )
+        return True
+
+    try:
+        record = provenance.load(provenance.PROVENANCE_PATH)
+    except FileNotFoundError as exc:
+        print(f"FAIL -- {exc}", file=sys.stderr)
+        return False
+
+    ok, message = provenance.check(
+        record,
+        provenance.fingerprint(
+            classify.SYSTEM_PROMPT,
+            gold_eval.WORKHORSE_MODEL,
+            gold_eval.JUDGE_MODEL,
+        ),
+        consequence=(
+            "Grading now would report the measured floors as met for a classifier "
+            "that is not the one on disk."
+        ),
+    )
+    if not ok:
+        print(message, file=sys.stderr)
+        return False
+    if message:
+        print(message)
+    return True
+
+
 def check_baseline(thresholds: dict, preds_path: str = PREDS_PATH) -> bool:
     """Grade baseline predictions against the ``[baseline]`` floors.
 
@@ -192,6 +267,9 @@ def main() -> None:
     The CI live job passes its freshly regenerated v3 file so the same eight
     measured floors grade a live run. All floors come from measured numbers
     (ADR-014: thresholds after measurement, never before).
+
+    Exits 1 without grading if the default snapshot is no longer pinned to the
+    prompt and models on disk (see ``check_provenance``).
     """
     parser = argparse.ArgumentParser(description="Grade eval outputs vs thresholds.")
     parser.add_argument(
@@ -200,6 +278,18 @@ def main() -> None:
         help="predictions CSV to grade (default: the committed v3 snapshot)",
     )
     args = parser.parse_args()
+
+    # Before any grading: the floors only mean something if the snapshot was produced
+    # by the classifier on disk. Its own exit path, not folded into the floor result,
+    # so a stale snapshot never gets reported as "a metric is below its floor" -- that
+    # would send the reader hunting a regression that did not happen.
+    if not check_provenance(args.preds):
+        print(
+            "\nFAIL -- refusing to grade a snapshot that is not pinned to the "
+            "classifier on disk.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     thresholds = load_thresholds()
     if check_baseline(thresholds, preds_path=args.preds):
