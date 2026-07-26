@@ -7,23 +7,25 @@ name: claude-review
 # build. tests.yml and evals.yml are the gates; a model's opinion is not one, and a
 # red X from a non-deterministic reviewer would train the habit of ignoring red Xs.
 #
-# `opened` only, deliberately NOT `synchronize`: re-reviewing on every push to a PR
-# branch is both a per-push API charge and a stream of near-duplicate comments on
-# work still in progress. Re-review on demand by commenting @claude -- see the
-# issue_comment trigger below, which is what makes that phrase actually fire.
+# ON DEMAND ONLY, as of 2026-07-26 (ADR-016 Amendment 1). There is no automatic
+# trigger: this lane fires when the owner comments @claude on a PR, and at no other
+# time. It costs nothing when idle.
 #
-# Like evals.yml's paid lane, this deliberately does NOT use pull_request_target --
-# that trigger runs untrusted fork code in the base repo's context WITH secrets. The
-# plain `pull_request` trigger is safe precisely because GitHub withholds secrets from
-# fork-originated runs; the `if` guard below turns that safety property into a clean
-# skip instead of a confusing red failure on a missing key.
+# The progression is recorded because the reasoning changed twice, both times on
+# measurement. `synchronize` was rejected up front -- a charge per push and a stream
+# of near-duplicate comments on unfinished work. `pull_request: [opened]` was the
+# compromise that replaced it: one automatic pass per PR. That is what has now been
+# dropped. It was never the wrong design; it stopped being worth its recurring price
+# once the lane worked well enough to run on every PR, which is the only reason it
+# ever cost anything at all.
+#
+# Deliberately does NOT use pull_request_target -- that trigger runs untrusted fork
+# code in the base repo's context WITH secrets. Moot for the comment path (which
+# always runs in the base context), retained as a standing prohibition so a future
+# PR-triggered lane does not reintroduce it.
 on:
-  pull_request:
-    types: [opened]
-  # On-demand re-review. This is what makes `opened`-only affordable rather than
-  # limiting: one automatic pass, then ask for another when the branch is actually
-  # ready. WITHOUT this trigger the @claude phrase does nothing -- trigger_phrase only
-  # matches once an event delivers the comment.
+  # The only trigger. WITHOUT this the @claude phrase does nothing -- trigger_phrase
+  # only matches once an event delivers the comment.
   issue_comment:
     types: [created]
 
@@ -43,41 +45,37 @@ permissions:
 
 jobs:
   review:
-    # Two events, two different guards.
+    # One event, and it is the asymmetric one -- which is why the
+    # author_association check is the load-bearing guard here rather than a
+    # belt-and-braces addition. Comment events ALWAYS run in the base repo's
+    # context WITH secrets; unlike fork pull_request runs, GitHub does not
+    # withhold them. On a public repo that means any stranger commenting
+    # "@claude" would spend this repo's API key. OWNER-only fails closed before a
+    # runner is even allocated. (The action also has an allowed_non_write_users
+    # input, but a guard here costs nothing and does not depend on the action
+    # behaving correctly.)
     #
-    # pull_request: fork PRs get no secrets from GitHub, so the API key would be empty
-    # and the run would fail on authentication rather than on anything about the code.
-    # Skipping outright keeps a contributor's first PR from greeting them with a red X
-    # they cannot fix and did not cause.
+    # The pull_request.issue check keeps this to PR comments; a plain issue
+    # comment is not a review request.
     #
-    # issue_comment: the asymmetric one, and the reason for the author_association
-    # check. Comment events ALWAYS run in the base repo's context WITH secrets --
-    # unlike fork pull_request runs, GitHub does not withhold them. On a public repo
-    # that means any stranger commenting "@claude" would spend this repo's API key.
-    # OWNER-only fails closed before a runner is even allocated. (The action also has
-    # an allowed_non_write_users input, but a guard here costs nothing and does not
-    # depend on the action behaving correctly.)
+    # SYS-021 req. 4 is still satisfied, and by a smaller surface than before:
+    # the fail-open event is guarded, and the fail-closed one no longer exists.
     #
-    # The bot check is the third guard, added 2026-07-25. The action refuses
-    # bot-authored PRs outright ("Workflow initiated by non-human actor:
-    # dependabot (type: Bot)") and exits 1, so before this guard every Dependabot
-    # bump allocated a runner, authenticated, and failed -- a red X on a PR nobody
-    # intended to review. ADR-016 accepts that dependency bumps go unreviewed;
-    # this makes that acceptance a clean skip instead of a recurring failure, the
-    # same way the fork guard above turns withheld secrets into a skip. Checking
-    # `user.type` rather than the dependabot login covers every bot the action
-    # would refuse for the same reason.
-    #
-    # Deliberately NOT applied to the issue_comment path: an OWNER commenting
-    # @claude on a Dependabot PR is a human explicitly asking for the review, and
-    # that escape hatch keeps working.
+    # Two guards were REMOVED with the pull_request trigger on 2026-07-26, and
+    # what they protected is worth recording so neither is re-added by reflex if
+    # an automatic pass ever returns:
+    #   - the same-repo fork check (fork PRs get no secrets, so the run would die
+    #     on auth and greet a contributor with a red X they cannot fix), and
+    #   - the `user.type != 'Bot'` check (the action refuses bot-authored PRs
+    #     outright and exits 1, so every Dependabot bump used to allocate a
+    #     runner, authenticate, and fail).
+    # Both are now unreachable rather than unnecessary. Dependabot bumps still go
+    # unreviewed, as ADR-016 already accepted -- now because nothing fires, not
+    # because a guard skips. An OWNER commenting @claude on a bump still works.
     if: >-
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       github.event.pull_request.user.type != 'Bot') ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.pull_request != null &&
-       github.event.comment.author_association == 'OWNER')
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request != null &&
+      github.event.comment.author_association == 'OWNER'
     runs-on: ubuntu-latest
     # Keyed on the PR number, NOT github.ref: on issue_comment events github.ref is the
     # default branch, so a ref-keyed group would put every @claude comment across every

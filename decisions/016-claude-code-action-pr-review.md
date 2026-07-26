@@ -1,6 +1,7 @@
 # ADR-016: Agentic PR review as an advisory lane, not a gate
 
-**Status:** Accepted
+**Status:** Accepted; amended once — the automatic `pull_request: [opened]` pass dropped,
+leaving the lane on-demand via `@claude` only (2026-07-26, *Amendment 1*)
 **Date:** 2026-07-24
 **Deciders:** San Lee
 
@@ -34,7 +35,7 @@ Concretely, in `.github/workflows/claude-review.yml`:
 |---|---|---|
 | Authority | Advisory, enforced by `continue-on-error: true` | A non-deterministic reviewer that can turn CI red trains the habit of ignoring red. The gates stay deterministic. Enforced at the CI level, not by convention — see Consequences. |
 | Permissions | `contents: read`, `pull-requests: write`, `issues: read`, `id-token: write` | Comment-only. `id-token: write` is required: the action exchanges a GitHub OIDC token for its App token and fails before reaching the model without it. |
-| Trigger | `pull_request: [opened]` + `issue_comment: [created]` | `synchronize` re-reviews on every push: a charge per push and a stream of near-duplicate comments on unfinished work. One automatic pass, then `@claude` on demand — the comment trigger is what makes that phrase fire at all. |
+| Trigger | ~~`pull_request: [opened]` +~~ `issue_comment: [created]` | *(Amended 2026-07-26 — the automatic pass is gone; see Amendment 1.)* `synchronize` re-reviews on every push: a charge per push and a stream of near-duplicate comments on unfinished work. One automatic pass, then `@claude` on demand — the comment trigger is what makes that phrase fire at all. |
 | Comment-trigger abuse | `author_association == 'OWNER'` | `issue_comment` runs in the base repo **with secrets** even for outside commenters — unlike fork `pull_request`, GitHub does not withhold them. Without this guard any stranger could spend the repo's API key by typing `@claude`. |
 | Fork PRs | Skipped via `head.repo.full_name == github.repository` | GitHub withholds secrets from fork runs, so the job would fail on a missing key — a red X a contributor cannot fix and did not cause. |
 | `pull_request_target` | **Not used** | Runs untrusted fork code in the base repo's context *with* secrets. Same reasoning already recorded in `evals.yml`'s header. |
@@ -163,3 +164,84 @@ Surfaces this decision touches, and their state as of 2026-07-24:
 | Let the action push fixes (`contents: write`) | Turns a reviewer into a committer. Commits on this repo carry eval implications; those should come from a human PR, consistent with `evals.yml` never committing refreshed numbers back. |
 | Generic "review this PR for quality" prompt | Produces generic findings. This repo's real risks are metric drift and doc staleness, which a generic reviewer has no reason to look for. |
 | Skip it — solo repo, self-review is fine | Self-review is exactly the gap. Every published number here is defended by an artifact check *because* asserting your own work is unreliable; the same logic applies to reviewing it. |
+
+---
+
+## Amendment 1 — 2026-07-26: the automatic pass, dropped once it was worth paying for
+
+This ADR's *Consequences* bounded the cost at "single-digit dollars a month" and its
+*Alternatives* rejected `synchronize` for "charges per push." Both were reasoning about the
+**wrong axis**. The lane never scaled with pushes, exactly as designed. It scaled with
+**PRs**, and this repo's PR volume across the v3.1.0 ladder work was not the volume this
+bullet was sized against.
+
+**The automatic `pull_request: [opened]` trigger is removed.** The lane now fires only when
+the owner comments `@claude` on a PR. Everything else is untouched: advisory status, the
+`--allowedTools` grant, `--max-turns 20`, the pinned model, the prompt, `use_sticky_comment`.
+
+**Why this is not a reversal of the ADR.** The decision this record settled was *what
+authority the reviewer gets* — advisory, comments only, never a gate. That is unchanged. The
+trigger was always a cost knob, and this ADR said so in the same breath it set it: one
+automatic pass was itself the compromise that replaced `synchronize`. This turns the knob one
+notch further along the axis it was already on.
+
+**What actually changed is that the lane started working.** At adoption it was cheap partly
+because it was shallow — the first live run spent $0.14 and posted nothing, because
+`--allowedTools` was missing and every attempt to comment became a permission denial. Each
+fix since (the grant, `Read`/`Grep`/`Glob`, the prompt scoping) made the review both more
+useful and more expensive per run. **A recurring charge is only worth questioning once it
+buys something**, so the bill arriving is evidence the fixes landed, not evidence they were a
+mistake.
+
+**The trade, stated honestly.** The automatic pass is the one that catches what you did not
+think to ask about — that is its whole value, and it is what is being given up. On-demand
+review has a failure mode the automatic pass does not: **you have to remember**, and the PRs
+you forget to ask about are correlated with the ones you are least likely to scrutinise
+yourself. This is accepted, not solved. The deterministic gates (`tests.yml`, `evals.yml`)
+are unaffected and remain the enforcing layer; the advisory lane was never what stopped a bad
+merge.
+
+**Two guards became unreachable** and their reasoning is preserved in the workflow rather than
+deleted, because "we removed a security guard" and "the event it guarded no longer exists"
+look identical in a diff a year later:
+- the same-repo fork check (fork runs get no secrets → auth failure → an unfixable red X for
+  a contributor), and
+- `user.type != 'Bot'` (the action refuses bot-authored PRs and exits 1, so Dependabot bumps
+  used to allocate a runner, authenticate, and fail).
+
+Dependabot bumps still go unreviewed, which this ADR already accepted — now because nothing
+fires rather than because a guard skips. An OWNER commenting `@claude` on a bump still works.
+
+**The OWNER gate is now load-bearing rather than defence in depth.** It was one of three
+guards on a mixed trigger surface; it is now the only thing between a stranger's `@claude`
+comment and this repo's API key. SYS-021 req. 4 is still satisfied — and by a smaller surface,
+since the fail-closed event is gone and only the fail-open one remains, guarded.
+
+**One narrowing worth naming.** A comment-triggered run checks out the **default branch**, not
+the PR merge ref, so `Read`/`Grep`/`Glob` see `main` rather than the PR's tree. The prompt
+already leads with `gh pr diff`, which remains authoritative for what changed, so the review
+still works — but reading a *changed* file now shows its pre-PR content. Checking out
+`refs/pull/N/merge` explicitly would restore the old tree and is the documented follow-up if
+review depth visibly suffers; it is not done here because that ref can be absent on closed or
+long-merged PRs, and trading a silent narrowing for a loud checkout failure is a bad deal on a
+change whose purpose is to stop this lane spending money unattended.
+
+**Downstream surfaces for this amendment:**
+- `.github/workflows/claude-review.yml` — the `on:` block loses `pull_request`; the job `if:`
+  collapses to the single OWNER-gated comment clause, with the two removed guards recorded in
+  place. The prompt, grant, ceiling, model pin and concurrency key are **unchanged**.
+- The *Decision* table's **Trigger** row above — struck through and annotated rather than
+  rewritten, so the compromise it records stays readable.
+- The **Fork PRs** row and the `pull_request_target` row — now describe an event this lane no
+  longer receives. Left standing: both are standing prohibitions, and the reasoning is what
+  stops a future PR-triggered lane reintroducing them.
+- `decisions/README.md` — the ADR-016 row notes the lane is on-demand.
+- **Verification is unchanged and still cannot happen on this PR.** The Claude App refuses to
+  run when the workflow differs from the copy on the default branch, so this change is
+  verified by merging and then commenting `@claude` on a later PR — judged by **a posted
+  review comment**, never by a green check. That was already this lane's only verification
+  path; it is now its only trigger as well.
+
+**Unchanged by Amendment 1:** every other choice in the Decision table, the whole of
+*Consequences* except the cost bullet's premise, and the advisory-not-a-gate ruling that is
+the actual subject of this record.
