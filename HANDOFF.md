@@ -66,6 +66,16 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   the old slot were swept to version-free phrasing, so the reference cannot rot
   at the next move. ADRs were deliberately left as written — correct on their
   date.
+- **Every downstream surface ADR-017 named is now swept.** The last one was the
+  SYS-007 AI-skill map (architecture PR #72, 2026-07-26), which gained a sixth
+  cluster, **Baselines & build-vs-buy** — framed as "fit the classical model you
+  are not going to ship, to price the one you are," and marked *measured once,
+  not yet a practice*. The same PR credited the finished ladder to the Agents &
+  orchestration cluster and the held-out veto to the Evals keystone. Note for
+  whoever bumps a version next: that PR also had to fix a stale `v3.0.0` version
+  claim in `architecture/program/README.md`, which is a **guarded marker** and had
+  been failing that repo's CI since our tag. A version bump here reddens the
+  architecture repo until its prose catches up.
 - **The bake-off is published** (portfolio PR #132, 2026-07-26). The project page
   now carries a "Why an LLM at all" section with the 72.2%/66.7% vs 92.6%
   comparison, both p-values, the failure shape, and the two disclosed handicaps.
@@ -81,21 +91,17 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 
 ## Next jobs, in order (each its own branch → PR)
 
-1. **SYS-007's AI-skill map has no line for any of this.** Checked 2026-07-25:
-   `architecture/decisions/SYS-007-engineering-substrate-and-ai-skills.md` says
-   nothing about the classical baseline or the ladder's measured results, though
-   ADR-017 named it a downstream surface. Architecture repo, separate session.
-2. **`v3.2.0` scaled region eval — unblocked, unscheduled.** n=300 DVIDS snippets
+1. **`v3.2.0` scaled region eval — unblocked, unscheduled.** n=300 DVIDS snippets
    graded on region by the validated Opus judge (100.0% judge-vs-human on the
    gold 54 cleared the gate), same Wilson-CI reporting as v2.1.0. This needs a
    decision to start, not a measurement. Owner's call.
-3. **The named `global` cluster still wants a prompt clause.** All 7 misses are
+2. **The named `global` cluster still wants a prompt clause.** All 7 misses are
    gold-`global` rows the model pulls to a specific region by inferring a theater
    from the US *actor*. L4 established the cluster is genuinely fixable by
    evidence checking (it fixed 6 of 7) — but at 4× cost through a pipeline that
    was declined. A prompt clause is the cheap alternative to test, measure-first
    like PR #79.
-4. **Option, explicitly NOT a commitment: a structurally narrowed critic.** L4's
+3. **Option, explicitly NOT a commitment: a structurally narrowed critic.** L4's
    failure was a charter that lived only in the prompt. A critic code-gated to
    fire *only* where triage reports `none stated`, on region alone, is a
    different experiment with a different cost profile — and it is a **new
@@ -154,7 +160,8 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 ## Owner-only actions pending
 
 - Scheduling the `v3.2.0` scaled region eval, which is unblocked but deliberately
-  unscheduled (job 2).
-- Deciding whether the narrowed-critic experiment (job 4) is worth a spec at all.
-  The honest default is no: the ladder is complete and measured, and the one
-  remaining publication gap (job 1) is worth more than another rung.
+  unscheduled (job 1).
+- Deciding whether the narrowed-critic experiment (job 3) is worth a spec at all.
+  The honest default is no. The ladder is complete, measured, and now fully
+  published — there is no documentation debt left to trade against, so this
+  would be new build work on a rung that already returned its answer.
