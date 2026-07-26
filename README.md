@@ -35,9 +35,12 @@ re-measured on the same gold set. Those are the current numbers, directly below.
 | **Retrieval** | none | BM25 over a 62-doc corpus, tried and cited — then measured and **retired** ([ADR-012](decisions/012-retire-bm25-grounding.md)) |
 | **Honest read** | in-distribution *consistency* | real-world *accuracy* |
 
-### Current state — v3.0.0: three axes, human-graded
+### Current state — v3.1.0: three axes, human-graded
 
-v3.0.0 is the roadmap's planned breaking change: output becomes
+The current release is **v3.1.0**, and the numbers below were measured at v3.0.0. Both are
+true at once: everything v3.1.0 added is eval and experiment machinery, so the shipped prompt
+and the single classify call are byte-for-byte what produced these results. v3.0.0 was the
+roadmap's planned breaking change: output becomes
 `{category, operational_domain, region}` ([ADR-014](decisions/014-region-field-design.md)).
 The gold set gained a hand-labeled `region` column, and every label on **all three axes** was
 then adversarially verified against each snippet's source article — category and domain

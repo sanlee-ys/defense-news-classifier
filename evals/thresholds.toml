@@ -31,7 +31,7 @@ judge_domain_agreement = 0.88
 # Region floors (ADR-014: set from the measured 2026-07-18 live run, never
 # aspirationally). region_accuracy 0.870 measured -> 0.78 floor (~9 pts, matching
 # the category margin). judge_region_agreement 1.000 measured -> 0.93 floor
-# (~7 pts; this floor guards the signal the v3.1.0 scaled eval stands on).
+# (~7 pts; this floor guards the signal the scaled region eval stands on).
 # There is deliberately NO region_macro_f1 floor: with europe support n=1, a
 # single flipped row moves region macro-F1 by ~0.17 -- any floor would either be
 # meaninglessly low or flap on noise. The per-label table in gold_eval_v3.txt is

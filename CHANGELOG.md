@@ -7,7 +7,21 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ---
 
-## [Unreleased]
+## [3.1.0] - 2026-07-25
+
+Milestone: **the autonomy ladder, built to the top.** L3's second rung and all of L4 land
+here, together with the classical-ML bake-off that finally measured whether the LLM was
+worth paying for at all ([ADR-017](decisions/017-classical-baseline-bakeoff.md) through
+[ADR-020](decisions/020-l4-multi-agent-pipeline.md)). Four verdicts, three of them negative:
+the agent-driven ML loop improved the split it could see and degraded the held-out one,
+retrieved exemplars did nothing, and the multi-agent pipeline did measurable harm at roughly
+four times the calls. Each was kept as a record rather than deleted.
+
+The shipped classifier is **unchanged** — same prompt, same single call, same
+`{category, operational_domain, region}` contract — so this is a MINOR: capability was added,
+nothing a caller relies on moved. The gold numbers below are still `v3.0.0`'s measurements
+because the thing they measure did not change. The roadmap's scaled region eval, previously
+pencilled in at this number, moves to `v3.2.0`.
 
 ### Added
 - **L4: the multi-agent pipeline** ([ADR-020](decisions/020-l4-multi-agent-pipeline.md),
@@ -50,8 +64,16 @@ Versions are tagged by milestone; individual commits are noted where relevant.
   (`validate_experiment` — the rung-2 counterpart of the region-rubric freeze). Feedback is
   built from 5-fold out-of-fold predictions inside A, never fit-on-self (a test pins it).
   Only the proposer spends tokens; scoring is local. `--dry-run` runs the full loop offline
-  with a canned proposer; the first live run is pending and its verdict (either direction)
-  will be recorded when it exists. Two axes, per ADR-017's disclosed region limit.
+  with a canned proposer. Two axes, per ADR-017's disclosed region limit. **Verdict (same
+  day, first live run — six iterations, stopped on plateau): the agent improved the metric it
+  could see and degraded the one that matters, and the harness caught it. Best-by-B iteration
+  2 scored B 0.699 (+6.0 over baseline) while held-out C fell to 0.545 (−8.6). The mechanism
+  is distribution shift, not peeking — A and B are both judge-labeled DVIDS wire text, so
+  keywords mined from A's errors genuinely generalize there and mislead on C's
+  human-labeled mix. Every guard behaved: plateau fired, best-iteration selection read B
+  alone, and C exposed the trade precisely because nothing was allowed to optimize it. This
+  is the Goodhart centerpiece demonstrated end-to-end rather than merely designed for.
+  Record: the ADR-018 amendment.**
 - **Classical ML baseline bake-off** ([ADR-017](decisions/017-classical-baseline-bakeoff.md),
   [spec](docs/specs/ml-baseline-bakeoff.md)): `src/baseline_ml.py` trains TF-IDF + logistic
   regression on the 300 judge-graded snippets (`judge_*` labels only) and scores it once
@@ -62,6 +84,23 @@ Versions are tagged by milestone; individual commits are noted where relevant.
   tests in `tests/test_baseline_ml.py`. scikit-learn enters the dev/eval dependency group
   only; the shipped classifier's runtime deps and behavior are unchanged. This harness is the
   substrate the autonomy ladder's rung-2 agent loop will wrap.
+- **Published `/classify` contract artifact** (`contracts/classify-response.schema.json`,
+  `scripts/gen_contract_schema.py`, `tests/test_contract_schema.py`) — this repo is the
+  **provider** on the SYS-004 seam, so it now publishes the wire contract as a committed
+  artifact consumers assert against. Generated from `ClassifyResponse` plus
+  `CATEGORIES`/`DOMAINS`/`REGIONS`, never hand-edited, with `additionalProperties: false`
+  so an added field is a detectable breaking change. A test regenerates in memory and
+  compares byte-for-byte, and CI runs `--check`, so editing the response model or a label
+  constant without regenerating turns the build red. The generator also refuses to publish
+  a response field that has no backing enum, closing the "fourth axis silently published as
+  an unconstrained string" path.
+
+  **Why:** SYS-004 claimed "contract tests on both sides… turn any drift into a red build."
+  That was false in kind — each repo asserted against its *own* copy of the shape, so when
+  `region` shipped in v3.0.0 the provider's fixture moved with it, the consumer's did not,
+  and both suites stayed green through a breaking change. This artifact is the shared thing
+  that was missing. Output contract untouched, so per this project's own precedent (the
+  evals-CI gate in v2.1.0) it earned no version bump on its own; it rides the `v3.1.0` tag.
 
 ### Fixed
 - **The published metrics can no longer be stamped with a version whose prompt never
@@ -145,25 +184,6 @@ Versions are tagged by milestone; individual commits are noted where relevant.
      gained an optional `result` payload to make this possible; it re-checks every axis
      against its own enum rather than trusting which one `_validate` happened to report
      first. An error raised without a payload still degrades to all-three sentinels.
-
-### Added
-- **Published `/classify` contract artifact** (`contracts/classify-response.schema.json`,
-  `scripts/gen_contract_schema.py`, `tests/test_contract_schema.py`) — this repo is the
-  **provider** on the SYS-004 seam, so it now publishes the wire contract as a committed
-  artifact consumers assert against. Generated from `ClassifyResponse` plus
-  `CATEGORIES`/`DOMAINS`/`REGIONS`, never hand-edited, with `additionalProperties: false`
-  so an added field is a detectable breaking change. A test regenerates in memory and
-  compares byte-for-byte, and CI runs `--check`, so editing the response model or a label
-  constant without regenerating turns the build red. The generator also refuses to publish
-  a response field that has no backing enum, closing the "fourth axis silently published as
-  an unconstrained string" path.
-
-  **Why:** SYS-004 claimed "contract tests on both sides… turn any drift into a red build."
-  That was false in kind — each repo asserted against its *own* copy of the shape, so when
-  `region` shipped in v3.0.0 the provider's fixture moved with it, the consumer's did not,
-  and both suites stayed green through a breaking change. This artifact is the shared thing
-  that was missing. Output contract untouched, so per this project's own precedent (the
-  evals-CI gate in v2.1.0) it earns no version bump on its own.
 
 ## [3.0.0] - 2026-07-18
 
@@ -407,7 +427,11 @@ First complete version of the defense news classifier. All v1 success criteria m
 
 ---
 
-[Unreleased]: https://github.com/sanlee-ys/defense-news-classifier/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/sanlee-ys/defense-news-classifier/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v3.0.0...v3.1.0
+[3.0.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v2.2.0...v3.0.0
+[2.2.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v2.1.0...v2.2.0
+[2.1.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v2.0.1...v2.1.0
 [2.0.1]: https://github.com/sanlee-ys/defense-news-classifier/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v1.0.0...v1.1.0

@@ -37,7 +37,8 @@ What is different, and why:
   scoring its own training set memorizes it (~100% on A) and would hand the
   agent an empty failure list; the OOF view is the honest generalization signal.
 - Two axes only (category, operational_domain): the judge-graded training data
-  has no region labels until v3.1.0 -- same disclosed limit as ADR-017.
+  has no region labels until the scaled region eval ships -- same disclosed
+  limit as ADR-017.
 
 The Goodhart read, mirrored from rung 1: A-vs-B separates "memorized the
 feedback set" from real improvement; B-vs-C separates "fit the judge's labeling
