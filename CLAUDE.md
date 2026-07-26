@@ -15,8 +15,9 @@ misclassification log) fronted by a README that **leads with the numbers**.
 `v2.0.0` added BM25 RAG grounding over real public text, which was later **measured and
 retired** ([ADR-012](decisions/012-retire-bm25-grounding.md)) once it stopped beating the
 ungrounded classifier — the shipped classifier is ungrounded. The `region` field
-**shipped as `v3.0.0`** ([ADR-014](decisions/014-region-field-design.md)). Version
-specifics — what ships when and why — live in **Versioning roadmap** below, not here.
+**shipped as `v3.0.0`** ([ADR-014](decisions/014-region-field-design.md)). What shipped in
+which version lives in [`CHANGELOG.md`](CHANGELOG.md); how to pick the next number is in
+**Versioning roadmap** below.
 
 Still out of scope unless a version deliberately picks it up: a web UI, scraping
 pipelines, databases, auth / multi-user, and model fine-tuning. If something
@@ -73,23 +74,23 @@ CLAUDE.md
 
 ## How to work with me
 - **Explain the key decisions** briefly as you make them (why this prompt design, why this eval metric) so the code is understood, not just run.
-- Prefer **clear, readable code with short comments** over clever one-liners.
-- Work in **small steps**. After each step, explain what was done and what's next, and wait for review before moving on.
+- **Checkpoint where a wrong turn is expensive to undo** — a real design choice, anything touching the gold set or a published number, anything that spends API budget. For mechanical batches an ADR or a doc already specifies, do the whole batch and report once; stopping after each file isn't review, it's friction.
 - When there's a real design choice (how to structure the eval, how to handle an article that spans two categories), **surface it and ask** rather than silently picking.
 - Write code so each piece can be run and inspected independently.
 
-## Working across multiple sessions
-Each web session runs in its own fresh container and can't see another session's uncommitted work — the **only** shared coordination point is `main`. Everything here follows from that. These rules exist because parallel sessions once built the same CI workflow three times (PRs #4/#5/#6) and forked off a stale `main`, causing conflicts.
+<!-- shared:parallel-sessions v1 -->
+## Working across parallel sessions (hard rule)
 
-- **One concern per session → one branch → one PR.** If the deliverable doesn't fit in a sentence, it's two sessions. Don't wander into adjacent cleanup.
-- **Before starting, check open PRs and branches** for the same work. A 10-second look prevents duplicate efforts.
-- **Branch from fresh `main`, merge fast, delete the branch on merge.** Short-lived branches are the whole game — the longer a branch lives, the more it drifts from `main`.
-- **Serialize changes to shared files; parallelize only genuinely independent work.**
-  - Must serialize (collision hotspots): `pyproject.toml`, `uv.lock`, `README.md`, `.github/workflows/*`, anything restructuring layout.
-  - Safe to parallelize: separate `src/` modules, isolated docs, separate test files.
-  - **Parallelize by independent *file*, not by *task*.** Cut a session per file that nothing else touches — never one session per task when the tasks collide on the same file. **Generated or aggregated files (build outputs, indexes, registries, generated HTML/SVG) especially can't be merged**, so when several pieces of work feed one of them, keep that *wiring* in one hand: author the independent content in parallel, then have a single integrator do the registration + rebuild once, after the content lands.
-- **Name branches by intent, not a session slug** (`fix-industry-labels`, not `claude/recent-changes-xyz`) so duplicates are obvious at a glance.
-- **If many sessions run at once, designate one "integrator"** that owns merging to `main` and keeping it green; others stay feature-scoped and rebase on its merges.
+Sessions cannot see each other's uncommitted work — **`main` is the only shared coordination point**. So: **one concern per session → one branch → one PR**; check open PRs and branches before starting; branch from fresh `main` and merge fast; **serialize the collision hotspots** and parallelize by independent *file*, not by task; keep the wiring for any generated or aggregated file in one hand. Full rule + the triple-build incident that produced it: [claude-ops `conventions/parallel-sessions.md`](https://github.com/sanlee-ys/claude-ops/blob/main/conventions/parallel-sessions.md).
+<!-- /shared:parallel-sessions -->
+
+**This repo's collision hotspots:** `pyproject.toml`, `uv.lock`, `README.md`,
+`CHANGELOG.md`, `.github/workflows/*`, and anything restructuring layout. Safe to
+parallelize: separate `src/` modules, isolated docs, separate test files.
+
+Branch names here should say what the work is (`fix-industry-labels`) so duplicates are
+obvious in `gh pr list` — except in hosted sessions, which are assigned a branch name and
+can't rename it. That's the environment, not a violation.
 
 ## Definition of done (v1)
 - Run the generator and produce a labeled synthetic dataset of defense-news snippets.
@@ -99,9 +100,11 @@ Each web session runs in its own fresh container and can't see another session's
 
 ## Versioning roadmap
 
-v1 (synthetic, self-graded), v2 (real text + human gold + BM25 retrieval, since retired —
-[ADR-012](decisions/012-retire-bm25-grounding.md)), and v3 (the `region` axis) have shipped;
-**`v3.1.0` is the current release** — the autonomy ladder, built to the top. Releases follow **semver** (`MAJOR.MINOR.PATCH`) and
+**What shipped when lives in [`CHANGELOG.md`](CHANGELOG.md) and `git tag --list`** — the
+mechanical record, not a prose copy of it. This section carries only the rule for choosing
+the *next* number and the work that hasn't shipped yet.
+
+Releases follow **semver** (`MAJOR.MINOR.PATCH`) and
 [Keep a Changelog](https://keepachangelog.com/) — every milestone gets a git tag + a CHANGELOG
 entry. The line to internalize:
 
@@ -114,34 +117,15 @@ entry. The line to internalize:
   methodology changes so prior results/integrations no longer apply. **Bumping MAJOR resets
   MINOR *and* PATCH to 0.**
 
-A worked progression from `v2.0.0` (the concrete plan, not just the theory):
+The reset rule is the whole game: a digit goes back to 0 every time a digit to its left
+moves (`2.1.0` -> `2.2.0` -> `3.0.0`). A version number is a promise about what changed, not
+a tally of releases.
 
-| Version | Bump | What it would ship | Why that bump |
-|---|---|---|---|
-| **v2.0.1** | patch | Remove the dead Kafka consumer path (`src/consumer.py` + its Testcontainers integration test) once notes-api dropped Kafka for a `BackgroundTasks` writeback | Pure dead-code hardening — no feature, contract untouched — **shipped 2026-07-05** |
-| **v2.0.2** | patch | Backfill the v2 eval modules' remaining orchestration tests — the API-driving run-loops and `main()` entrypoints the pure-function tests skipped in `gold_eval_rag.py` (62%), `stability.py` (58%), `retrieval_error_analysis.py` (82%), `gold_eval_haiku.py` (86%) — and fix any edge cases they expose | Pure correctness/hardening — no feature, contract untouched |
-| **v2.1.0** | minor | **Scale the eval with the validated judge** — 300 real DVIDS snippets graded by the Opus judge with 95% Wilson CIs: category 93.3% [89.9, 95.6], domain 90.3% [86.5, 93.2], halving the n=54 CI width — **shipped 2026-07-17** (`src/scale_eval.py`, `evals/scale_eval.txt`; the DVIDS-only set is operations-skewed, so the category macro-F1 is documented as uninformative) | New capability, same output contract → MINOR; PATCH resets to 0 |
-| **v2.1.1** | patch | Fix whatever the scaled run exposes — e.g. a resume/batching bug in the judge harness or a larger-data CI timeout | A fix *on top of* v2.1.0 → third digit increments |
-| **v2.2.0** | minor | **Tiered model routing — measured and declined** ([ADR-013](decisions/013-decline-tiered-routing.md)) — built the runner-up trigger + measurement harness ([ADR-011](decisions/011-reaim-tiered-routing-technology-operations.md) had re-aimed it at `technology`-vs-`operations`), measured the trade, and shipped the negative result: routing moved **+0 rows** on both gold axes (escalated rows: fixed 0, broke 1) at **~1.97x** the cost (19.4% escalation rate). The shipped classifier stays single-model; the harness stays dormant as the record — **shipped 2026-07-18** | Additive capability (the harness + verdict), callers unaffected → MINOR again; PATCH back to 0 |
-| **v3.0.0** | major | **Add a `region` field** — output becomes `{category, operational_domain, region}` ([ADR-014](decisions/014-region-field-design.md)): six labels with `global` as the no-anchor/multi-region catch-all; fresh gold-labeling pass, owner-reviewed then adversarially audited against source articles on all three axes (cat/dom hand labels survived 108/108). First live run: category 92.6%, domain 92.6%, region 87.0% — with judge-vs-human region agreement **100.0%**, clearing the gate for the scaled region eval. The region misses are one named cluster (7× gold=`global` pulled to a specific region — the no-guessing rule is the model's hardest) — **shipped 2026-07-18** | Breaks the output contract → MAJOR; MINOR + PATCH reset to 0 |
-| **v3.1.0** | minor | **The autonomy ladder, built to the top** — L3's rung 2 (the agent-driven ML loop, [ADR-018](decisions/018-agent-driven-ml-loop.md)) and all of L4 (the multi-agent pipeline, [ADR-020](decisions/020-l4-multi-agent-pipeline.md)), on top of the classical-ML bake-off that first measured whether the LLM was worth paying for ([ADR-017](decisions/017-classical-baseline-bakeoff.md)) and the kNN-exemplar null that closed the retrieval question ([ADR-019](decisions/019-knn-exemplar-fewshot.md)). Four verdicts, three negative — the ML loop's own held-out split vetoed its best iteration (B +6.0 / C −8.6), and the pipeline did the repo's first statistically significant harm (p=0.016) at ~4x the calls. All harnesses, no change to the shipped prompt or call — **shipped 2026-07-25** | Additive capability + a fix; output contract untouched → MINOR |
-| **v3.2.0** | minor | **Scale the region eval** — n=300 DVIDS snippets graded on region by the Opus judge (validated at 100.0% vs human on the gold 54, so the answer-key chain holds); same Wilson-CI reporting as v2.1.0. Unblocked by the measured gate; unscheduled until picked. *(Held this slot as `v3.1.0` until 2026-07-25, when the ladder work — which depends on none of it — shipped first.)* | New capability, contract untouched → MINOR |
-
-Read straight down the third digit: it climbs *within* a line (`2.0.1` -> `2.0.2`, then `2.1.1`)
-and **resets to 0 every time a digit to its left moves** (`2.1.0`, `2.2.0`, `3.0.0`). That reset
-rule is the whole game — a version number is a promise about what changed, not a counter.
-
-**Released in `v2.1.0` (they had accumulated under `[Unreleased]`; the v2.1.0 tag ships them):**
-- **Evals-as-CI capability gate** ([ADR-007](decisions/007-evals-as-ci-gate.md)) — CI tooling
-  (offline PR gate plus a paid live gate). Doesn't change the output contract, so it earned no
-  bump on its own; it rode along with the v2.1.0 tag.
-- **Rung-1 prompt-optimization loop, autonomy ladder L3** ([ADR-005](decisions/005-agentic-prompt-optimization-loop.md),
-  [spec](docs/specs/prompt-optimization-loop.md)) — a new, backward-compatible capability. The
-  loop spec's §11 held its bump **until after `v2.1.0`** ("scale the eval" is what shrinks the
-  noise floor this loop's honest numbers depend on); v2.1.0 having shipped, it releases with it.
-- **Prompt refinement (tech-vs-ops + `land`)** and the **BM25 grounding retirement**
-  ([ADR-012](decisions/012-retire-bm25-grounding.md)) also ride the v2.1.0 tag — neither changes
-  the `{category, operational_domain}` contract.
+**Not yet shipped:**
+- **Scale the region eval** — n=300 DVIDS snippets graded on region by the Opus judge
+  (validated at 100.0% vs human on the gold 54, so the answer-key chain holds); same
+  Wilson-CI reporting as the category/domain scale eval. Unblocked by the measured gate,
+  unscheduled until picked. Additive, contract untouched → MINOR.
 
 **Guiding principle (carried over from v1):** model tier and feature scope are per-task
 cost/quality knobs **decided by the eval, not by default** — measure first, escalate only where
