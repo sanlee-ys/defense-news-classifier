@@ -41,6 +41,7 @@ from anthropic.types import TextBlockParam
 from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
 from anthropic.types.messages.batch_create_params import Request
 
+import api_retry
 import gold_eval
 import scale_eval
 from classify import (
@@ -104,17 +105,13 @@ def _classify_runner_up_retry(
         Dict with ``category``, ``operational_domain``, ``runner_up_category``.
 
     Raises:
-        anthropic.InternalServerError: If all retries are exhausted on a 500.
-        anthropic.RateLimitError: If all retries are exhausted on a 429.
+        anthropic.APIError: The last failure, re-raised once attempts are
+            exhausted -- or immediately, when ``api_retry``'s taxonomy
+            classifies it as fail-fast (auth, quota, billing).
     """
-    for attempt in range(max_retries):
-        try:
-            return classify_with_runner_up(client, text)
-        except (anthropic.InternalServerError, anthropic.RateLimitError):
-            if attempt == max_retries - 1:
-                raise
-            time.sleep(2 ** (attempt + 1))
-    raise ValueError("max_retries must be >= 1")
+    return api_retry.call_with_retry(
+        lambda: classify_with_runner_up(client, text), max_retries=max_retries
+    )
 
 
 def run_runner_up_predictions(

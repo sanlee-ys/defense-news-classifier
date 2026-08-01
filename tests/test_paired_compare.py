@@ -307,6 +307,29 @@ def test_observations_classify_blank_sentinel_and_ungradable_rows(answer_key):
     assert observations[0].score == 1.0
 
 
+def test_every_harness_error_sentinel_is_errored_not_wrong(answer_key):
+    """A non-answer is never a miss; all three sentinels land in one bucket.
+
+    Scoring a non-answer wrong charges the model for the harness's failure.
+    """
+    answers = load_answer_key(answer_key, "category")
+    frame = pd.DataFrame(
+        [
+            {"id": "g001", "pred_category": paired_compare.UNCLASSIFIED},
+            {"id": "g002", "pred_category": paired_compare.INCOMPLETE},
+            {"id": "g003", "pred_category": paired_compare.REFUSED},
+        ]
+    ).astype(str)
+    observations = observations_from_frame(frame, "arm", "pred_category", answers)
+    assert [o.outcome for o in observations] == [Outcome.ERRORED] * 3
+    assert [o.score for o in observations] == [None] * 3
+    assert [o.detail for o in observations] == [
+        "unclassified sentinel",
+        "incomplete sentinel",
+        "refused sentinel",
+    ]
+
+
 def test_observations_require_the_prediction_column(answer_key):
     answers = load_answer_key(answer_key, "category")
     frame = pd.DataFrame([{"id": "g001", "prediction": "policy"}])

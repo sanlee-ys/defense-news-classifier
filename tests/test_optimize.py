@@ -1179,7 +1179,10 @@ def patch_anthropic_errors(monkeypatch):
     """
     monkeypatch.setattr(optimize.anthropic, "RateLimitError", _FakeRateLimit)
     monkeypatch.setattr(optimize.anthropic, "InternalServerError", _FakeServerError)
-    monkeypatch.setattr(optimize.time, "sleep", lambda *_: None)
+    # The backoff sleep now lives in the shared taxonomy (src/api_retry.py),
+    # which optimize._classify_retry delegates to; optimize itself no longer
+    # imports time.
+    monkeypatch.setattr(optimize.api_retry.time, "sleep", lambda *_: None)
 
 
 def test_classify_retry_recovers_after_transient_errors(

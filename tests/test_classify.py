@@ -6,9 +6,11 @@ send the right request and correctly pull the structured result back out.
 
 import io
 import sys
+import types
 from typing import cast
 
 import pytest
+from conftest import make_tool_block
 
 import classify
 
@@ -473,3 +475,85 @@ def test_main_exits_when_no_text_given(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         classify.main()
     assert exc.value.code == 1
+
+
+# --- truncated / incomplete responses are never scored -------------------
+
+
+class _TruncatedMessages:
+    """client.messages stand-in returning a max_tokens-truncated tool_use response.
+
+    The dangerous shape: a real ToolUseBlock whose input happens to carry
+    labels that are individually legal, on a response that never finished.
+    Without the stop-reason assertion this scores as an ordinary (wrong or
+    right) answer.
+    """
+
+    def __init__(self, stop_reason: str, payload: dict):
+        self._stop_reason = stop_reason
+        self._payload = payload
+        self.last_kwargs = None
+
+    def create(self, **kwargs):
+        self.last_kwargs = kwargs
+        return types.SimpleNamespace(
+            content=[make_tool_block(self._payload)], stop_reason=self._stop_reason
+        )
+
+
+class _TruncatedClient:
+    def __init__(self, stop_reason: str, payload: dict):
+        self.messages = _TruncatedMessages(stop_reason, payload)
+
+
+@pytest.mark.parametrize(
+    "stop_reason", ["max_tokens", "pause_turn", "model_context_window_exceeded"]
+)
+def test_classify_refuses_to_return_a_truncated_answer(stop_reason):
+    client = _TruncatedClient(
+        stop_reason,
+        {"category": "policy", "operational_domain": "multi", "region": "global"},
+    )
+    with pytest.raises(classify.IncompleteResponseError) as exc:
+        classify.classify(cast(object, client), "text")  # type: ignore[arg-type]
+    assert stop_reason in str(exc.value)
+
+
+def test_classify_accepts_a_normal_tool_use_stop_reason():
+    client = _TruncatedClient(
+        "tool_use",
+        {"category": "policy", "operational_domain": "multi", "region": "global"},
+    )
+    result = classify.classify(cast(object, client), "text")  # type: ignore[arg-type]
+    assert result["category"] == "policy"
+
+
+def test_classify_tolerates_a_response_with_no_stop_reason(tool_client):
+    # Deny-list, not allow-list: an unknown or absent stop reason must not
+    # start failing callers the day the API adds a terminal value.
+    client = tool_client(
+        {"category": "industry", "operational_domain": "sea", "region": "europe"}
+    )
+    assert classify.classify(client, "text")["region"] == "europe"
+
+
+def test_batch_result_refuses_a_truncated_item():
+    message = types.SimpleNamespace(
+        content=[
+            make_tool_block(
+                {
+                    "category": "policy",
+                    "operational_domain": "multi",
+                    "region": "global",
+                }
+            )
+        ],
+        stop_reason="max_tokens",
+    )
+    item = types.SimpleNamespace(
+        custom_id="g007",
+        result=types.SimpleNamespace(type="succeeded", message=message),
+    )
+    with pytest.raises(classify.IncompleteResponseError) as exc:
+        classify.parse_batch_result(item)
+    assert "g007" in str(exc.value)

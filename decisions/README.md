@@ -24,6 +24,7 @@ Decisions are recorded here as they are made. Each ADR captures the context, the
 | [018](018-agent-driven-ml-loop.md) | Rung 2: agent-driven ML loop on the bake-off substrate — rung 1's A/B/C + done-signal architecture reused as shared code | Accepted |
 | [019](019-knn-exemplar-fewshot.md) | kNN-exemplar few-shot — measured and declined as a clean null (n=300 paired, p=0.70); completes the three-shape retrieval series | Accepted |
 | [020](020-l4-multi-agent-pipeline.md) | L4 built + measured: the backward edge fixed 6/7 of the named cluster, but the over-challenging critic did net harm (scale domain p=0.016) at 4× cost — declined as configured | Accepted |
+| [021](021-api-error-taxonomy-and-incomplete-responses.md) | One API error taxonomy (retry 429/5xx/**529**/timeouts, fail fast on auth/quota/billing) replacing five hand-rolled loops, plus a stop-reason assertion so a truncated response is never scored | Accepted |
 
 ## Format
 
