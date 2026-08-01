@@ -6,10 +6,13 @@ read B only, and an invalid experiment is rejected before any fitting.
 """
 
 import json
+import types
 
 import pandas as pd
 import pytest
+from anthropic.types import ToolUseBlock
 
+import api_retry
 import ml_loop
 from ml_loop import (
     DEFAULT_EXPERIMENT,
@@ -159,6 +162,68 @@ def test_proposal_error_stops_run_and_books_tokens(tmp_path):
     assert summary["tokens_spent"] == 123  # failed attempts still cost money
     error = [r for r in records if r["record"] == "run_error"]
     assert len(error) == 1
+
+
+# --- live proposer retry policy (offline; no real client) -----------------
+
+
+def _proposal_response():
+    """A messages.create() response carrying one valid experiment proposal."""
+    payload = {
+        "experiment": json.loads(json.dumps(DEFAULT_EXPERIMENT)),
+        "rationale": "the errors motivate no change",
+        "edit_summary": "no change",
+    }
+    block = ToolUseBlock(
+        id="toolu_fake", input=payload, name="propose_experiment", type="tool_use"
+    )
+    return types.SimpleNamespace(
+        content=[block],
+        usage=types.SimpleNamespace(input_tokens=5, output_tokens=6),
+    )
+
+
+def test_live_proposer_retries_transient_error(monkeypatch):
+    # A 529 on the proposer call must cost a backoff, not the unattended run.
+    slept: list[float] = []
+    monkeypatch.setattr(api_retry.time, "sleep", slept.append)
+    calls = {"n": 0}
+
+    class FlakyMessages:
+        def create(self, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("Overloaded")
+            return _proposal_response()
+
+    client = types.SimpleNamespace(messages=FlakyMessages())
+    backend = ml_loop.AnthropicMLBackend(client, model="m")
+
+    proposal = backend.propose(DEFAULT_EXPERIMENT, "feedback")
+    assert proposal.experiment == DEFAULT_EXPERIMENT
+    assert proposal.tokens == 11  # only the successful attempt returned usage
+    assert calls["n"] == 2
+    assert slept == [2.0]
+
+
+def test_live_proposer_fails_fast_on_account_state(monkeypatch):
+    # A billing/quota failure must surface on the first response, unretried.
+    monkeypatch.setattr(
+        api_retry.time, "sleep", lambda _: pytest.fail("must not back off")
+    )
+    calls = {"n": 0}
+
+    class BrokeMessages:
+        def create(self, **kwargs):
+            calls["n"] += 1
+            raise RuntimeError("insufficient_quota")
+
+    client = types.SimpleNamespace(messages=BrokeMessages())
+    backend = ml_loop.AnthropicMLBackend(client, model="m")
+
+    with pytest.raises(RuntimeError, match="insufficient_quota"):
+        backend.propose(DEFAULT_EXPERIMENT, "feedback")
+    assert calls["n"] == 1
 
 
 def test_keyword_features_change_predictions(split):

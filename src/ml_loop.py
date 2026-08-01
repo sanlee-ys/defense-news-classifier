@@ -71,6 +71,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import KFold
 
+import api_retry
 from baseline_ml import AXES, load_train
 from classify import MODEL
 from eval import compute_metrics, macro_average
@@ -626,13 +627,18 @@ class AnthropicMLBackend:
                 f"Current experiment:\n{json.dumps(current_experiment, indent=2)}\n\n"
                 f"{feedback}\n{complaint}\nPropose the next experiment."
             )
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=2048,
-                system=PROPOSER_SYSTEM_PROMPT,
-                tools=[PROPOSE_TOOL],
-                tool_choice={"type": "tool", "name": "propose_experiment"},
-                messages=[{"role": "user", "content": message}],
+            # The outer loop retries VALIDATION failures; transport failures
+            # (429/529/connection drops) back off here per ADR-021 instead of
+            # aborting an unattended multi-iteration run.
+            response = api_retry.call_with_retry(
+                lambda: self.client.messages.create(
+                    model=self.model,
+                    max_tokens=2048,
+                    system=PROPOSER_SYSTEM_PROMPT,
+                    tools=[PROPOSE_TOOL],
+                    tool_choice={"type": "tool", "name": "propose_experiment"},
+                    messages=[{"role": "user", "content": message}],
+                )
             )
             tokens += int(response.usage.input_tokens) + int(
                 response.usage.output_tokens

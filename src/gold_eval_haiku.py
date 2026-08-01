@@ -40,6 +40,7 @@ import time
 import anthropic
 import pandas as pd
 
+import api_retry
 from classify import (
     BatchItemError,
     InvalidLabelError,
@@ -118,13 +119,21 @@ def run_predictions_batch(
         for _, row in todo.iterrows()
     ]
     print(f"Submitting a batch of {len(requests)} Haiku requests...", flush=True)
-    batch = client.messages.batches.create(requests=requests)
+    # The synchronous loop retries via classify_retry; the batch calls get the
+    # same ADR-021 policy so a transient drop during the hour-long submit/poll/
+    # fetch cycle backs off instead of aborting the unattended run.
+    batch = api_retry.call_with_retry(
+        lambda: client.messages.batches.create(requests=requests)
+    )
+    batch_id = batch.id
     print(
-        f"Batch {batch.id} submitted; polling every {poll_interval:.0f}s...", flush=True
+        f"Batch {batch_id} submitted; polling every {poll_interval:.0f}s...", flush=True
     )
 
     while True:
-        batch = client.messages.batches.retrieve(batch.id)
+        batch = api_retry.call_with_retry(
+            lambda: client.messages.batches.retrieve(batch_id)
+        )
         if batch.processing_status == "ended":
             break
         print(
@@ -136,7 +145,12 @@ def run_predictions_batch(
 
     print("Batch ended; retrieving results...", flush=True)
     write_header = not os.path.exists(HAIKU_PREDS_PATH)
-    for result in client.messages.batches.results(batch.id):
+    # Materialized inside the retry so a connection drop mid-stream replays
+    # the whole fetch rather than losing the tail of the results.
+    results = api_retry.call_with_retry(
+        lambda: list(client.messages.batches.results(batch_id))
+    )
+    for result in results:
         try:
             pred = parse_batch_result(result)
         except (BatchItemError, InvalidLabelError) as exc:
