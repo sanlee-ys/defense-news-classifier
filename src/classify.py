@@ -287,6 +287,65 @@ class ClassificationRefusalError(RuntimeError):
     """
 
 
+class IncompleteResponseError(RuntimeError):
+    """Raised when a call returned without completing normally.
+
+    A truncated response is the quietest failure this classifier has. With
+    forced tool use the API is expected to end at ``stop_reason == "tool_use"``;
+    if it instead ends at ``max_tokens`` the content list can still carry a
+    ``ToolUseBlock`` whose ``input`` was cut off mid-object. Depending on where
+    the cut lands, that block either fails ``_validate`` (loud, fine) or --
+    worse -- validates, because the axes that made it through are individually
+    legal labels. A partial answer then gets scored right-or-wrong against the
+    gold set, and the harness's failure is silently attributed to the model.
+
+    The assertion is baked in here rather than left to each caller for the same
+    reason the pi agent harness puts its stop-reason check inside the harness
+    itself (https://github.com/earendil-works/pi,
+    ``packages/evals/src/pi-harness.ts``): an errored or truncated run must be
+    an eval *failure*, never a quiet zero. Callers that score rows should treat
+    this as an unscored/errored outcome (see ``src/paired_compare.py``'s
+    harness-health section), not as a wrong label.
+
+    Deliberately NOT retried by ``src/api_retry.py``'s taxonomy: the same
+    request re-sent against the same ``max_tokens`` truncates in the same
+    place, so a retry spends money to reproduce the failure. It fails fast and
+    names the stop reason instead.
+    """
+
+
+# Stop reasons that mean "this response is not a finished answer". Anything
+# else -- including an unrecognized future value or a response object that
+# carries no stop_reason at all (test doubles) -- is left alone: a
+# deny-list is the version of this check that cannot break a caller on the
+# day the API adds a new terminal stop reason.
+INCOMPLETE_STOP_REASONS = frozenset(
+    {"max_tokens", "pause_turn", "model_context_window_exceeded"}
+)
+
+
+def _raise_if_incomplete(payload, *, context: str = "") -> None:
+    """Raise ``IncompleteResponseError`` if ``payload`` did not finish normally.
+
+    Args:
+        payload: The API ``Message`` (or batch ``result.message``) to inspect.
+        context: Optional label (e.g. a batch ``custom_id``) folded into the
+            error message so a truncation in a bulk run points at its row.
+
+    Raises:
+        IncompleteResponseError: If ``stop_reason`` is in
+            ``INCOMPLETE_STOP_REASONS``.
+    """
+    stop_reason = getattr(payload, "stop_reason", None)
+    if stop_reason not in INCOMPLETE_STOP_REASONS:
+        return
+    where = f" ({context})" if context else ""
+    raise IncompleteResponseError(
+        f"model response did not complete{where} "
+        f"(stop_reason={stop_reason!r}); refusing to score a truncated answer"
+    )
+
+
 def _raise_if_refusal(payload, *, context: str = "") -> None:
     """Raise ``ClassificationRefusalError`` if ``payload`` is a refusal response.
 
@@ -386,6 +445,9 @@ def classify(
     Raises:
         ClassificationRefusalError: If the model declined the request
             (``stop_reason == "refusal"``) -- see that exception's docstring.
+        IncompleteResponseError: If the response was truncated or otherwise did
+            not finish (e.g. ``stop_reason == "max_tokens"``), so a partial
+            answer can never be scored right-or-wrong.
         InvalidLabelError: If the response falls outside the allowed label
             sets despite ``strict: true`` -- see ``InvalidLabelError``'s
             docstring for why this should no longer occur in practice.
@@ -437,6 +499,10 @@ def classify(
         # next() below would otherwise raise a bare StopIteration. See
         # ClassificationRefusalError.
         _raise_if_refusal(response)
+        # ...and the truncation case before trusting the tool input: a
+        # max_tokens cut can leave a ToolUseBlock whose partial input still
+        # validates. See IncompleteResponseError.
+        _raise_if_incomplete(response)
         tool_block = next(b for b in response.content if isinstance(b, ToolUseBlock))
         result = _validate(cast(dict, tool_block.input))
         if span.is_recording():
@@ -534,6 +600,8 @@ def parse_batch_result(result) -> dict:
         BatchItemError: If the item's result type is not ``"succeeded"``.
         ClassificationRefusalError: If a succeeded item is a refusal
             (``stop_reason == "refusal"``) -- see that exception's docstring.
+        IncompleteResponseError: If a succeeded item's message was truncated
+            (e.g. ``stop_reason == "max_tokens"``).
         InvalidLabelError: If a succeeded item's labels are somehow still out
             of range -- the same defensive backstop classify() applies.
     """
@@ -545,6 +613,7 @@ def parse_batch_result(result) -> dict:
     # A "succeeded" batch item can still be a refusal (the item transport
     # worked; the model declined) -- guard it the same way classify() does.
     _raise_if_refusal(message, context=f"batch item {result.custom_id!r}")
+    _raise_if_incomplete(message, context=f"batch item {result.custom_id!r}")
     tool_block = next(b for b in message.content if isinstance(b, ToolUseBlock))
     return _validate(cast(dict, tool_block.input))
 

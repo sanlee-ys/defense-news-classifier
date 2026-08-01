@@ -68,11 +68,24 @@ import pandas as pd
 # model, it may not measure). Imported rather than re-derived so there is one
 # McNemar in the repo, not three.
 from baseline_ml import mcnemar_exact
+from run_isolation import atomic_write_text
 
 # Sentinel written by the optimization loop when a call could not be classified
 # at all (src/optimize.py). Treated as a harness error, not as a wrong answer --
 # scoring it wrong would charge the model for the harness's failure.
 UNCLASSIFIED = "__unclassified__"
+
+# The same rule generalized to the other two ways a call can come back without
+# a usable answer: the model declined (``classify.ClassificationRefusalError``)
+# or the response was truncated (``classify.IncompleteResponseError``, added
+# alongside this). All three mean "no answer was produced", which is a
+# different fact from "the wrong answer was produced" -- and the distinction is
+# the entire reason this module reports harness health separately. A harness
+# that records one of these sentinels gets the row counted as ``errored`` and
+# excluded from the lift, instead of silently scoring a non-answer as a miss.
+INCOMPLETE = "__incomplete__"
+REFUSED = "__refused__"
+HARNESS_ERROR_SENTINELS = frozenset({UNCLASSIFIED, INCOMPLETE, REFUSED})
 
 # Gold-set column naming: data/gold/gold.csv stores the domain axis as `domain`.
 _TRUTH_COLUMN_ALIASES = {"operational_domain": ("operational_domain", "domain")}
@@ -579,9 +592,10 @@ def observations_from_frame(
     """Turn one arm's prediction rows into scored observations.
 
     Outcome rules, in order: a blank prediction is ``unscored`` (the harness
-    produced no answer); the optimization loop's ``__unclassified__`` sentinel
-    is ``errored``; a row the answer key cannot grade is ``unscorable``;
-    otherwise it is ``scored`` 1.0 for an exact label match and 0.0 otherwise.
+    produced no answer); any of the ``HARNESS_ERROR_SENTINELS``
+    (``__unclassified__``, ``__incomplete__``, ``__refused__``) is ``errored``;
+    a row the answer key cannot grade is ``unscorable``; otherwise it is
+    ``scored`` 1.0 for an exact label match and 0.0 otherwise.
 
     Args:
         frame: Prediction rows, as returned by ``read_predictions``.
@@ -610,10 +624,13 @@ def observations_from_frame(
                 Observation(group_key, arm, Outcome.UNSCORED, detail="blank prediction")
             )
             continue
-        if predicted == UNCLASSIFIED:
+        if predicted in HARNESS_ERROR_SENTINELS:
             observations.append(
                 Observation(
-                    group_key, arm, Outcome.ERRORED, detail="unclassified sentinel"
+                    group_key,
+                    arm,
+                    Outcome.ERRORED,
+                    detail=f"{predicted.strip('_')} sentinel",
                 )
             )
             continue
@@ -840,8 +857,11 @@ def main() -> None:
         candidate_name=args.candidate_name,
     )
     if args.out:
-        with open(args.out, "w", encoding="utf-8") as handle:
-            handle.write(report)
+        # Whole-file write with no resume behind it: a crash mid-write would
+        # leave a truncated comparison report that still looks like a report.
+        # See src/run_isolation.py for why this is where pi's temp-isolation
+        # discipline lands in a repo whose eval runs append as they go.
+        atomic_write_text(args.out, report)
     print(report)
 
 

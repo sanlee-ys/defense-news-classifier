@@ -131,3 +131,29 @@ def set_usage_attributes(span: Span, usage: object) -> None:
         value = getattr(usage, field, None)
         if value is not None:
             span.set_attribute(key, value)
+
+    # Cache WRITES are not one number. Anthropic prices a 5-minute cache write
+    # at ~1.25x the base input rate and a 1-hour write at 2x, while a cache READ
+    # is discounted -- the asymmetry the pi agent harness encodes in
+    # ``calculateCost`` (https://github.com/earendil-works/pi,
+    # ``packages/ai/src/models.ts``: ``cacheWrite * shortWrite + input * 2 *
+    # longWrite``). ``cache_creation_input_tokens`` above collapses both into a
+    # single count, so a span carrying only that number cannot be priced: the
+    # same total costs 1.6x more if it was written at the 1h TTL.
+    #
+    # This repo deliberately reports cost in relative workhorse-call units
+    # rather than dollars (ADR-013, src/route_eval.py), so nothing here computes
+    # a price -- adding a pricing table would be a subsystem with no consumer,
+    # and list prices go stale. What it does is stop discarding the one field
+    # the asymmetry depends on, so a traced run can be priced downstream.
+    cache_creation = getattr(usage, "cache_creation", None)
+    if cache_creation is None:
+        return
+    breakdown = (
+        ("ephemeral_5m_input_tokens", "gen_ai.usage.cache_creation_5m_input_tokens"),
+        ("ephemeral_1h_input_tokens", "gen_ai.usage.cache_creation_1h_input_tokens"),
+    )
+    for field, key in breakdown:
+        value = getattr(cache_creation, field, None)
+        if value is not None:
+            span.set_attribute(key, value)

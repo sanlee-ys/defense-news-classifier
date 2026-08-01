@@ -41,7 +41,6 @@ import difflib
 import hashlib
 import json
 import os
-import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Protocol, cast
@@ -50,6 +49,7 @@ import anthropic
 import pandas as pd
 from anthropic.types import ToolParam, ToolUseBlock
 
+import api_retry
 from classify import (
     CATEGORIES,
     DOMAINS,
@@ -1110,19 +1110,19 @@ def _classify_retry(
         Dict with keys ``category`` and ``operational_domain``.
 
     Raises:
-        anthropic.InternalServerError: If all retries are exhausted on a 500.
-        anthropic.RateLimitError: If all retries are exhausted on a 429.
+        anthropic.APIError: The last transport failure, re-raised once attempts
+            are exhausted -- or immediately, when ``api_retry``'s taxonomy
+            classifies it as fail-fast (auth, quota, billing). Failing fast on
+            an exhausted balance matters most here: an unattended loop that
+            slept-and-retried a billing error three times per row would burn
+            hours reproducing a failure that cannot resolve itself.
         classify.InvalidLabelError: If classify() itself exhausts its own
             re-sample budget on an out-of-enum label. Not retried here.
     """
-    for attempt in range(max_retries):
-        try:
-            return classify(client, text, model=model, system_prompt=system_prompt)
-        except (anthropic.InternalServerError, anthropic.RateLimitError):
-            if attempt == max_retries - 1:
-                raise
-            time.sleep(2 ** (attempt + 1))
-    raise ValueError("max_retries must be >= 1")
+    return api_retry.call_with_retry(
+        lambda: classify(client, text, model=model, system_prompt=system_prompt),
+        max_retries=max_retries,
+    )
 
 
 def _salvage_labels(exc: InvalidLabelError) -> tuple[str, str, str]:

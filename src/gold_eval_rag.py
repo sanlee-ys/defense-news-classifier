@@ -22,6 +22,7 @@ import time
 import anthropic
 import pandas as pd
 
+import api_retry
 from classify import make_client
 from classify_rag import RAG_MODEL, classify_grounded
 from eval import compute_metrics, macro_average
@@ -64,17 +65,14 @@ def classify_retry(
         Dict with keys ``category``, ``operational_domain``, and ``citations``.
 
     Raises:
-        anthropic.InternalServerError: If all retries are exhausted on a 500.
-        anthropic.RateLimitError: If all retries are exhausted on a 429.
+        anthropic.APIError: The last failure, re-raised once attempts are
+            exhausted -- or immediately, when ``api_retry``'s taxonomy
+            classifies it as fail-fast (auth, quota, billing).
     """
-    for attempt in range(max_retries):
-        try:
-            return classify_grounded(client, text, retriever, k=RETRIEVE_K)
-        except (anthropic.InternalServerError, anthropic.RateLimitError):
-            if attempt == max_retries - 1:
-                raise
-            time.sleep(2 ** (attempt + 1))
-    raise ValueError("max_retries must be >= 1")
+    return api_retry.call_with_retry(
+        lambda: classify_grounded(client, text, retriever, k=RETRIEVE_K),
+        max_retries=max_retries,
+    )
 
 
 def run_grounded(

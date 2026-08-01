@@ -23,6 +23,7 @@ import time
 import anthropic
 import pandas as pd
 
+import api_retry
 from classify import (
     BatchItemError,
     InvalidLabelError,
@@ -169,6 +170,12 @@ def classify_with_retry(
 ) -> dict:
     """Call classify(), retrying on transient errors with exponential backoff.
 
+    Which errors count as transient is decided by ``api_retry.classify_error``,
+    not by a local ``except`` tuple: 429/5xx/**529 overloaded**/connection
+    drops/timeouts back off, while auth, quota, and billing failures stop on
+    the first response even when they arrive as a 429. Backoff is unchanged
+    (2s then 4s at the defaults).
+
     Args:
         client: Authenticated Anthropic client.
         text: Article snippet to classify.
@@ -180,21 +187,22 @@ def classify_with_retry(
         Dict with keys ``category`` and ``operational_domain``.
 
     Raises:
-        anthropic.InternalServerError: If all retries are exhausted on a 500.
-        anthropic.RateLimitError: If all retries are exhausted on a 429.
+        anthropic.APIError: The last failure, re-raised once attempts are
+            exhausted -- or immediately, when the taxonomy classifies it as
+            fail-fast.
     """
-    for attempt in range(max_retries):
-        try:
-            if temperature is None:
-                return classify(client, text)
-            return classify(client, text, temperature)
-        except (anthropic.InternalServerError, anthropic.RateLimitError) as exc:
-            if attempt == max_retries - 1:
-                raise
-            wait = 2 ** (attempt + 1)  # 2s then 4s
-            print(f"  [{exc.__class__.__name__}] retrying in {wait}s...", flush=True)
-            time.sleep(wait)
-    raise ValueError("max_retries must be >= 1")
+
+    def produce() -> dict:
+        if temperature is None:
+            return classify(client, text)
+        return classify(client, text, temperature)
+
+    def announce(_retry_index: int, delay: float, exc: BaseException) -> None:
+        print(f"  [{exc.__class__.__name__}] retrying in {delay:.0f}s...", flush=True)
+
+    return api_retry.call_with_retry(
+        produce, max_retries=max_retries, on_retry=announce
+    )
 
 
 def run_predictions(

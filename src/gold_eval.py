@@ -42,6 +42,7 @@ import time
 import anthropic
 import pandas as pd
 
+import api_retry
 import provenance
 from classify import (
     CATEGORIES,
@@ -132,25 +133,27 @@ def classify_retry(
         Dict with keys ``category``, ``operational_domain``, and ``region``.
 
     Raises:
-        anthropic.InternalServerError: If all retries are exhausted on a 500.
-        anthropic.RateLimitError: If all retries are exhausted on a 429.
+        anthropic.APIError: The last transport failure, re-raised once attempts
+            are exhausted -- or immediately, when ``api_retry``'s taxonomy
+            classifies it as fail-fast (auth, quota, billing).
         InvalidLabelError: If the strict-mode anomaly persists across every
             attempt (a real API regression, not a blip -- surface it).
     """
-    for attempt in range(max_retries):
-        try:
-            return classify(client, text, model=model)
-        except (
-            anthropic.InternalServerError,
-            anthropic.RateLimitError,
-            InvalidLabelError,
-        ) as exc:
-            if attempt == max_retries - 1:
-                raise
-            if isinstance(exc, InvalidLabelError):
-                print(f"  [retry] transient invalid tool input: {exc}", flush=True)
-            time.sleep(2 ** (attempt + 1))
-    raise ValueError("max_retries must be >= 1")
+
+    def announce(_retry_index: int, _delay: float, exc: BaseException) -> None:
+        if isinstance(exc, InvalidLabelError):
+            print(f"  [retry] transient invalid tool input: {exc}", flush=True)
+
+    # The API-transport half of the policy now lives in api_retry (which also
+    # covers 529 overloaded and connection drops, and fails fast on quota or
+    # billing); InvalidLabelError stays a caller-supplied extra, since it is a
+    # repo-specific judgement call, not a provider-transport classification.
+    return api_retry.call_with_retry(
+        lambda: classify(client, text, model=model),
+        max_retries=max_retries,
+        retry_on=(InvalidLabelError,),
+        on_retry=announce,
+    )
 
 
 def run_predictions(
