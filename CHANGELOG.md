@@ -9,6 +9,26 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
+### Added
+- **The ADR-017 classical baseline is now portable to the browser**, with a parity gate
+  (`scripts/export_baseline.py`, `web/baseline_export.json`, `web/baseline_infer.js`,
+  `scripts/generate_parity_fixture.py`, `scripts/parity_check.mjs`). The baseline is a
+  TF-IDF vectorizer plus one logistic regression per axis — a linear model over a sparse
+  bag of n-grams, which is small enough to ship as JSON and evaluate client-side with no
+  server and no dependencies. The export fits the ADR-017 configuration on the ADR-017
+  training data by calling `baseline_ml.fit_baseline` itself, so the two cannot drift.
+
+  Nothing here re-measures anything: the published 72.2% / 66.7% figures remain the frozen
+  record in `evals/baseline_eval.txt`, and the export reproduces that fit exactly (verified
+  as a build check, not published as a new number). The risk this change actually carries is
+  the hand-ported preprocessing — a JS reimplementation of sklearn's tokenize → stop-word →
+  n-gram → idf → L2 pipeline fails *quietly*, returning a plausible label rather than the
+  measured model's. So it is gated: `scripts/parity_check.mjs` (bare `node`, no npm) runs the
+  module over 354 committed rows of sklearn's own predictions and decision scores and fails
+  the build on any disagreement beyond 1e-6. The gate additionally asserts that the fixture
+  exercises **every** vocabulary term, because the first draft — gold rows only — could be
+  shown not to catch a perturbed coefficient on a term those 54 rows didn't contain.
+
 ### Fixed
 - **The published metrics can no longer be stamped with a version whose prompt never
   produced them** (`src/provenance.py`, `scripts/gen_metrics_artifact.py`,
