@@ -14,9 +14,10 @@ WORKDIR /app
 COPY requirements-api.txt .
 RUN pip install --no-cache-dir -r requirements-api.txt
 
-# Only the source the service needs. classify.py is imported by api.py; the
-# generator/eval scripts and data are not part of the runtime image.
-COPY src/api.py src/classify.py ./src/
+# Only the source the service needs. classify.py is imported by api.py, and
+# telemetry.py by classify.py; the generator/eval scripts and data are not part
+# of the runtime image.
+COPY src/api.py src/classify.py src/telemetry.py ./src/
 
 # Run as a non-root user. Standard hardening: if the process is compromised it
 # isn't root inside the container.
