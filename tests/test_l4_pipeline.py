@@ -6,10 +6,13 @@ untouched, the audit trail complete, and resume behavior.
 """
 
 import json
+import types
 
 import pandas as pd
 import pytest
+from anthropic.types import ToolUseBlock
 
+import api_retry
 import l4_pipeline
 from classify import SYSTEM_PROMPT
 from l4_pipeline import (
@@ -149,3 +152,58 @@ def test_critic_prompt_embeds_the_live_region_rubric():
 
     block = extract_region_block(SYSTEM_PROMPT)
     assert block and block in l4_pipeline.CRITIC_SYSTEM_PROMPT
+
+
+# --- live backend retry policy (offline; no real client) ------------------
+
+
+def _tool_response(payload):
+    """A messages.create() response shaped like the live backend expects."""
+    block = ToolUseBlock(id="toolu_fake", input=payload, name="tool", type="tool_use")
+    return types.SimpleNamespace(
+        content=[block],
+        usage=types.SimpleNamespace(input_tokens=3, output_tokens=4),
+    )
+
+
+def test_live_tool_call_retries_transient_error(monkeypatch):
+    # A 529 on a triage/critic call must cost a backoff, not the paid run.
+    slept: list[float] = []
+    monkeypatch.setattr(api_retry.time, "sleep", slept.append)
+    calls = {"n": 0}
+
+    class FlakyMessages:
+        def create(self, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("Overloaded")
+            return _tool_response({"verdict": "accept"})
+
+    client = types.SimpleNamespace(messages=FlakyMessages())
+    backend = l4_pipeline.AnthropicL4Backend(client, model="m")
+
+    reply = backend.critic("text", {}, {})
+    assert reply.payload == {"verdict": "accept"}
+    assert reply.tokens == 7
+    assert calls["n"] == 2
+    assert slept == [2.0]
+
+
+def test_live_tool_call_fails_fast_on_account_state(monkeypatch):
+    # A billing/quota failure must surface on the first response, unretried.
+    monkeypatch.setattr(
+        api_retry.time, "sleep", lambda _: pytest.fail("must not back off")
+    )
+    calls = {"n": 0}
+
+    class BrokeMessages:
+        def create(self, **kwargs):
+            calls["n"] += 1
+            raise RuntimeError("Your credit balance is too low")
+
+    client = types.SimpleNamespace(messages=BrokeMessages())
+    backend = l4_pipeline.AnthropicL4Backend(client, model="m")
+
+    with pytest.raises(RuntimeError, match="credit balance"):
+        backend.triage("text")
+    assert calls["n"] == 1

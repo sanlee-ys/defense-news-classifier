@@ -10,7 +10,9 @@ import sys
 import types
 
 import pandas as pd
+import pytest
 
+import api_retry
 import gold_eval_haiku
 
 
@@ -330,6 +332,109 @@ def test_run_predictions_batch_polls_until_batch_ends(
     preds = pd.read_csv(gold_eval_haiku.HAIKU_PREDS_PATH)
     assert set(preds["id"]) == {"g001", "g002"}
     assert retrieves["n"] >= 2  # polled at least once before the batch ended
+
+
+# --- batch-path retry policy (offline; no real client) --------------------
+
+
+def test_run_predictions_batch_retries_transient_create(
+    monkeypatch, batch_client, tmp_path
+):
+    # A 529 on submit must cost a backoff, not the unattended batch run.
+    monkeypatch.chdir(tmp_path)
+    os.makedirs("evals", exist_ok=True)
+    slept: list[float] = []
+    monkeypatch.setattr(api_retry.time, "sleep", slept.append)
+
+    client = batch_client(
+        {
+            "g001": {
+                "category": "procurement",
+                "operational_domain": "air",
+                "region": "global",
+            }
+        }
+    )
+    real_create = client.messages.batches.create
+    calls = {"n": 0}
+
+    def flaky_create(requests):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("Overloaded")
+        return real_create(requests)
+
+    client.messages.batches.create = flaky_create
+    gold_eval_haiku.run_predictions_batch(client, _gold_df(), done_ids={"g002"})
+
+    preds = pd.read_csv(gold_eval_haiku.HAIKU_PREDS_PATH)
+    assert set(preds["id"]) == {"g001"}
+    assert calls["n"] == 2
+    assert slept == [2.0]
+
+
+def test_run_predictions_batch_retries_transient_retrieve(
+    monkeypatch, batch_client, tmp_path
+):
+    # A connection drop mid-poll must back off, not abort the hour-long wait.
+    monkeypatch.chdir(tmp_path)
+    os.makedirs("evals", exist_ok=True)
+    monkeypatch.setattr(api_retry.time, "sleep", lambda *_: None)
+
+    client = batch_client(
+        {
+            "g001": {
+                "category": "procurement",
+                "operational_domain": "air",
+                "region": "global",
+            },
+            "g002": {
+                "category": "operations",
+                "operational_domain": "sea",
+                "region": "global",
+            },
+        }
+    )
+    retrieves = {"n": 0}
+
+    def flaky_retrieve(batch_id):
+        retrieves["n"] += 1
+        if retrieves["n"] == 1:
+            raise RuntimeError("connection error while reading response")
+        return types.SimpleNamespace(
+            id=batch_id,
+            processing_status="ended",
+            request_counts=types.SimpleNamespace(processing=0),
+        )
+
+    monkeypatch.setattr(client.messages.batches, "retrieve", flaky_retrieve)
+    gold_eval_haiku.run_predictions_batch(client, _gold_df(), done_ids=set())
+
+    preds = pd.read_csv(gold_eval_haiku.HAIKU_PREDS_PATH)
+    assert set(preds["id"]) == {"g001", "g002"}
+    assert retrieves["n"] == 2
+
+
+def test_run_predictions_batch_fails_fast_on_account_state(
+    monkeypatch, batch_client, tmp_path
+):
+    # A billing/quota failure must surface on the first response, unretried.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        api_retry.time, "sleep", lambda _: pytest.fail("must not back off")
+    )
+
+    client = batch_client({})
+    calls = {"n": 0}
+
+    def broke_create(requests):
+        calls["n"] += 1
+        raise RuntimeError("insufficient_quota")
+
+    client.messages.batches.create = broke_create
+    with pytest.raises(RuntimeError, match="insufficient_quota"):
+        gold_eval_haiku.run_predictions_batch(client, _gold_df(), done_ids=set())
+    assert calls["n"] == 1
 
 
 # --- main() run branches (sync dispatch vs --batch dispatch) -------------

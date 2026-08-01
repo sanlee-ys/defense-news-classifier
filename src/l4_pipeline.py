@@ -51,6 +51,7 @@ import anthropic
 import pandas as pd
 from anthropic.types import ToolParam, ToolUseBlock
 
+import api_retry
 from baseline_ml import mcnemar_exact
 from classify import CATEGORIES, DOMAINS, MODEL, REGIONS, SYSTEM_PROMPT, make_client
 from eval import wilson_interval
@@ -258,13 +259,18 @@ class AnthropicL4Backend:
         self.model = model
 
     def _tool_call(self, system: str, tool: ToolParam, message: str) -> AgentReply:
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=1024,
-            system=system,
-            tools=[tool],
-            tool_choice={"type": "tool", "name": tool["name"]},
-            messages=[{"role": "user", "content": message}],
+        # classify() already backs off via _classify_retry; triage and critic
+        # get the same ADR-021 policy so a transient 429/529/drop costs one
+        # backoff, not the whole multi-call-per-row paid run.
+        response = api_retry.call_with_retry(
+            lambda: self.client.messages.create(
+                model=self.model,
+                max_tokens=1024,
+                system=system,
+                tools=[tool],
+                tool_choice={"type": "tool", "name": tool["name"]},
+                messages=[{"role": "user", "content": message}],
+            )
         )
         tokens = int(response.usage.input_tokens) + int(response.usage.output_tokens)
         block = next(b for b in response.content if isinstance(b, ToolUseBlock))
