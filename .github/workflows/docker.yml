@@ -1,0 +1,99 @@
+name: docker
+
+# Builds the serving image and smoke-tests the running container.
+#
+# Why a separate workflow instead of a job in tests.yml: path filters in GitHub
+# Actions are workflow-level, not job-level. Keeping this in its own file is the
+# only way to skip the (slow) image build on the many changes that can't affect
+# it, while still running on every change that can.
+#
+# The `test` job in tests.yml installs deps with uv straight onto the runner and
+# never touches the Dockerfile, so before this workflow a base-image bump or a
+# requirements-api.txt edit could merge fully green without the shipped artifact
+# ever being built. See issue #40.
+on:
+  push:
+    paths:
+      - 'Dockerfile'
+      - 'requirements-api.txt'
+      - '.github/workflows/docker.yml'
+      # The image COPYs these two modules; an import error in either is exactly
+      # the failure mode the smoke test exists to catch.
+      - 'src/api.py'
+      - 'src/classify.py'
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'requirements-api.txt'
+      - '.github/workflows/docker.yml'
+      - 'src/api.py'
+      - 'src/classify.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Plain `docker build` on the runner's preinstalled Docker. No buildx,
+      # registry, or cache setup: the point is to prove the image builds from a
+      # clean state, and nothing is pushed anywhere (out of scope, issue #40).
+      - name: Build image
+        run: docker build -t defense-news-classifier:ci .
+
+      # ANTHROPIC_API_KEY is required only for its PRESENCE: api.py's lifespan
+      # handler calls make_client(), which raises if the var is unset, and the
+      # Anthropic constructor does not validate the value. So a dummy value is
+      # enough to boot, and /health deliberately does not call the LLM (see
+      # api.py) — the smoke test needs no real secret and makes no API call.
+      - name: Start container
+        run: |
+          docker run -d --name classifier-smoke \
+            -e ANTHROPIC_API_KEY=dummy-key-for-ci \
+            -p 8080:8080 \
+            defense-news-classifier:ci
+
+      # Poll rather than sleep a fixed amount: uvicorn's startup time varies on
+      # shared runners, and a fixed sleep is either flaky or wasteful. Bail early
+      # if the container has already exited (a broken CMD dies immediately, and
+      # there is no point polling a dead container for 30s).
+      - name: Wait for readiness and assert /health returns 200
+        run: |
+          for i in $(seq 1 30); do
+            if ! docker ps --filter name=classifier-smoke --filter status=running \
+                 --format '{{.Names}}' | grep -q classifier-smoke; then
+              echo "Container is no longer running after ${i}s."
+              exit 1
+            fi
+            code=$(curl -s -o /tmp/health.json -w '%{http_code}' http://localhost:8080/health || true)
+            if [ "$code" = "200" ]; then
+              echo "GET /health -> 200"
+              cat /tmp/health.json
+              # The endpoint must actually be the classifier's health probe, not
+              # just any process answering on 8080.
+              grep -q '"status":"ok"' /tmp/health.json
+              exit 0
+            fi
+            echo "attempt ${i}: /health returned '${code}', retrying..."
+            sleep 1
+          done
+          echo "Timed out waiting for a 200 from /health."
+          exit 1
+
+      # Only on failure, and always run so it fires even when the step above
+      # exits non-zero — without the logs a red build here says "it broke" and
+      # nothing else.
+      - name: Container logs (on failure)
+        if: failure()
+        run: docker logs classifier-smoke || true
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f classifier-smoke || true
