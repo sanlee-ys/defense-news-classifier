@@ -58,6 +58,19 @@ jobs:
     # The pull_request.issue check keeps this to PR comments; a plain issue
     # comment is not a review request.
     #
+    # THE @claude CHECK IS THIS FILE'S JOB, NOT THE ACTION'S. The header above
+    # says "fires when the owner comments @claude"; until 2026-08-01 nothing
+    # enforced that. `trigger_phrase` is a TAG-mode input, and supplying a
+    # `prompt:` below puts the action in AGENT mode, which "runs whenever an
+    # explicit prompt is provided ... bypasses the standard @claude mention
+    # checking" (claude-code-action src/modes/agent). So every owner comment on
+    # any PR -- "lgtm", "merging" -- allocated a runner and spent a review.
+    # Documented posture and actual behaviour now agree.
+    #
+    # `contains` is a substring test; GitHub expressions have no regex. Paired
+    # with the OWNER gate that is sufficient: the worst a loose match can do is
+    # let San's own comment start a review he did not mean to start.
+    #
     # SYS-021 req. 4 is still satisfied, and by a smaller surface than before:
     # the fail-open event is guarded, and the fail-closed one no longer exists.
     #
@@ -75,6 +88,7 @@ jobs:
     if: >-
       github.event_name == 'issue_comment' &&
       github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '@claude') &&
       github.event.comment.author_association == 'OWNER'
     runs-on: ubuntu-latest
     # Keyed on the PR number, NOT github.ref: on issue_comment events github.ref is the
