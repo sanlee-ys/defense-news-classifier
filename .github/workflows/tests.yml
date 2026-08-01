@@ -74,6 +74,17 @@ jobs:
       - name: ADRs list their downstream surfaces
         run: uv run python scripts/lint_decisions.py
 
+      # web/baseline_infer.js reimplements sklearn's TF-IDF transform in plain JS
+      # so the ADR-017 baseline can run in a browser tab. A hand-port fails
+      # QUIETLY -- it still returns a plausible label, just not the measured
+      # model's -- so it is gated rather than trusted: the JS is run over the
+      # committed fixture of sklearn's own predictions and decision scores and
+      # must match to 1e-6 on every row and axis. The check also asserts the
+      # fixture exercises every vocabulary term, so it cannot pass by not
+      # covering the thing that changed. Bare node, no npm install.
+      - name: Browser baseline matches sklearn (parity gate)
+        run: node scripts/parity_check.mjs
+
       # --cov-fail-under gates the build on coverage. Set a few points below the
       # current total so it holds the line without breaking now, and can be
       # ratcheted upward as coverage improves.
