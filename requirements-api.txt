@@ -12,4 +12,3 @@ uvicorn[standard]
 # it. The OTLP wire exporter stays an optional extra and is not installed here.
 opentelemetry-api
 opentelemetry-sdk
-this-package-does-not-exist-gate-test
