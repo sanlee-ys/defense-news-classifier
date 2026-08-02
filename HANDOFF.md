@@ -21,18 +21,19 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   `v3.2.0` harness. None of it moved a published number: all eight gated floors
   are byte-identical (category 0.926, category-F1 0.911, domain 0.926, domain-F1
   0.933, judge-cat 0.926, judge-dom 0.981, region 0.870, judge-region 1.000).
-- **⚠ The `[Unreleased]` CHANGELOG block does not cover that work, and the release
-  runbook assumes it does.** `[Unreleased]` today records exactly three things: the
+- **~~⚠ The `[Unreleased]` CHANGELOG block does not cover that work~~ — CLOSED in the
+  `v3.2.0` release.** The `[3.2.0]` entry now records the ADR-021 taxonomy, the
+  paired-compare layer and both CI lanes alongside the three that were already
+  there; the judgement call was made as part of writing the release. The gap as it
+  stood: `[Unreleased]` recorded exactly three things: the
   browser baseline export (#148) under Added, and the two provenance pins (#137,
   #142) under Fixed. ADR-021 (#151, #152), the paired-compare layer (#149), the
-  Docker CI lane (#146), and the two review-trigger changes (#144, #150) merged
-  **without a CHANGELOG entry**. Step 7 of
-  [the v3.2.0 runbook](docs/v3.2.0-release-runbook.md) reads "`[Unreleased]`
-  already holds shipped work that rides the v3.2.0 tag" — that premise is false as
-  written. Deciding what earns an entry (the CI lanes plausibly do not; the three
-  `src/` additions plausibly do) is a judgement call that belongs to whoever writes
-  the release, but it has to happen **before** the tag or the tag ships an
-  incomplete record.
+  Docker CI lane (#146), and the two review-trigger changes (#144, #150) had merged
+  **without a CHANGELOG entry**, so step 7 of
+  [the v3.2.0 runbook](docs/v3.2.0-release-runbook.md) ("`[Unreleased]` already
+  holds shipped work that rides the v3.2.0 tag") was false as written. The CI lanes
+  were included rather than dropped, on this repo's own v2.1.0 precedent — the
+  `Jenkinsfile` and the evals-CI gate both earned entries there.
 - **The autonomy ladder is fully built, L1–L4** ([spec](docs/specs/autonomy-ladder.md)).
   Everything above L1 has now been measured, and three of the four measurements
   are negative:
@@ -193,36 +194,22 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 
 ## Next jobs, in order (each its own branch → PR)
 
-1. **`v3.2.0` scaled region eval — SCHEDULED 2026-08-02, harness BUILT, awaiting
-   the live run.** n=300 DVIDS snippets graded on region by the validated Opus
-   judge (100.0% judge-vs-human on the gold 54 cleared the gate), same Wilson-CI
-   reporting as v2.1.0. Design and the full run protocol:
-   [docs/specs/scaled-region-eval.md](docs/specs/scaled-region-eval.md); the
-   harness is `src/scale_region_eval.py`, merged in #154 (verified present, and
-   the two commands below match the spec's run protocol and the module's own
-   output paths).
-
-   Everything except the paid pass is done and offline-verified. What remains is
-   two owner-driven commands from the repo root:
-
-   ```bash
-   uv run --env-file .env python src/scale_region_eval.py --run --batch
-   uv run python src/scale_region_eval.py --report
-   ```
-
-   600 calls (300 snippets × workhorse + judge), resume-safe; the second command
-   is free and repeatable. Artifacts land at `evals/scale_predictions_v3.csv`
-   (+ its provenance sidecar), `evals/scale_eval_v3.txt`, and
-   `evals/scale_confusion_v3_region.csv`. **No threshold was added** — a floor for
-   the n=300 number is an owner decision after the measurement, not before it
-   (ADR-007). Post-run: read the report, decide on a floor, write the verdict ADR
-   (it **must** carry a `## Downstream surfaces` section — `lint_decisions.py`
-   grandfathers only 001–014), then the version/CHANGELOG/metrics sweep per
-   [the v3.2.0 release runbook](docs/v3.2.0-release-runbook.md) — which is the
-   authority on that sweep, including the CHANGELOG gap flagged in State above.
-2. **The named `global` cluster still wants a prompt clause.** All 7 misses are
-   gold-`global` rows the model pulls to a specific region by inferring a theater
-   from the US *actor*. L4 established the cluster is genuinely fixable by
+1. ~~**`v3.2.0` scaled region eval.**~~ **DONE — run 2026-08-02, shipped.** Region
+   **88.3%** 95% CI [84.2%, 91.5%] (265/300), macro-F1 0.904; category 91.7%,
+   domain 89.3%. The CI narrows from 18 points at n=54 to 7. Verdict and both
+   design forks (published as frozen dated prose per the bake-off precedent; **no
+   `thresholds.toml` floor** — one run has no run-to-run noise under it) are in
+   [ADR-022](decisions/022-scaled-region-eval-verdict.md); report in
+   `evals/scale_eval_v3.txt`. The `[Unreleased]` CHANGELOG gap flagged in State
+   was closed in the same release. **What is left is owner-only: the tag and the
+   GitHub release** (below).
+2. **The named `global` cluster still wants a prompt clause — and it now has a
+   ruler.** The v3.2.0 run confirmed the cluster is systematic, not anecdotal: 17
+   of 70 answer-key `global` rows pulled to a specific region, 16 to `americas`,
+   **49% of all region disagreements**. Measure the clause against the n=300
+   interval, not the n=54 one. On the gold 54 all 7 region misses are the same
+   shape: `global` rows the model pulls to a specific region by inferring a
+   theater from the US *actor*. L4 established the cluster is genuinely fixable by
    evidence checking (it fixed 6 of 7) — but at 4× cost through a pipeline that
    was declined. A prompt clause is the cheap alternative to test, measure-first
    like PR #79. **It got less cheap since this job was written:** #137/#142 pinned
@@ -307,13 +294,19 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 
 ## Owner-only actions pending
 
-- **Running** the `v3.2.0` scaled region eval (job 1). Scheduling was the pending
-  decision and it is made; the harness is built and merged, so the outstanding
-  item is now the paid pass itself — the two commands under job 1.
-- **Deciding what earns a `[Unreleased]` CHANGELOG entry** before the `v3.2.0` tag
-  — see the flagged item in State. Six merged PRs are currently unrecorded, and
-  the tag freezes whatever the block says on the day. Judgement call, not a
-  mechanical backfill, which is why it is here rather than done.
+- **Tagging and releasing `v3.2.0`.** The release commit is on `main`; everything
+  else in job 1 is done. Tags never work from a container (proxy 403), so this is
+  owner-only:
+
+  ```bash
+  git -C <repo> checkout main
+  git -C <repo> pull
+  git -C <repo> tag -a v3.2.0 -m "v3.2.0 - the ruler shrinks: the region axis, measured at n=300"
+  git -C <repo> push origin v3.2.0
+  gh release create v3.2.0 -R sanlee-ys/defense-news-classifier --title "The ruler shrinks" --notes-file <notes>
+  ```
+
+  Release notes point at the `[3.2.0]` CHANGELOG entry and ADR-022.
 - Deciding whether the narrowed-critic experiment (job 3) is worth a spec at all.
   The honest default is no. The ladder is complete, measured, and now fully
   published — there is no documentation debt left to trade against, so this

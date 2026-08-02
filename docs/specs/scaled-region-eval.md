@@ -1,7 +1,7 @@
 # Feature Spec — v3.2.0: Scaled Region Eval (n=300, judge-graded)
 
 **Version:** 1.0
-**Status:** Accepted — **scheduled 2026-08-02** (owner's call; it had been "unblocked, unscheduled" since v3.0.0)
+**Status:** Accepted — **run 2026-08-02, shipped as `v3.2.0`**. The verdict and the numbers live in [ADR-022](../../decisions/022-scaled-region-eval-verdict.md); the report is `evals/scale_eval_v3.txt`. This document remains the design record.
 **Author:** San Lee
 **Last updated:** 2026-08-02
 **Roadmap fit:** **MINOR** (`v3.2.0`). Additive measurement only — `src/api.py`, `src/classify.py` and `SYSTEM_PROMPT` are untouched, so the `{category, operational_domain, region}` contract holds.

@@ -106,8 +106,9 @@ separates it from re-running the classifier twice and keeping the disagreement.
 ## 7. Honest-reporting rules (inherited, non-negotiable)
 
 Bake-off spec §8 applies verbatim: every figure carries its n; a delta is not a finding
-without the paired test; report the direction that hurts; name what is uncovered (region has
-no scale-set answer key until the scaled region eval ships; the named cluster is 7 rows).
+without the paired test; report the direction that hurts; name what is uncovered (at the time
+this ran, region had no scale-set answer key and the named cluster was 7 rows — v3.2.0's
+scaled region eval has since sized it at 17 pulled rows out of 70, [ADR-022](../../decisions/022-scaled-region-eval-verdict.md)).
 
 ## 8. Cost estimate (up front, per house rules)
 

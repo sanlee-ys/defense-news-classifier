@@ -35,11 +35,14 @@ re-measured on the same gold set. Those are the current numbers, directly below.
 | **Retrieval** | none | BM25 over a 62-doc corpus, tried and cited — then measured and **retired** ([ADR-012](decisions/012-retire-bm25-grounding.md)) |
 | **Honest read** | in-distribution *consistency* | real-world *accuracy* |
 
-### Current state — v3.1.0: three axes, human-graded
+### Current state — v3.2.0: three axes, human-graded
 
-The current release is **v3.1.0**, and the numbers below were measured at v3.0.0. Both are
-true at once: everything v3.1.0 added is eval and experiment machinery, so the shipped prompt
-and the single classify call are byte-for-byte what produced these results. v3.0.0 was the
+The current release is **v3.2.0**, and the numbers below were measured at v3.0.0. Both are
+true at once: everything v3.1.0 and v3.2.0 added is eval and experiment machinery, so the
+shipped prompt and the single classify call are byte-for-byte what produced these results.
+(v3.2.0's own headline — the region axis re-measured at n=300 against the Opus judge — is
+[further down](#tighter-error-bars-the-scaled-evals), where the scaled evals live; it shrinks
+the error bar around the region number below rather than replacing it.) v3.0.0 was the
 roadmap's planned breaking change: output becomes
 `{category, operational_domain, region}` ([ADR-014](decisions/014-region-field-design.md)).
 The gold set gained a hand-labeled `region` column, and every label on **all three axes** was
@@ -70,8 +73,9 @@ future prompt clause, the same shape as the tech-vs-ops fix that lifted v2. Seco
 dipped one row from the v2-era 94.4% — consistent with the schema-perturbation effect the
 routing experiment measured (adding one field moved 2/54 there) and inside n=54 noise.
 
-The **100.0% judge-vs-human region agreement** is the load-bearing number: it clears ADR-014's
-gate for scaling the region eval to n=300 with the Opus judge as answer key (v3.1.0).
+The **100.0% judge-vs-human region agreement** is the load-bearing number: it cleared ADR-014's
+gate for scaling the region eval to n=300 with the Opus judge as answer key, which is what
+v3.2.0 then ran ([ADR-022](decisions/022-scaled-region-eval-verdict.md)).
 
 ### Why an LLM at all — the classical baseline, finally measured
 
@@ -90,7 +94,9 @@ Unlike the grounding and routing deltas, this gap clears significance even at n=
 spend is justified with a number instead of an assumption, for the first time. The honest
 fine print: the training labels are judge-generated (the baseline inherits the judge's ~5–6%
 human-disagreement ceiling — the direction that handicaps the baseline, not flatters it),
-region is uncovered (no region labels exist until v3.1.0), and `industry` has a single
+region is uncovered (the v2.1.0 scale snapshot this trains on carries no region column — the
+judge-graded region labels arrived later, in v3.2.0's own `_v3` snapshot, which this frozen
+bake-off deliberately does not read), and `industry` has a single
 training row, so it is structurally unlearnable here. On cost the baseline wins by orders of
 magnitude ($0.00, ~0.1 ms/article locally vs one API call per article); at a ~70% accuracy
 bar that trade would flip, and now it's priced either way.
@@ -158,7 +164,7 @@ the ungrounded classifier — and recorded as a measured negative result in
 [ADR-012](decisions/012-retire-bm25-grounding.md). The full measurement is in the grounding
 section below.
 
-#### Tighter error bars: the scaled eval (v2.1.0)
+#### Tighter error bars: the scaled evals
 
 The gold numbers above are honest but small — at n=54, a "94.4%" carries a **±13-point** 95%
 confidence interval. v2.1.0 shrinks that noise floor without more hand-labeling: the Opus judge
@@ -180,6 +186,42 @@ instead of it); and the DVIDS wire is operations-heavy, so the 300-set is too �
 uninformative** (one `industry` miss drags the unweighted mean to 0.704), so read the overall
 accuracy and the well-populated per-label rows, not that macro-F1. The domain axis is balanced
 and its macro-F1 (0.886) stands. Full report: [`evals/scale_eval.txt`](evals/scale_eval.txt).
+
+##### The region axis, scaled (v3.2.0)
+
+The region axis shipped in v3.0.0 with one number and an **18-point** interval, inside which no
+future change to the region rubric could be told apart from noise. v3.2.0 does for region what
+v2.1.0 did for category and domain: the same 300 DVIDS snippets, the same Opus judge — this
+time validated on *region* at 100.0% against the human labels, which is the gate ADR-014 set
+before allowing it to grade this axis at all.
+
+**Measured 2026-08-02 at `v3.2.0`, n=300, judge-graded — a frozen dated figure, not a live
+metric** ([ADR-022](decisions/022-scaled-region-eval-verdict.md), full report in
+[`evals/scale_eval_v3.txt`](evals/scale_eval_v3.txt)):
+
+| Workhorse vs judge | Accuracy | 95% CI | CI width |
+|---|---|---|---|
+| Region | **88.3%** (265/300) | [84.2%, 91.5%] | ±7pts (was ±18 at n=54) |
+| Category | 91.7% (275/300) | [88.0%, 94.3%] | ±6pts |
+| Domain | 89.3% (268/300) | [85.3%, 92.3%] | ±7pts |
+
+**The interval is the deliverable, not the accuracy.** 88.3% against the gold set's 87.0% is
+corroboration; what changed is that the number is now known to within 7 points instead of 18.
+
+And it settles the open question about the **named `global` cluster**. On the gold 54, all
+seven region misses were rows whose true label is `global` that the model pulled to a specific
+region, inferring a theater from the US *actor* where the snippet names no place — but seven
+rows cannot tell a systematic behavior from a coincidence. At n=300 they can: of **70**
+answer-key `global` rows, **17 were pulled to a region** (16 of them to `americas`), which is
+**49% of all 35 region disagreements**. That is one identified failure mode accounting for half
+the region error, and it is now a measurable target for a prompt clause rather than an anecdote.
+
+The same two caveats as above apply, plus one more. This is workhorse-vs-judge agreement, and
+on region the judge's measured disagreement with humans was 0/54 — which is itself a wide
+interval, so read these numbers **alongside** the human-graded n=54 figures at the top of this
+section, never instead of them. And the DVIDS wire is US-actor-heavy: `americas` is 148/300 and
+`africa` is n=3, which drags the region macro-F1 (0.904) down through thin classes rather than
+through a quality drop.
 
 #### Tiered routing: measured and declined (v2.2.0)
 
