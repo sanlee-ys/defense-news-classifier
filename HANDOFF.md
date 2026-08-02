@@ -1,4 +1,4 @@
-# HANDOFF — 2026-07-25 — chair: FABLE
+# HANDOFF — 2026-08-02 — chair: FABLE
 
 _You are a fresh session. Read `CLAUDE.md` (and the repo's process docs) before
 acting. Escalate on anomaly, not task type. **Verify PR/file state with
@@ -13,6 +13,26 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   region fix and the published contract artifact. MINOR, because all of it is
   eval and experiment machinery — `src/api.py` and `SYSTEM_PROMPT` are untouched
   since `v3.0.0`, so the `{category, operational_domain, region}` contract holds.
+- **`v3.1.0` is still the released tag; everything below it landed after and is
+  unreleased.** Sixteen PRs have merged since the tag (#137–#154, less #139 —
+  closed, superseded by #142 — and #147, still open), three of them refreshes to
+  this file. The rest are runtime
+  hardening, two provenance pins, three new offline layers, two CI lanes, and the
+  `v3.2.0` harness. None of it moved a published number: all eight gated floors
+  are byte-identical (category 0.926, category-F1 0.911, domain 0.926, domain-F1
+  0.933, judge-cat 0.926, judge-dom 0.981, region 0.870, judge-region 1.000).
+- **⚠ The `[Unreleased]` CHANGELOG block does not cover that work, and the release
+  runbook assumes it does.** `[Unreleased]` today records exactly three things: the
+  browser baseline export (#148) under Added, and the two provenance pins (#137,
+  #142) under Fixed. ADR-021 (#151, #152), the paired-compare layer (#149), the
+  Docker CI lane (#146), and the two review-trigger changes (#144, #150) merged
+  **without a CHANGELOG entry**. Step 7 of
+  [the v3.2.0 runbook](docs/v3.2.0-release-runbook.md) reads "`[Unreleased]`
+  already holds shipped work that rides the v3.2.0 tag" — that premise is false as
+  written. Deciding what earns an entry (the CI lanes plausibly do not; the three
+  `src/` additions plausibly do) is a judgement call that belongs to whoever writes
+  the release, but it has to happen **before** the tag or the tag ships an
+  incomplete record.
 - **The autonomy ladder is fully built, L1–L4** ([spec](docs/specs/autonomy-ladder.md)).
   Everything above L1 has now been measured, and three of the four measurements
   are negative:
@@ -52,7 +72,13 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   a materially bigger human-labeled ruler.
 - **The shipped classifier is unchanged through all of it** — single model,
   single call, same prompt. It remains the measured optimum of everything tried
-  against it, which is the repo's actual headline.
+  against it, which is the repo's actual headline. Stated precisely as of today:
+  `SYSTEM_PROMPT` still hashes to `a59689e8…` (the fingerprint recorded in
+  `evals/gold_predictions_v3.provenance.json`, mechanically enforced — see the
+  provenance pins below), `src/api.py` is untouched since `v3.0.0`, and the
+  `{category, operational_domain, region}` contract holds. The one post-tag change
+  to `src/classify.py` is ADR-021's truncation guard, which makes a cut-off
+  response raise instead of scoring — a new refusal path, not a new answer.
 - **The 54-row gold set is settled and adversarially audited** on all three axes.
   Category and domain confirmed 108/108; region took two review corrections
   (g003 → `europe`, g024 → `americas`). Ratified conventions live in
@@ -75,19 +101,95 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   whoever bumps a version next: that PR also had to fix a stale `v3.0.0` version
   claim in `architecture/program/README.md`, which is a **guarded marker** and had
   been failing that repo's CI since our tag. A version bump here reddens the
-  architecture repo until its prose catches up.
+  architecture repo until its prose catches up. **That ripple is now inventoried
+  end to end** — every downstream surface across four repos, in dependency order,
+  with the out-of-order costs named — in
+  [docs/v3.2.0-release-runbook.md](docs/v3.2.0-release-runbook.md) (#153). Do not
+  restate its steps here; it is the single source for release mechanics, and a
+  second copy is exactly the drift this file keeps having to fix.
 - **The bake-off is published** (portfolio PR #132, 2026-07-26). The project page
   now carries a "Why an LLM at all" section with the 72.2%/66.7% vs 92.6%
   comparison, both p-values, the failure shape, and the two disclosed handicaps.
   This was job 1 in the previous revision of this file and is done; the numbers
   there deliberately carry no `data-metric` markers, because a frozen paired
   comparison must not drift with the live artifact.
-- **In flight, not yours unless it stalls:** PR #137 (`pin-predictions-to-prompt`)
-  fingerprints the gold predictions snapshot against the prompt that produced it,
-  closing a gap where a prompt edit plus a version bump could re-stamp stale
-  numbers with a new version while CI stayed green. It touches
-  `evals/metrics.json` and `tests/test_metrics_artifact.py`, both of which the
-  v3.1.0 sweep also moved — expect a rebase, not a conflict of substance.
+
+### Landed since the `v3.1.0` tag
+
+- **A stale prompt can no longer be published *or* graded** (#137, #142 — the two
+  provenance pins; both merged, both in `[Unreleased]`). A live run now records
+  `prompt_sha256` plus both model ids to a sidecar
+  (`evals/gold_predictions_v3.provenance.json`), and **both** consumers refuse on
+  divergence: `scripts/gen_metrics_artifact.py` will not publish, and
+  `src/eval_gate.py` will not print its floors. The second one is the subtler
+  half — the gate's claim is "the *shipped* numbers still clear the bar", and
+  before #142 a prompt edit plus a skipped gold re-run left it printing eight
+  green floors for a classifier that was not the one shipped. Practical
+  consequence for you: **editing `SYSTEM_PROMPT` now hard-reds CI** until either a
+  paid gold re-run or a named, reasoned waiver. That is the guard working.
+- **One API error taxonomy, and a truncated response is never scored**
+  ([ADR-021](decisions/021-api-error-taxonomy-and-incomplete-responses.md), #151;
+  extended by #152). Five modules had grown the same wrong `except
+  (InternalServerError, RateLimitError)` tuple — **too narrow** (`OverloadedError`
+  / 529 is a *sibling* of `InternalServerError`, not a subclass, so the most common
+  transient failure on a long unattended run aborted it) and **too wide** (a spend
+  cap arriving as a 429 was slept on and retried, which cannot succeed).
+  `src/api_retry.py` is now the single taxonomy: the non-retryable pattern
+  (quota/billing/credit/auth) is tested first and wins over exception type, then
+  deterministic types fail fast, then transient ones retry; an unrecognized error
+  fails fast, because retrying an unknown failure triples spend on a bug. Backoff
+  is byte-for-byte the old policy. Separately, `classify()` now asserts the call
+  *finished* — with forced tool use and `max_tokens=256`, a truncated `ToolUseBlock`
+  can still **validate**, because the axes that survived are individually legal
+  labels, and that partial answer was being scored right-or-wrong against gold.
+  #152 then wired the three live-call modules #151 had missed
+  (`l4_pipeline`'s triage/critic calls, `ml_loop`'s raw `messages.create`,
+  `gold_eval_haiku`'s whole batch path). **Not verified live** — the whole taxonomy
+  is exercised offline against constructed SDK errors, never a real 529.
+- **A paired-comparison layer, with harness health reported separately** (#149,
+  `src/paired_compare.py`). Every A/B here — ADR-012, ADR-013, ADR-017, ADR-019 —
+  re-derived the same plumbing by hand, and the part that kept getting
+  re-litigated was the bookkeeping, because a comparison that quietly drops rows
+  reports a lift that never happened. Now: a deterministic group key that fails
+  loud rather than merging two inputs into one "pair"; metrics computed only over
+  pairs where **both** arms scored (a missing observation is never imputed and
+  never zero, or an arm that crashes on the hard rows looks better the more it
+  crashes); nothing eligible returns `None`, never `0.0`. Non-participating rows
+  come back as diagnostics under their own heading — "is this comparison
+  trustworthy" is a different question from "what did it find". It is additive and
+  reads already-materialized CSVs, so it cannot perturb a published number; it
+  independently reproduces the ADR-017 bake-off result as a test.
+- **The ADR-017 classical baseline runs in a browser now** (#148, `web/`,
+  `scripts/export_baseline.py`). Phase 1 is artifacts only — no page is built, and
+  nothing is re-measured; 72.2% / 66.7% stay the frozen record in
+  `evals/baseline_eval.txt`. The risk it carries is a hand-ported sklearn
+  preprocessing chain, which fails *quietly* by returning a plausible label, so it
+  is gated: `scripts/parity_check.mjs` (bare `node`, no npm) checks 354 rows × 2
+  axes against sklearn's own scores at 1e-6 and asserts **every** vocabulary term
+  is exercised — the first draft was gold-rows-only and could be shown not to catch
+  a perturbed coefficient.
+- **Two CI lanes changed.** #146 added `docker.yml`: the serving image is now built
+  and a container smoke-tested on `/health` before merge, path-filtered to
+  `Dockerfile`, `requirements-api.txt`, `src/api.py`, `src/classify.py` — before
+  it, a base-image bump could go fully green without the shipped artifact ever
+  being built. The PR deliberately broke the image on a second commit to prove the
+  job goes red, then reverted. #144 and #150 walked the advisory review lane back
+  to on-demand ([ADR-016](decisions/016-claude-code-action-pr-review.md) Amendment
+  1): #144 dropped the automatic `pull_request: [opened]` pass, and #150 fixed the
+  gap that made the remaining gate a fiction — supplying a `prompt:` puts the
+  action in **agent mode**, which bypasses `@claude` mention checking entirely, so
+  the effective trigger was *any* OWNER comment (`lgtm`, `merging`) each spending a
+  billed review. It now requires the phrase explicitly.
+- **`CLAUDE.md` was cut 17.5KB → 11.9KB** (#145), dropping rules that constrained
+  without informing and replacing the shipped-version roadmap table with a pointer
+  to `CHANGELOG.md` + tags. Relevant to how you work here: the small-steps rule is
+  no longer unconditional — checkpoint where a wrong turn is expensive (design
+  calls, the gold set, published numbers, API spend), batch what an ADR already
+  specifies.
+- **In flight, not yours unless it stalls:** two Dependabot PRs, both **green on
+  every check**, both open — #147 (`codeql-action` 4 → 4.37.3) and #123 (the
+  python-minor-patch group, 6 updates, open since 2026-07-25). Neither touches
+  runtime behavior or a published number. They are the only open PRs.
 
 ## Next jobs, in order (each its own branch → PR)
 
@@ -95,7 +197,10 @@ file is a point-in-time snapshot and goes stale the moment work lands._
    the live run.** n=300 DVIDS snippets graded on region by the validated Opus
    judge (100.0% judge-vs-human on the gold 54 cleared the gate), same Wilson-CI
    reporting as v2.1.0. Design and the full run protocol:
-   [docs/specs/scaled-region-eval.md](docs/specs/scaled-region-eval.md).
+   [docs/specs/scaled-region-eval.md](docs/specs/scaled-region-eval.md); the
+   harness is `src/scale_region_eval.py`, merged in #154 (verified present, and
+   the two commands below match the spec's run protocol and the module's own
+   output paths).
 
    Everything except the paid pass is done and offline-verified. What remains is
    two owner-driven commands from the repo root:
@@ -110,14 +215,21 @@ file is a point-in-time snapshot and goes stale the moment work lands._
    (+ its provenance sidecar), `evals/scale_eval_v3.txt`, and
    `evals/scale_confusion_v3_region.csv`. **No threshold was added** — a floor for
    the n=300 number is an owner decision after the measurement, not before it
-   (ADR-007). Post-run: read the report, decide on a floor, write the verdict ADR,
-   then the version/CHANGELOG/metrics sweep per the v3.2.0 release runbook.
+   (ADR-007). Post-run: read the report, decide on a floor, write the verdict ADR
+   (it **must** carry a `## Downstream surfaces` section — `lint_decisions.py`
+   grandfathers only 001–014), then the version/CHANGELOG/metrics sweep per
+   [the v3.2.0 release runbook](docs/v3.2.0-release-runbook.md) — which is the
+   authority on that sweep, including the CHANGELOG gap flagged in State above.
 2. **The named `global` cluster still wants a prompt clause.** All 7 misses are
    gold-`global` rows the model pulls to a specific region by inferring a theater
    from the US *actor*. L4 established the cluster is genuinely fixable by
    evidence checking (it fixed 6 of 7) — but at 4× cost through a pipeline that
    was declined. A prompt clause is the cheap alternative to test, measure-first
-   like PR #79.
+   like PR #79. **It got less cheap since this job was written:** #137/#142 pinned
+   the published snapshot to the prompt that produced it, so touching
+   `SYSTEM_PROMPT` now hard-reds both `gen_metrics_artifact.py` and
+   `src/eval_gate.py` until a paid gold re-run rewrites the sidecar (or a named
+   waiver is filed). Budget the re-run into the job; do not discover it mid-PR.
 3. **Option, explicitly NOT a commitment: a structurally narrowed critic.** L4's
    failure was a charter that lived only in the prompt. A critic code-gated to
    fire *only* where triage reports `none stated`, on region alone, is a
@@ -154,7 +266,18 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   artifact outward surfaces assert against; `gen_metrics_artifact.py` reads the
   version from `pyproject.toml`, so a version bump turns CI red until you
   regenerate the artifact *and* update the pinned literal in
-  `tests/test_metrics_artifact.py`. That is the guard working, not a bug.
+  `tests/test_metrics_artifact.py`. That is the guard working, not a bug. The full
+  ripple of a version bump, across all four repos and in dependency order, is
+  inventoried in [docs/v3.2.0-release-runbook.md](docs/v3.2.0-release-runbook.md).
+- **Other generated artifacts that must never be hand-edited**, each with a
+  `--check` or parity gate that fails the build on a stale copy:
+  `contracts/classify-response.schema.json` (`gen_contract_schema.py`),
+  `evals/metrics.json` (`gen_metrics_artifact.py`), the README metrics block
+  (`gen_readme_metrics.py`), `evals/gold_predictions_v3.provenance.json` (written
+  by `gold_eval.py` at run time — hand-editing it fabricates a pairing nobody
+  verified; the *only* legal hand edit is adding a named `waiver` block), and
+  `web/baseline_export.json` + its parity fixture (`export_baseline.py`,
+  `generate_parity_fixture.py`).
 - **Run logs are gitignored by policy** (`evals/optimize/`, `evals/ml_loop/`,
   `evals/l4/`). The verdict in the ADR is the durable record; if a run needs to
   be published, embed it deliberately rather than un-ignoring the directory.
@@ -162,7 +285,15 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   `__` or bare ids (regression-tested).
 - **Safety-layer refusals are an expected per-row outcome** on this content
   (s151 precedent). Record-and-continue with a sentinel; never let one row kill
-  a batch retrieval (#85 pattern).
+  a batch retrieval (#85 pattern). ADR-021 generalized this: the sentinel set is
+  now `paired_compare.HARNESS_ERROR_SENTINELS` (`__unclassified__`,
+  `__incomplete__`, `__refused__`), all of which pair but are **never scored as a
+  miss** — a harness failure attributed to the model is a fabricated error rate.
+- **Do not hand-roll another retry loop.** New code that calls the API goes
+  through `api_retry.call_with_retry` (ADR-021). The five-copies-of-the-wrong-
+  `except`-tuple bug is exactly what a sixth local loop reintroduces, and its
+  failure mode is silent: the run aborts on a 529, or bills a retry storm against
+  an exhausted credit balance.
 - **Measure-first is now five-for-five** (ADR-012, ADR-013, ADR-018, ADR-019,
   ADR-020): nothing ships past the eval, and thresholds come from measured
   numbers only. Four of those five declined an escalation with data.
@@ -179,6 +310,10 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 - **Running** the `v3.2.0` scaled region eval (job 1). Scheduling was the pending
   decision and it is made; the harness is built and merged, so the outstanding
   item is now the paid pass itself — the two commands under job 1.
+- **Deciding what earns a `[Unreleased]` CHANGELOG entry** before the `v3.2.0` tag
+  — see the flagged item in State. Six merged PRs are currently unrecorded, and
+  the tag freezes whatever the block says on the day. Judgement call, not a
+  mechanical backfill, which is why it is here rather than done.
 - Deciding whether the narrowed-critic experiment (job 3) is worth a spec at all.
   The honest default is no. The ladder is complete, measured, and now fully
   published — there is no documentation debt left to trade against, so this
