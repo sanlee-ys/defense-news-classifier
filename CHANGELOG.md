@@ -97,8 +97,8 @@ Versions are tagged by milestone; individual commits are noted where relevant.
   record whose conclusion (caching carries over to the batch path) does not depend on the
   floor's value.
 
-- **Judge-side caching confirmed live, and the "~2425-token prefix" figure corrected to be
-  per-model** (`src/classify.py`, `docs/specs/global-boundary-clause-rerun.md`). Running
+- **Judge-side caching confirmed live** (`src/classify.py`,
+  `docs/specs/global-boundary-clause-rerun.md`). Running
   `scripts/cache_diagnostics.py --live --model claude-opus-4-8` on 2026-08-02 closed the
   question the entry above left open: `call 1: cache_creation=3625, cache_read=0` →
   `call 2: cache_creation=0, cache_read=3625`. **Prompt caching engages on the Opus
@@ -106,19 +106,31 @@ Versions are tagged by milestone; individual commits are noted where relevant.
   **3625 tokens, below the 4096** the old table claimed — so the correction stands on
   measurement, not only on the docs.
 
-  **It also surfaced a second stale number, this one an over-generalization rather than an
-  inference.** The repo quoted a single "~2425-token cacheable prefix" as a property of the
-  prompt. It is not: token counts are model-specific, and the *same* prefix counts **~3700
-  under Opus 4.8** against ~2425 under Sonnet 5 — ~50% larger. Every site that attributed
-  the Sonnet figure to the judge now carries both numbers and the reason they differ, and
-  the rerun spec's step 0 runs the diagnostic **once per model** rather than reporting the
-  workhorse and implying the judge. The spec's cost table is deliberately **not**
-  recomputed: the judge row understates input tokens by ~50% (the tokenizer) and overstates
-  by assuming no cache discount (now measured false), the second dominates, and a spend
-  ceiling is more useful honest-and-high than re-derived from two estimates. What remains
-  genuinely open is narrower than before — not *whether* the prefix caches, but what
-  fraction of ~1300 dispatched calls hit it under the 5-minute TTL and Batches scheduling,
-  which only the run itself can answer.
+- **The "~2425-token cacheable prefix" figure was stale by a full minor version, and the
+  first attempt to explain the discrepancy was wrong** (`src/classify.py`, both
+  `docs/specs/global-boundary-clause*.md`). Measuring both models on 2026-08-02 gives
+  **3764 tokens on Sonnet 5 and 3700 on Opus 4.8**. The ~2425 figure was recorded at
+  **v2.1.0 (2026-07-17)** and obsoleted the next day by **v3.0.0**, which added the
+  `region` label and its boundary rubric to `SYSTEM_PROMPT`; the prose was never updated
+  and the number propagated for a fortnight.
+
+  An intermediate revision of these notes explained the gap as a *tokenizer* difference —
+  claiming the same prefix counted ~50% larger under Opus 4.8 than under Sonnet 5. That is
+  refuted by the workhorse measurement: the two models differ by **64 tokens (~1.7%)**,
+  ordinary variation. The real cause is simply that the prompt grew. The retraction is kept
+  here rather than quietly edited away, because the failure repeated a pattern worth
+  naming: the same fortnight produced an *inferred* cacheable floor and an
+  *over-generalized* token count, both propagated as fact. **Prefix size tracks the prompt,
+  so any prompt edit invalidates every quoted figure** — the code and specs now say to
+  re-run `scripts/cache_diagnostics.py` rather than cite a number from prose.
+
+  The rerun spec's cost table is deliberately **not** recomputed. All three of its rows —
+  not just the judge — undersize input tokens by ~50%, while its no-cache-discount
+  assumption is now measured false; the discount dominates, so the totals should come in
+  under $5.75. A spend ceiling is more useful honest-and-high than re-derived from two
+  estimates. What remains genuinely open is narrower than before: not *whether* the prefix
+  caches, but what fraction of ~1300 dispatched calls hit it under the 5-minute TTL and
+  Batches scheduling, which only the run itself can answer.
 
 ---
 

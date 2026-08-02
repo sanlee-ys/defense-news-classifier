@@ -327,11 +327,17 @@ The cache checks need a key but make no billed call (`count_tokens` is free). **
 > system block with only the model swapped. The no-op line was an inference from the bad
 > floor, never an observation.
 >
-> **The prefix is ~3700 tokens on Opus 4.8, not ~2425.** The ~2425 figure quoted
-> throughout this repo was measured on **Sonnet 5**; token counts are model-specific, and
-> the same prefix counts ~50% larger under Opus 4.8's tokenizer. Wherever this spec sizes
-> the judge line, ~3625–3700 is the right number. Run step 0 **per model** — the default
-> reports the workhorse only.
+> **The prefix is ~3700–3764 tokens, not ~2425 — on both models.** Measured 2026-08-02:
+> **3764** on Sonnet 5, **3700** on Opus 4.8. The ~2425 figure quoted throughout this repo
+> dates from **v2.1.0 (2026-07-17)** and was obsoleted the very next day by **v3.0.0**,
+> which added the `region` label and its boundary rubric to `SYSTEM_PROMPT`. It has been
+> stale in the prose ever since.
+>
+> The 64-token spread between the two models is ordinary tokenizer variation (~1.7%), not
+> a meaningful difference — an earlier revision of this block claimed the gap was ~50% and
+> model-specific, which the measurement above refutes. **The lesson is the simpler one:
+> prefix size tracks the prompt, so any prompt edit invalidates every quoted figure.**
+> Re-run step 0 rather than citing a number from prose — including this one.
 
 ### Step 1 — collect the extension (free; DVIDS, no LLM call)
 
@@ -399,13 +405,14 @@ prefix plus a ~180-token snippet and ~60 output tokens per call, with the Batche
 
 > **Two corrections to the table's inputs, 2026-08-02 — both left un-recomputed on
 > purpose, because they push in opposite directions and the net is favorable.** (a) The
-> ~2425-token prefix is a **Sonnet 5** measurement; under Opus 4.8's tokenizer the same
-> prefix is **~3700**, so the judge row understates input tokens by ~50%. (b) Caching is
-> now **measured working on the judge** (step 0), and the table assumes none. A cache
-> read bills at roughly a tenth of base input, and the prefix is ~94% of each judge
-> call's input — so (b) dominates (a) by a wide margin and the judge row should come in
-> **under** $3.15, not over. The numbers stay as written because a spend ceiling is more
-> useful honest-and-high than re-derived from two estimates.
+> ~2425-token prefix is a **v2.1.0** measurement, obsoleted by v3.0.0's region rubric; the
+> real size is **~3700–3764 on every row**, so *all three* rows understate input tokens by
+> ~50%, not just the judge. (b) Caching is now **measured working** on both models (step
+> 0), and the table assumes none. A cache read bills at roughly a tenth of base input
+> against a prefix that is ~95% of each call's input — so (b) dominates (a) by a wide
+> margin and the totals should come in **under** $5.75, not over. The numbers stay as
+> written because a spend ceiling is more useful honest-and-high than re-derived from two
+> estimates.
 
 | | Calls | ≈ Cost (batch) | ≈ Cost (synchronous) |
 |---|---:|---:|---:|
@@ -421,13 +428,13 @@ tighten it. ADR-023 spent 408 calls for its verdict; this is ~3.2× that, and th
 analysis is the argument for why.
 
 **The table is an upper bound, and the cache is the reason.** Every call in it — both
-arms and the judge — carries the same `cache_control`-marked prefix, differing only in
-how each model's tokenizer counts it (~2425 on Sonnet 5, ~3700 on Opus 4.8). That prefix
-is ~93–94% of each call's input; the per-call variable part is only the ~180-token
-snippet. It clears every floor involved, caching is **measured working on both models**
-(step 0), and a cache read bills at roughly a tenth of base input. So the *input* side of
-every line above should fall by most of its value: the ~1300 calls pay the full prefix
-once per cache window rather than 1300 times.
+arms and the judge — carries the same `cache_control`-marked prefix, measured 2026-08-02
+at ~3764 tokens on Sonnet 5 and ~3700 on Opus 4.8. That prefix is ~95% of each call's
+input; the per-call variable part is only the ~180-token snippet. It clears every floor
+involved, caching is **measured working on both models** (step 0), and a cache read bills
+at roughly a tenth of base input. So the *input* side of every line above should fall by
+most of its value: the ~1300 calls pay the full prefix once per cache window rather than
+1300 times.
 
 **Do not bank the saving in advance.** What step 0 proves is that the prefix *can* cache
 — two back-to-back identical probes hit. It does not prove a 1300-call production run
