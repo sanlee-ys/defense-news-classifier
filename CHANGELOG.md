@@ -9,7 +9,67 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [3.2.0] - 2026-08-02
+
+Milestone: **the ruler shrinks.** The region axis had shipped with a single number — 87.0% on
+n=54, a 95% Wilson interval **18 points wide** — inside which no future region change could be
+told apart from noise. The scaled region eval grades 300 DVIDS snippets with the Opus judge
+that validated at 100.0% region agreement against the human labels, and brings that interval
+down to **7 points** ([ADR-022](decisions/022-scaled-region-eval-verdict.md)).
+
+This tag also releases everything accumulated since `v3.1.0`: the API error taxonomy and the
+truncation assertion (ADR-021), the paired-comparison layer, the browser-portable ADR-017
+baseline, the two provenance pins, and two CI lanes.
+
+The shipped classifier is **unchanged** — same prompt (`SYSTEM_PROMPT` still hashes to
+`a59689e8…`), same single call, same `{category, operational_domain, region}` contract — so
+this is a MINOR: capability and measurement were added, nothing a caller relies on moved. The
+gold numbers published in `evals/metrics.json` are still `v3.0.0`'s measurements, because the
+thing they measure did not change; the only byte that moved in the artifact is `version`.
+
 ### Added
+- **The scaled region eval, measured** ([ADR-022](decisions/022-scaled-region-eval-verdict.md),
+  [spec](docs/specs/scaled-region-eval.md), `src/scale_region_eval.py`) — 300 DVIDS snippets
+  (`data/scale/scale_set.csv`, the same ids v2.1.0 used: reused rather than resampled, so every
+  row lines up with the frozen v2 snapshot and the judge never grades its own validation data),
+  workhorse `claude-sonnet-5`, answer key the `claude-opus-4-8` judge on the frozen
+  configuration that cleared ADR-014's gate.
+
+  **Region 88.3%, 95% CI [84.2%, 91.5%] (265/300), macro-F1 0.904**; category 91.7%
+  [88.0%, 94.3%]; domain 89.3% [85.3%, 92.3%]. The deliverable is the interval, not the point
+  estimate: 18 points wide at n=54, 7 at n=300, and 88.3% against the gold set's 87.0% is
+  corroboration rather than a new headline.
+
+  **The named `global` cluster is confirmed systematic.** On the gold 54, all seven region
+  misses were `global` rows the model pulled to a specific region by inferring a theater from
+  the US *actor*; seven rows could not separate a behavior from a run of luck. At n=300: 70
+  answer-key `global` rows, **17 pulled to a region** (16 of them to `americas`), which is
+  **49% of all 35 region disagreements**. That is the evidence a HANDOFF-job-2 prompt clause
+  gets measured against, and the at-scale price comparison for ADR-020's declined critic — the
+  clause itself is deliberately *not* implemented here, because measuring first is the method.
+
+  Read **alongside** the human-graded n=54 figures, never instead of them: this is
+  workhorse-vs-judge agreement, and the judge's measured disagreement with humans on region was
+  0/54 — itself a wide interval. The report says so in its own header. Artifacts:
+  [`evals/scale_eval_v3.txt`](evals/scale_eval_v3.txt), `evals/scale_predictions_v3.csv` (+ its
+  provenance sidecar), `evals/scale_confusion_v3_region.csv`. **No threshold was added** —
+  floors come from measured runs *with run-to-run noise under them* (ADR-007), and one pass
+  cannot supply that; a scale run is a dated measurement, not a live gate.
+- **A paired-comparison layer, with harness health reported separately** (`src/paired_compare.py`).
+  Every A/B in this repo — ADR-012, ADR-013, ADR-017, ADR-019 — re-derived the same plumbing by
+  hand, and the part that kept getting re-litigated was the bookkeeping, because a comparison
+  that quietly drops rows reports a lift that never happened. Now: a deterministic group key
+  that fails loud rather than merging two inputs into one "pair"; metrics computed only over
+  pairs where **both** arms scored (a missing observation is never imputed and never zero, or an
+  arm that crashes on the hard rows looks better the more it crashes); nothing eligible returns
+  `None`, never `0.0`. Non-participating rows come back as diagnostics under their own heading,
+  because "is this comparison trustworthy" is a different question from "what did it find". It
+  is additive and reads already-materialized CSVs, so it cannot perturb a published number, and
+  it independently reproduces the ADR-017 bake-off result as a test.
 - **The ADR-017 classical baseline is now portable to the browser**, with a parity gate
   (`scripts/export_baseline.py`, `web/baseline_export.json`, `web/baseline_infer.js`,
   `scripts/generate_parity_fixture.py`, `scripts/parity_check.mjs`). The baseline is a
@@ -29,7 +89,41 @@ Versions are tagged by milestone; individual commits are noted where relevant.
   exercises **every** vocabulary term, because the first draft — gold rows only — could be
   shown not to catch a perturbed coefficient on a term those 54 rows didn't contain.
 
+### Changed
+- **Two CI lanes.** The serving image is now **built and smoke-tested on `/health`** before
+  merge (`.github/workflows/docker.yml`, path-filtered to `Dockerfile`,
+  `requirements-api.txt`, `src/api.py`, `src/classify.py`) — before it, a base-image bump could
+  go fully green without the shipped artifact ever being built. And the advisory review lane
+  walked back to **on-demand only** ([ADR-016](decisions/016-claude-code-action-pr-review.md)
+  Amendment 1): the automatic `pull_request: [opened]` pass is gone, and the remaining gate was
+  a fiction until it was fixed — supplying a `prompt:` puts the action in **agent mode**, which
+  bypasses `@claude` mention checking entirely, so the effective trigger was *any* OWNER comment
+  (`lgtm`, `merging`), each one spending a billed review. It now requires the phrase explicitly.
+
 ### Fixed
+- **One API error taxonomy, and a truncated response is never scored**
+  ([ADR-021](decisions/021-api-error-taxonomy-and-incomplete-responses.md), `src/api_retry.py`,
+  `src/run_isolation.py`). Five modules had grown the same wrong
+  `except (InternalServerError, RateLimitError)` tuple, wrong in both directions: **too narrow**
+  — `OverloadedError` (529) is a *sibling* of `InternalServerError`, not a subclass, so the most
+  common transient failure on a long unattended run aborted it, and `APIConnectionError` /
+  `APITimeoutError` were missed the same way — and **too wide**, since a spend cap arriving as a
+  429 was slept on and retried, which cannot succeed. `api_retry` is now the single taxonomy:
+  the non-retryable pattern (quota/billing/credit/auth) is tested first and wins over exception
+  type, then deterministic types fail fast, then transient ones retry; an **unrecognized error
+  fails fast**, because retrying an unknown failure silently triples spend on a bug. Backoff is
+  byte-for-byte the old policy and every call site keeps its signature.
+
+  Separately, `classify()` now asserts the call *finished*. With forced tool use and
+  `max_tokens=256`, a truncated `ToolUseBlock` can still **validate** — the axes that survived
+  are individually legal labels — and that partial answer was being scored right-or-wrong
+  against gold. `IncompleteResponseError` is a deny-list (`max_tokens`, `pause_turn`,
+  `model_context_window_exceeded`), not an allow-list, so an unrecognized `stop_reason` never
+  breaks a caller the day the API adds a terminal value. `paired_compare` gained the landing
+  spot: `HARNESS_ERROR_SENTINELS` (`__unclassified__`, `__incomplete__`, `__refused__`) all pair
+  but are never scored as a miss, because a harness failure attributed to the model is a
+  fabricated error rate. **Not verified live** — the taxonomy is exercised offline against
+  constructed SDK errors, never a real 529.
 - **The published metrics can no longer be stamped with a version whose prompt never
   produced them** (`src/provenance.py`, `scripts/gen_metrics_artifact.py`,
   `src/gold_eval.py`). `evals/gold_predictions_v3.csv` is a frozen snapshot of a paid
@@ -482,7 +576,8 @@ First complete version of the defense news classifier. All v1 success criteria m
 
 ---
 
-[Unreleased]: https://github.com/sanlee-ys/defense-news-classifier/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/sanlee-ys/defense-news-classifier/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v2.2.0...v3.0.0
 [2.2.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v2.1.0...v2.2.0

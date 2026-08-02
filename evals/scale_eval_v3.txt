@@ -1,0 +1,82 @@
+==============================================================
+v3.2.0 SCALED REGION EVAL -- workhorse vs validated Opus judge
+==============================================================
+
+Snippets evaluated : 300   (data/scale/scale_set.csv)
+Workhorse : claude-sonnet-5
+Answer key: claude-opus-4-8 judge -- validated vs human on the n=54 gold set
+            (REGION 100.0% -- the ADR-014 gate for this eval;
+            92.6% category / 98.1% domain).
+
+Hand-labeling doesn't scale, so the judge is the answer key here. Accuracy
+below is the workhorse agreeing with the judge. On region the judge's
+measured disagreement with humans was 0/54 -- but 0/54 is itself a wide
+interval, so read these numbers ALONGSIDE the human-graded n=54 figures in
+evals/gold_eval_v3.txt, not instead of them.
+
+-- Workhorse vs judge, with 95% Wilson CIs ----------------
+Region accuracy   : 88.3%   95% CI [84.2%, 91.5%]   (265/300)   macro-F1 0.904
+Category accuracy : 91.7%   95% CI [88.0%, 94.3%]   (275/300)   macro-F1 0.763
+Domain accuracy   : 89.3%   95% CI [85.3%, 92.3%]   (268/300)   macro-F1 0.868
+
+-- The noise-floor shrink (why this eval exists) ----------
+Same metric, human-graded on n=54 (evals/gold_eval_v3.txt):
+  Region accuracy: 87.0% CI [75.6%, 93.6%] (width 18pts) -> at n=300 width 7pts
+  Category accuracy: 92.6% CI [82.5%, 97.1%] (width 15pts) -> at n=300 width 6pts
+  Domain accuracy: 92.6% CI [82.5%, 97.1%] (width 15pts) -> at n=300 width 7pts
+
+-- The named `global` cluster, at scale -------------------
+On the n=54 gold set every region miss was a `global` row pulled to a
+specific region (ADR-014). Seven rows cannot tell a systematic behavior
+from a coincidence; these counts can.
+
+Answer-key `global` rows        : 70
+  of which pulled to a region   : 17
+Converse (over-called `global`) : 10
+All region disagreements        : 35
+  share that is the global pull : 49% (17/35)
+Pulled to                       : americas 16, indo-pacific 1
+
+Region per-label (workhorse vs judge):
+              precision  recall    f1  support
+label                                         
+africa            1.000   1.000 1.000        3
+americas          0.882   0.912 0.897      148
+europe            0.750   0.882 0.811       17
+global            0.841   0.757 0.797       70
+indo-pacific      0.929   0.963 0.945       27
+middle-east       1.000   0.943 0.971       35
+
+Answer-key label distribution (judge): africa 3, americas 148, europe 17, global 70, indo-pacific 27, middle-east 35
+
+Category per-label (workhorse vs judge):
+             precision  recall    f1  support
+label                                        
+industry         0.500   0.333 0.400        3
+operations       0.963   0.947 0.955      190
+policy           0.545   0.857 0.667       14
+procurement      0.833   0.952 0.889       21
+technology       0.954   0.861 0.905       72
+
+Answer-key label distribution (judge): industry 3, operations 190, policy 14, procurement 21, technology 72
+
+Operational domain per-label (workhorse vs judge):
+       precision  recall    f1  support
+label                                  
+air        0.929   0.952 0.940       83
+cyber      0.909   0.980 0.943       51
+land       0.849   0.900 0.874       50
+multi      0.692   0.545 0.610       33
+sea        0.930   0.946 0.938       56
+space      0.958   0.852 0.902       27
+
+Answer-key label distribution (judge): air 83, cyber 51, land 50, multi 33, sea 56, space 27
+
+-- Known limitation: DVIDS label skew -----------------------
+Region: `americas` is 148/300 (49%); thin classes (support < 10): africa n=3.
+  -> the region macro-F1 (0.904) is dragged down by those thin classes, not by a real quality drop; read overall accuracy + the well-populated per-label rows instead.
+Category: `operations` is 190/300 (63%); thin classes (support < 10): industry n=3.
+  -> the category macro-F1 (0.763) is dragged down by those thin classes, not by a real quality drop; read overall accuracy + the well-populated per-label rows instead.
+
+Region confusion matrix: evals/scale_confusion_v3_region.csv
+==============================================================

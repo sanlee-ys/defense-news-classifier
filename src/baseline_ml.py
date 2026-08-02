@@ -20,8 +20,11 @@ Design constraints (from the spec, non-negotiable):
 - Metrics are the repo's hand-rolled ``eval.py`` functions, not sklearn's report
   (ADR-004: sklearn may model, it may not measure).
 
-Covers category and operational_domain only: the scaled set has no region labels
-(the scaled region eval is unscheduled). Train labels are judge-generated,
+Covers category and operational_domain only: the frozen v2 scale snapshot this
+trains on has no region column. (The scaled region eval shipped in v3.2.0 and
+produced judge region labels, but into its own _v3 snapshot; this bake-off is a
+frozen record and stays pinned to the predictions it was measured on.)
+Train labels are judge-generated,
 so the baseline inherits the judge's ~5-6% disagreement-with-human ceiling and is
 then tested against human labels -- the direction that handicaps the baseline, not
 flatters it.
@@ -235,8 +238,8 @@ def main() -> None:
     out("Train : 300 DVIDS snippets, Opus-JUDGE labels (not human; the")
     out("        baseline inherits the judge's ~5-6% human-disagreement ceiling).")
     out("Test  : the 54-row human gold set, touched once. Region is NOT covered")
-    out("        (the training data has no region labels until the scaled")
-    out("        region eval ships).")
+    out("        (the frozen v2 scale snapshot this trains on has no region")
+    out("        column; v3.2.0's scaled region eval wrote its own _v3 file).")
     out("Config: word 1-2 grams, english stop words, min_df=2,")
     out("        LogisticRegression(class_weight='balanced') per axis.")
     out("Caveat: 'industry' has n=1 training row -- structurally unlearnable.")

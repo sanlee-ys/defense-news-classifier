@@ -121,13 +121,11 @@ The reset rule is the whole game: a digit goes back to 0 every time a digit to i
 moves (`2.1.0` -> `2.2.0` -> `3.0.0`). A version number is a promise about what changed, not
 a tally of releases.
 
-**Not yet shipped:**
-- **Scale the region eval** — n=300 DVIDS snippets graded on region by the Opus judge
-  (validated at 100.0% vs human on the gold 54, so the answer-key chain holds); same
-  Wilson-CI reporting as the category/domain scale eval. **Scheduled 2026-08-02; the
-  harness is built** ([spec](docs/specs/scaled-region-eval.md), `src/scale_region_eval.py`)
-  and what remains is the owner-driven live pass — the run protocol is in the spec and in
-  HANDOFF job 1. Additive, contract untouched → MINOR.
+**Not yet shipped:** nothing on the roadmap. The scaled region eval shipped as `v3.2.0`
+(2026-08-02, [ADR-022](decisions/022-scaled-region-eval-verdict.md)) — the last item that
+was carrying a version slot. Open work now lives in HANDOFF's job list, not here; the
+nearest candidate is the `global`-boundary prompt clause, which is unversioned until it is
+measured against the n=300 ruler that release built.
 
 **Guiding principle (carried over from v1):** model tier and feature scope are per-task
 cost/quality knobs **decided by the eval, not by default** — measure first, escalate only where
