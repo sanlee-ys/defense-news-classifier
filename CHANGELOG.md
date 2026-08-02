@@ -71,6 +71,35 @@ Versions are tagged by milestone; individual commits are noted where relevant.
   re-run would reuse (the ADR-013/ADR-019 pattern); what would change the answer is a larger
   human-labeled key, parked as a condition rather than scheduled.
 
+### Fixed
+- **`MIN_CACHEABLE_PREFIX_TOKENS` carried inferred floors that were both wrong, and the
+  "caching is a no-op on the judge passes" claim rested on one of them** (`src/classify.py`,
+  `scripts/cache_diagnostics.py`, `docs/specs/global-boundary-clause-rerun.md`). The table
+  recorded `claude-sonnet-5: 2048` and `claude-opus-4-8: 4096`; re-fetched from
+  [Anthropic's prompt-caching docs](https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching)
+  on 2026-08-02, **both are 1024**. The sonnet-5 entry was explicitly commented as
+  *inferred* from a same-tier sibling, and that is the root cause worth naming: the floor
+  does not track model tier or recency — the same page lists Opus 5 at 512, Opus 4.7 at
+  2048, and Opus 4.6/4.5 and Haiku 4.5 at 4096 — so a per-model table is right in shape and
+  can only be filled by transcription. A new test pins the three values against the
+  published figures so the next drift fails CI instead of propagating.
+
+  **The consequence is a retracted claim, not a code change.** No shipped behavior moves:
+  `cacheable_prefix_gap()` already returned "clears the floor" for the workhorse, and the
+  v2.3.0 live check (`cache_creation=2350` then `cache_read=2350`) had confirmed that
+  empirically. What the stale 4096 produced was a *false negative on the judge*: the
+  ~2425-token prefix looked incapable of caching on Opus 4.8, and the rerun spec had
+  hardened that inference into "a measured no-op on the judge passes." It was never
+  measured. The judge is not a distinct call shape — `gold_eval.py` reaches it via
+  `classify_retry(..., JUDGE_MODEL)`, the same `cache_control`-marked system block with the
+  model swapped — so with the real 1024 floor it should cache like the workhorse does. The
+  spec now says *expected but unmeasured*, names the one command that settles it
+  (`scripts/cache_diagnostics.py --live --model claude-opus-4-8`), and keeps its
+  no-cache-discount cost table as a deliberate upper bound rather than a description of
+  reality. ADR-009's incidental "~2048" reference is left as-written: it is a
+  correct-on-its-date record whose conclusion (caching carries over to the batch path) does
+  not depend on the floor's value.
+
 ---
 
 ## [3.2.0] - 2026-08-02

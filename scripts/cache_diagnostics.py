@@ -1,10 +1,11 @@
 """Diagnose when classify()'s prompt cache will actually start working.
 
-classify() marks its system block with ``cache_control``, but on
-claude-sonnet-4-6 the cache silently does nothing until the cached prefix
-(tool schema + system prompt) clears the model's ~2048-token minimum
-cacheable-prefix floor. This script gives visibility into that gap, in two
-parts:
+classify() marks its system block with ``cache_control``, but the cache silently
+does nothing until the cached prefix (tool schema + system prompt) clears the
+model's minimum cacheable-prefix floor -- 1024 tokens for every model this repo
+calls (see ``classify.MIN_CACHEABLE_PREFIX_TOKENS``; the floor is per-model and
+does not track tier, so look it up rather than inferring it). This script gives
+visibility into that gap, in two parts:
 
 1. **Token counting (free, default).** Uses the free ``/v1/messages/count_tokens``
    endpoint to measure classify()'s current cacheable prefix and report how many

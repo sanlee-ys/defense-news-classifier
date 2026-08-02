@@ -301,10 +301,28 @@ uv run python src/mcnemar_power.py
 uv run --env-file .env python scripts/cache_diagnostics.py
 ```
 
-The second needs a key but makes no billed call (`count_tokens` is free). Prompt caching
-has been a measured no-op on the judge passes in this repo, so **no cache discount is
-assumed** in the estimates below; this is the check that says whether that is still true
-before ~1300 calls are placed.
+The second needs a key but makes no billed call (`count_tokens` is free). Run it, and
+**read the `gap to floor` line** before placing ~1300 calls.
+
+> **Corrected 2026-08-02 — the "caching is a no-op on the judge passes" claim was wrong.**
+> It rested on a stale floor: `MIN_CACHEABLE_PREFIX_TOKENS` recorded Opus 4.8 at 4096
+> tokens, so a ~2425-token prefix looked like it could never cache. Re-fetched from
+> [Anthropic's prompt-caching docs](https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching),
+> **Opus 4.8's real floor is 1024** (as is Sonnet 5's) — the prefix clears it by ~1400
+> tokens. The judge is not a separate call shape: `gold_eval.py` reaches it through
+> `classify_retry(..., JUDGE_MODEL)`, i.e. `classify()`'s own `cache_control`-marked
+> system block with only the model swapped. So caching is **expected to engage on the
+> judge passes**, and no measurement in this repo ever contradicted that — the one live
+> check on record (`scripts/cache_diagnostics.py --live`, CHANGELOG v2.3.0) ran on the
+> workhorse and showed caching *working* (`cache_creation=2350` then `cache_read=2350`).
+> The no-op line was an inference from the bad floor, never an observation.
+>
+> **This has not yet been confirmed on Opus 4.8 specifically.** The authoritative check is
+> `cache_read_input_tokens` in a live response; the one-line way to get it is
+> `scripts/cache_diagnostics.py --live --model claude-opus-4-8` (two billed Opus calls,
+> a few cents). Until someone runs that, treat judge-side caching as *expected but
+> unmeasured*. The cost table below still assumes **no** cache discount, which is now a
+> deliberately conservative upper bound rather than a description of reality.
 
 ### Step 1 — collect the extension (free; DVIDS, no LLM call)
 
@@ -382,6 +400,19 @@ long-tailed (median 327 characters, mean 633), and the token estimate is a calcu
 rather than a measurement — `scripts/cache_diagnostics.py` in step 0 is the free way to
 tighten it. ADR-023 spent 408 calls for its verdict; this is ~3.2× that, and the power
 analysis is the argument for why.
+
+**The table is an upper bound, and the cache is the reason.** Every call in it — both
+arms and the judge — carries the same ~2425-token `cache_control`-marked prefix, which is
+~93% of each call's ~2605 input tokens; the per-call variable part is only the ~180-token
+snippet. With the floors corrected (see step 0), that prefix clears every floor involved,
+and a cache read bills at roughly a tenth of base input. If caching engages across the
+run, the *input* side of every line above falls by most of its value — the ~1300 calls
+would pay the full prefix once per cache window instead of 1300 times. **Do not bank the
+saving in advance**: the 5-minute ephemeral TTL and the Batches API's scheduling mean hit
+rate is a property of how the run is actually dispatched, not something derivable here.
+The honest planning posture is to budget the table's numbers and treat any discount as
+recovered margin — then read `cache_read_input_tokens` off the run and record what
+actually happened, since that measurement is what retires the open question above.
 
 ## 8. Explicitly NOT in this branch
 

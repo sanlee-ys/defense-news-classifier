@@ -458,9 +458,10 @@ def classify(
     # across many calls in a row -- eval.py/gold_eval.py across every row of
     # their dataset, the optimize.py loop across ~354 scoring calls per
     # iteration -- so this is the textbook repeated-prefix caching case.
-    # SYSTEM_PROMPT's extended rubric deliberately carries the prefix past
-    # Sonnet 5's 2048-token minimum cacheable floor (~2425 measured; verified
-    # live with scripts/cache_diagnostics.py --live: call 2 reads the full
+    # SYSTEM_PROMPT's extended rubric carries the prefix well past the
+    # 1024-token minimum cacheable floor that applies to every model here --
+    # workhorse and Opus judge alike (~2425 measured; verified live on the
+    # workhorse with scripts/cache_diagnostics.py --live: call 2 reads the full
     # prefix from cache). If a future edit shrinks the prompt back under the
     # floor, the marker silently reverts to a no-op -- re-run that script
     # after any prompt change.
@@ -622,12 +623,13 @@ def parse_batch_result(result) -> dict:
 # Cache-diagnostics instrumentation -- visibility into WHEN classify()'s prompt
 # cache actually engages, without touching classify()'s hot path.
 #
-# classify() marks its system block with cache_control, but on claude-sonnet-5
-# the cache silently does nothing until the cached prefix (tool schema + system
-# prompt) crosses the model's ~2048-token minimum cacheable-prefix floor. The
-# prefix deliberately clears that floor today (~2425 tokens, via SYSTEM_PROMPT's
-# extended rubric), so the marker is live -- and these helpers are the guard
-# that a future prompt edit doesn't silently slip back under it, using the free
+# classify() marks its system block with cache_control, but the cache silently
+# does nothing until the cached prefix (tool schema + system prompt) crosses the
+# model's minimum cacheable-prefix floor -- 1024 tokens for every model this
+# repo calls (see MIN_CACHEABLE_PREFIX_TOKENS). The prefix clears that floor
+# with room to spare today (~2425 tokens, via SYSTEM_PROMPT's extended rubric),
+# so the marker is live -- and these helpers are the guard that a future prompt
+# edit doesn't silently slip back under it, using the free
 # /v1/messages/count_tokens
 # endpoint -- so the prompt-optimization loop (which revises the system prompt
 # over iterations) can see whether caching still pays off. The live
@@ -637,13 +639,21 @@ def parse_batch_result(result) -> dict:
 
 # Minimum cacheable prefix (tokens) per model: below this, the cache_control
 # marker on classify()'s system block is a silent no-op (cache_creation stays 0,
-# no error). Values from Anthropic's prompt-caching docs; only the models this
-# project actually calls are listed (workhorse + Opus judge). Unknown models
-# return None from cacheable_prefix_gap().
+# no error). Only the models this project actually calls are listed (workhorse +
+# Opus judge). Unknown models return None from cacheable_prefix_gap().
+#
+# Values transcribed from Anthropic's prompt-caching docs, re-fetched and
+# verified 2026-08-02:
+# https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching
+# The floor is genuinely per-model and does NOT track model tier or recency --
+# the same page lists Opus 5 at 512, Opus 4.7 at 2048, and Opus 4.6/4.5 and
+# Haiku 4.5 at 4096. So never infer an entry from a sibling model; look it up.
+# (An earlier version of this table did infer, and carried claude-sonnet-5 at
+# 2048 and claude-opus-4-8 at 4096 -- both wrong, both really 1024.)
 MIN_CACHEABLE_PREFIX_TOKENS = {
-    "claude-sonnet-5": 2048,  # current workhorse (inferred: same-tier as Sonnet 4.6 / Fable 5)
-    "claude-sonnet-4-6": 2048,  # prior workhorse, kept for back-compat
-    "claude-opus-4-8": 4096,  # gold-eval judge
+    "claude-sonnet-5": 1024,  # current workhorse
+    "claude-sonnet-4-6": 1024,  # prior workhorse, kept for back-compat
+    "claude-opus-4-8": 1024,  # gold-eval judge
 }
 
 

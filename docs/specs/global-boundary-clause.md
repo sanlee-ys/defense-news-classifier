@@ -415,7 +415,9 @@ uv run --env-file .env python scripts/cache_diagnostics.py
 ```
 
 The clause **adds** tokens, so the ~2425-token prefix moves further above Sonnet 5's
-2048-token cacheable floor. A confirmation, not a risk.
+cacheable floor. A confirmation, not a risk. (That floor was written here as 2048; it is
+**1024** — the table in `src/classify.py` was corrected against the live docs on
+2026-08-02. The conclusion is unchanged and the margin is larger.)
 
 ## 8. Expected-red CI on this branch, and exactly why
 
