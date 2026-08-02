@@ -69,7 +69,10 @@ are rows whose gold label is `global` (no identifiable theater in the snippet) t
 pulled to a specific region — six to `americas`, one to `indo-pacific`
 (`evals/gold_confusion_v3.md` names them). The rubric forbids inferring a theater from the US
 *actor* when the text states no place; the model does it anyway. That's a precise target for a
-future prompt clause, the same shape as the tech-vs-ops fix that lifted v2. Second, category
+prompt clause, the same shape as the tech-vs-ops fix that lifted v2 — and one was written,
+measured against the n=300 ruler, and **reverted** as marginal
+([ADR-023](decisions/023-global-boundary-clause-verdict.md); the numbers are further down).
+Second, category
 dipped one row from the v2-era 94.4% — consistent with the schema-perturbation effect the
 routing experiment measured (adding one field moved 2/54 there) and inside n=54 noise.
 
@@ -215,6 +218,17 @@ rows cannot tell a systematic behavior from a coincidence. At n=300 they can: of
 answer-key `global` rows, **17 were pulled to a region** (16 of them to `americas`), which is
 **49% of all 35 region disagreements**. That is one identified failure mode accounting for half
 the region error, and it is now a measurable target for a prompt clause rather than an anecdote.
+
+**And it was measured.** A one-bullet prompt clause was pre-registered — clause, decision rule
+and p-value table written down *before* any call was made — then run against this ruler on
+2026-08-02. It worked, and it still did not ship: scale region **88.5% → 92.2%** (12 of 17
+named pulls fixed against 7 correct rows dragged the other way, net +11 rows) at **McNemar
+p=0.0522**, missing the pre-registered p<0.05 by 0.0022, with the human-graded gold arm moving
+87.0% → 94.4%. The rule's own text calls a marginal result a revert, so the clause was
+reverted and the shipped prompt is unchanged. The reasoning, both arms in full, and what would
+change the answer are in [ADR-023](decisions/023-global-boundary-clause-verdict.md); the
+record is `evals/region_clause_ab.txt`. Renegotiating a threshold after seeing the number is
+the failure this project is built to avoid.
 
 The same two caveats as above apply, plus one more. This is workhorse-vs-judge agreement, and
 on region the judge's measured disagreement with humans was 0/54 — which is itself a wide

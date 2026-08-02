@@ -26,6 +26,7 @@ Decisions are recorded here as they are made. Each ADR captures the context, the
 | [020](020-l4-multi-agent-pipeline.md) | L4 built + measured: the backward edge fixed 6/7 of the named cluster, but the over-challenging critic did net harm (scale domain p=0.016) at 4× cost — declined as configured | Accepted |
 | [021](021-api-error-taxonomy-and-incomplete-responses.md) | One API error taxonomy (retry 429/5xx/**529**/timeouts, fail fast on auth/quota/billing) replacing five hand-rolled loops, plus a stop-reason assertion so a truncated response is never scored | Accepted |
 | [022](022-scaled-region-eval-verdict.md) | Scaled region eval measured (n=300): region 88.3% [84.2, 91.5], the CI narrows 18pts → 7pts, and the named `global` cluster is confirmed systematic (49% of region disagreements) — figures published as frozen dated prose, no CI floor | Accepted |
+| [023](023-global-boundary-clause-verdict.md) | The `global`-boundary prompt clause, measured against ADR-022's ruler and **reverted**: region 88.5% → 92.2% (12/17 named pulls fixed, 7 correct rows broken) at **McNemar p=0.0522** against a pre-registered p<0.05 — marginal reverts, because a pre-registration that binds only when convenient is not one | Accepted |
 
 ## Format
 

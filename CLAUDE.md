@@ -123,9 +123,11 @@ a tally of releases.
 
 **Not yet shipped:** nothing on the roadmap. The scaled region eval shipped as `v3.2.0`
 (2026-08-02, [ADR-022](decisions/022-scaled-region-eval-verdict.md)) — the last item that
-was carrying a version slot. Open work now lives in HANDOFF's job list, not here; the
-nearest candidate is the `global`-boundary prompt clause, which is unversioned until it is
-measured against the n=300 ruler that release built.
+was carrying a version slot. Open work now lives in HANDOFF's job list, not here. The
+nearest candidate *was* the `global`-boundary prompt clause; it was measured against that
+n=300 ruler on 2026-08-02 and **reverted** as marginal (p=0.0522 against a pre-registered
+p<0.05), so it never claimed a version at all —
+[ADR-023](decisions/023-global-boundary-clause-verdict.md).
 
 **Guiding principle (carried over from v1):** model tier and feature scope are per-task
 cost/quality knobs **decided by the eval, not by default** — measure first, escalate only where
