@@ -81,7 +81,7 @@ CLAUDE.md
 <!-- shared:parallel-sessions v1 -->
 ## Working across parallel sessions (hard rule)
 
-Sessions cannot see each other's uncommitted work — **`main` is the only shared coordination point**. So: **one concern per session → one branch → one PR**; check open PRs and branches before starting; branch from fresh `main` and merge fast; **serialize the collision hotspots** and parallelize by independent *file*, not by task; keep the wiring for any generated or aggregated file in one hand. Full rule + the triple-build incident that produced it: [claude-ops `conventions/parallel-sessions.md`](https://github.com/sanlee-ys/claude-ops/blob/main/conventions/parallel-sessions.md).
+Sessions cannot see each other's uncommitted work — **`main` is the only shared coordination point**. So: **one concern per session → one branch → one PR**; check open PRs and branches before starting; branch from fresh `main` and merge fast; **serialize the collision hotspots** and parallelize by independent *file*, not by task; keep the wiring for any generated or aggregated file in one hand. Full rule + the triple-build incident that produced it: [agent-ops `conventions/parallel-sessions.md`](https://github.com/sanlee-ys/agent-ops/blob/main/conventions/parallel-sessions.md).
 <!-- /shared:parallel-sessions -->
 
 **This repo's collision hotspots:** `pyproject.toml`, `uv.lock`, `README.md`,
@@ -150,7 +150,7 @@ escalation twice with data — BM25 grounding (ADR-012) and tiered routing (ADR-
 <!-- shared:links-verify v1 -->
 ## Links — verify before sending (hard rule)
 
-Links given in chat must resolve: **full `github.com/<owner>/<repo>/blob/<ref>/<path>` URLs only**, **verify the path exists on the ref before sending** (unverified → say so), and **branch links are perishable** (prefer `main` once merged). Full rule + rationale: [claude-ops `conventions/links-verify.md`](https://github.com/sanlee-ys/claude-ops/blob/main/conventions/links-verify.md).
+Links given in chat must resolve: **full `github.com/<owner>/<repo>/blob/<ref>/<path>` URLs only**, **verify the path exists on the ref before sending** (unverified → say so), and **branch links are perishable** (prefer `main` once merged). Full rule + rationale: [agent-ops `conventions/links-verify.md`](https://github.com/sanlee-ys/agent-ops/blob/main/conventions/links-verify.md).
 <!-- /shared:links-verify -->
 
 ## Known issue: `uv sync` file-lock races on Windows (Defender)
