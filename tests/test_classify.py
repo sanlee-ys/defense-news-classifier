@@ -402,15 +402,29 @@ def test_count_prefix_tokens_honors_model_and_prompt_overrides(count_tokens_clie
     assert kwargs["system"][0]["text"] == "REVISED prompt"
 
 
+def test_min_cacheable_prefix_floors_match_published_values():
+    # Pinned to Anthropic's prompt-caching docs, re-verified 2026-08-02:
+    # https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching
+    # These are transcribed values, not derived ones -- the floor is per-model
+    # and does not track tier (the same page lists Opus 5 at 512 and Opus 4.6 at
+    # 4096). This test exists because the table previously carried *inferred*
+    # floors (sonnet-5 at 2048, opus-4-8 at 4096) that were both wrong.
+    assert classify.MIN_CACHEABLE_PREFIX_TOKENS == {
+        "claude-sonnet-5": 1024,
+        "claude-sonnet-4-6": 1024,
+        "claude-opus-4-8": 1024,
+    }
+
+
 def test_cacheable_prefix_gap_positive_when_below_floor():
-    # 850 tokens against Sonnet 4.6's 2048 floor -> 1198 tokens short (no-op).
+    # 850 tokens against Sonnet 4.6's 1024 floor -> 174 tokens short (no-op).
     gap = classify.cacheable_prefix_gap(850, model="claude-sonnet-4-6")
-    assert gap == 2048 - 850
+    assert gap == 1024 - 850
 
 
 def test_cacheable_prefix_gap_non_positive_when_clearing_floor():
     gap = classify.cacheable_prefix_gap(3000, model="claude-sonnet-4-6")
-    assert gap == 2048 - 3000
+    assert gap == 1024 - 3000
     assert gap <= 0
 
 
