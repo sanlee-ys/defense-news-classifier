@@ -338,6 +338,7 @@ def run_workhorse(
     df: pd.DataFrame,
     done_ids: set,
     preds_path: str = CANDIDATE_PREDS_PATH,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> None:
     """Classify every not-yet-done snippet with the workhorse alone, appending as we go.
 
@@ -353,12 +354,19 @@ def run_workhorse(
         df: Frame with at least columns ``id`` and ``text``.
         done_ids: Ids that already have predictions and can be skipped.
         preds_path: CSV the workhorse predictions are appended to.
+        system_prompt: Prompt to classify under. Defaults to the live
+            ``SYSTEM_PROMPT`` -- which is how the ADR-023 arm was produced, on a
+            branch that carried the clause. The higher-power re-run passes the
+            clause-applied prompt here instead, so ``main`` never has to hold a
+            prompt it does not ship (see ``src/region_clause_rerun.py``).
     """
     todo = df[~df["id"].isin(done_ids)].reset_index(drop=True)
     write_header = not os.path.exists(preds_path)
     for i, (_, row) in enumerate(todo.iterrows()):
         print(f"[{i + 1:3d}/{len(todo)}] {row['id']}", flush=True)
-        base = classify_retry(client, row["text"], WORKHORSE_MODEL)
+        base = classify_retry(
+            client, row["text"], WORKHORSE_MODEL, system_prompt=system_prompt
+        )
         result = {
             "id": row["id"],
             "pred_category": base["category"],
@@ -378,6 +386,7 @@ def run_workhorse_batch(
     done_ids: set,
     poll_interval: float = 30.0,
     preds_path: str = CANDIDATE_PREDS_PATH,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> None:
     """Classify every not-yet-done snippet with the workhorse via the Message Batches API.
 
@@ -391,13 +400,20 @@ def run_workhorse_batch(
         done_ids: Ids that already have predictions and can be skipped.
         poll_interval: Seconds between status polls.
         preds_path: CSV the workhorse predictions are appended to.
+        system_prompt: Prompt to classify under. Defaults to the live
+            ``SYSTEM_PROMPT``; see :func:`run_workhorse`.
     """
     todo = df[~df["id"].isin(done_ids)].reset_index(drop=True)
     if todo.empty:
         return
 
     requests = [
-        build_batch_request(str(row["id"]), row["text"], model=WORKHORSE_MODEL)
+        build_batch_request(
+            str(row["id"]),
+            row["text"],
+            model=WORKHORSE_MODEL,
+            system_prompt=system_prompt,
+        )
         for _, row in todo.iterrows()
     ]
     print(
@@ -633,12 +649,17 @@ def axis_comparison(
 # ---------------------------------------------------------------------------
 
 
-def _optional(value: float | None, spec: str) -> str:
+def optional_format(value: float | None, spec: str) -> str:
     """Format an optional number, keeping 'nothing to compare' distinct from zero.
 
     Local rather than imported from ``paired_compare``: that module's equivalents are
     private, and reaching across a module boundary for a private helper couples this
     report to another module's internals for two lines of formatting.
+
+    Public (renamed from ``_optional``) because the higher-power re-run renders the
+    same table -- the same reason ``scale_eval``'s ``accuracy_row`` / ``per_label`` /
+    ``limitations_block`` were made public when a second eval began computing through
+    them. A pure rename: no behavior change, no artifact regenerated.
 
     Args:
         value: The number, or ``None`` when there was nothing to compute it over.
@@ -650,8 +671,14 @@ def _optional(value: float | None, spec: str) -> str:
     return "n/a" if value is None else format(value, spec)
 
 
-def _cluster_block(delta: dict) -> list[str]:
+def cluster_block(delta: dict) -> list[str]:
     """Format the named-cluster accounting.
+
+    Public (renamed from ``_cluster_block``) so the higher-power re-run prints the
+    F/B accounting in exactly this shape rather than a look-alike -- the two reports
+    disagreeing about how B is counted is the one difference a reader would never
+    catch. Pure rename; the frozen ``evals/region_clause_ab.txt`` is unaffected
+    because nothing regenerates it.
 
     Args:
         delta: Output of :func:`cluster_delta`.
@@ -779,15 +806,15 @@ def build_report(
         f"{'c/b/tie':>13}{'McNemar p':>12}",
     ]
     for axis, _result, lift in comparisons:
-        base = _optional(lift.baseline_pass_rate, ".1%")
-        cand = _optional(lift.candidate_pass_rate, ".1%")
-        shift = _optional(lift.lift, "+.1%")
+        base = optional_format(lift.baseline_pass_rate, ".1%")
+        cand = optional_format(lift.candidate_pass_rate, ".1%")
+        shift = optional_format(lift.lift, "+.1%")
         wins = f"{lift.candidate_wins}/{lift.baseline_wins}/{lift.ties}"
         lines.append(
             f"{axis:<20}{base:>8}{cand:>8}{shift:>9}{wins:>13}{lift.p_value:>12.4f}"
         )
 
-    lines += _cluster_block(delta)
+    lines += cluster_block(delta)
     lines += [
         "",
         "-- Harness health ------------------------------------------",

@@ -10,6 +10,33 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 ## [Unreleased]
 
 ### Added
+- **The higher-power re-run of the `global`-boundary clause — pre-registered and
+  run-ready, not yet run**
+  ([spec](docs/specs/global-boundary-clause-rerun.md), `src/mcnemar_power.py`,
+  `src/region_clause_rerun.py`, `scripts/extend_scale_set.py`). ADR-023 declined the
+  clause at **p=0.0522** and named the one thing that would change the answer: a
+  higher-power ruler. `src/mcnemar_power.py` turns that into arithmetic — exact
+  two-sided McNemar power, computed through the repo's own `mcnemar_exact` rather than
+  a normal approximation — and the answer is that **ADR-023 ran at ~49% power against
+  the effect it observed**. That reframes the verdict without changing it: the rule was
+  right to revert, *and* the design could never have decided either way. 80% power
+  needs **n=545**, 90% needs **n=713**, and "just collect 300 more" buys 84% only if
+  the true effect is exactly the observed one (58% at three-quarters of it) — so the
+  target is ~730 effective pairs, and **n=545 is a floor enforced in code**, not
+  printed.
+
+  **Two design changes make this cheaper and safer than the round it repeats.** The
+  clause is applied **at run time** from a source pinned by digest to the fingerprint
+  the paid ADR-023 run recorded, so `classify.SYSTEM_PROMPT` is never edited: no
+  expected-red CI, no provenance waiver, no revert to perform, and — load-bearing — the
+  Opus judge still grades under the shipped prompt, which it must, because `classify()`
+  defaults *both* models to `SYSTEM_PROMPT`. And the 295 rows already measured are
+  **reused rather than re-bought**, guarded by both sidecars, so only new snippets are
+  classified at 3 calls each. The extension is collected by importing
+  `build_scale_set.py`'s own queries and filters (a copy could drift; an import cannot),
+  with one documented deviation — the per-query keep cap rises — and one new exclusion
+  that is the ADR-023 lesson: **exact-duplicate snippet text is dropped before anything
+  is graded**, not after. Offline tests throughout; no live call was made building it.
 - **The `global`-boundary prompt clause experiment — measured and reverted**
   ([ADR-023](decisions/023-global-boundary-clause-verdict.md),
   [spec](docs/specs/global-boundary-clause.md), `src/region_clause_ab.py`). The region axis

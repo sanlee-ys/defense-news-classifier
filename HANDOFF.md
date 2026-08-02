@@ -221,11 +221,35 @@ file is a point-in-time snapshot and goes stale the moment work lands._
    number moved, no version bump, no marker cascade. The harness
    (`src/region_clause_ab.py`, 51 tests) and the frozen `region_clause_*` eval
    artifacts merged as the reproducible record; the clause itself did not.
-   **If anyone reopens this:** the only thing that would change the answer is a
-   higher-power ruler (a larger human-labeled or judge-graded key on this
-   boundary), and that is parked as a condition, not scheduled. Do not re-run the
-   same 295 rows to break the tie — that is the p-hacking the rule forbids.
-3. **Option, explicitly NOT a commitment: a structurally narrowed critic.** L4's
+   **This was reopened deliberately on 2026-08-02 — see job 3.** Do not re-run the
+   same 295 rows to break the tie; that is the p-hacking the rule forbids, and the
+   follow-up does not do it.
+3. **The higher-power re-run — RUN-READY, awaiting owner-driven execution.**
+   ADR-023's own named condition, now costed. `src/mcnemar_power.py` prices it
+   exactly: at n=295 that experiment had **~49% power** against the effect it
+   observed, so p=0.0522 is what a coin flip looks like when it lands on the wrong
+   side by a hair. 80% power needs **n=545**, 90% needs **n=713**; one more
+   300-snippet collection buys 84% *only if* the true effect is exactly what was
+   measured (58% if it is three-quarters of that). Target is therefore ~730
+   effective pairs. Pre-registration, power tables, decision rule and run protocol:
+   [the spec](docs/specs/global-boundary-clause-rerun.md), canonical for §6 and §7.
+   Harness `src/region_clause_rerun.py`; collector `scripts/extend_scale_set.py`.
+
+   **Two design changes worth knowing before running it.** The clause is applied
+   **at run time** — `classify.SYSTEM_PROMPT` is never edited, so there is no
+   expected-red CI, no waiver, no revert to perform, and the Opus judge still grades
+   under the shipped prompt (it must: `classify()` defaults *both* models to
+   `SYSTEM_PROMPT`). And the 295 rows ADR-023 already measured are **reused, not
+   re-bought** — the composed prompt is pinned by digest to the fingerprint the paid
+   run recorded, so only new snippets are classified, at 3 calls each. Nothing runs
+   below the pre-registered n=545 floor; `report()` raises rather than scoring.
+
+   **Owner commands and cost are in the spec §7** (~1305 calls at the target size,
+   ≈$5.75 batch / ≈$11.45 synchronous — estimates, and step 0 is the free pre-check).
+   The gold arm is **deferred** to step 5, run only if rule 1 passes: it is a
+   non-regression check, and last round it cost 108 calls plus a delete-and-restore
+   across the published gold record for an arm that could not decide anything alone.
+4. **Option, explicitly NOT a commitment: a structurally narrowed critic.** L4's
    failure was a charter that lived only in the prompt. A critic code-gated to
    fire *only* where triage reports `none stated`, on region alone, is a
    different experiment with a different cost profile — and it is a **new
@@ -323,7 +347,11 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   ```
 
   Release notes point at the `[3.2.0]` CHANGELOG entry and ADR-022.
-- Deciding whether the narrowed-critic experiment (job 3) is worth a spec at all.
+- **Running the higher-power re-run (job 3).** The harness, the collector and the
+  pre-registration are merged and run-ready; every command that spends is owner-driven
+  by repo contract. Start at the spec's §7 step 0 (free), and check the achieved
+  extension size against the n=545 floor before step 2.
+- Deciding whether the narrowed-critic experiment (job 4) is worth a spec at all.
   The honest default is no. The ladder is complete, measured, and now fully
   published — there is no documentation debt left to trade against, so this
   would be new build work on a rung that already returned its answer.

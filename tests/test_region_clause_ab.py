@@ -701,8 +701,8 @@ def test_run_makes_one_call_per_row_not_two(tmp_path, monkeypatch):
     scale.write_text("id,text\ns001,one\ns002,two\ns003,three\n", encoding="utf-8")
     calls = []
 
-    def _fake(_client, text, model):
-        calls.append((model, text))
+    def _fake(_client, text, model, system_prompt=None):
+        calls.append((model, text, system_prompt))
         return {"category": "policy", "operational_domain": "multi", "region": "global"}
 
     monkeypatch.setattr(ab, "classify_retry", _fake)
@@ -715,7 +715,11 @@ def test_run_makes_one_call_per_row_not_two(tmp_path, monkeypatch):
     ab.run()
 
     assert len(calls) == 3
-    assert {model for model, _ in calls} == {gold_eval.WORKHORSE_MODEL}
+    assert {model for model, _, _ in calls} == {gold_eval.WORKHORSE_MODEL}
+    # The default is the shipped prompt: this module produced the ADR-023 arm on a
+    # branch that carried the clause in SYSTEM_PROMPT, and that default must not
+    # drift now that the parameter exists for the higher-power re-run to use.
+    assert {prompt for _, _, prompt in calls} == {ab.SYSTEM_PROMPT}
 
 
 def test_run_resumes_and_skips_done_ids(tmp_path, monkeypatch):
@@ -736,7 +740,7 @@ def test_run_resumes_and_skips_done_ids(tmp_path, monkeypatch):
     )
     calls = []
 
-    def _fake(_client, text, model):
+    def _fake(_client, text, model, system_prompt=None):
         calls.append(text)
         return {"category": "policy", "operational_domain": "multi", "region": "global"}
 
