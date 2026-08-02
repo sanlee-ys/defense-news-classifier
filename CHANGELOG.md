@@ -92,13 +92,33 @@ Versions are tagged by milestone; individual commits are noted where relevant.
   hardened that inference into "a measured no-op on the judge passes." It was never
   measured. The judge is not a distinct call shape — `gold_eval.py` reaches it via
   `classify_retry(..., JUDGE_MODEL)`, the same `cache_control`-marked system block with the
-  model swapped — so with the real 1024 floor it should cache like the workhorse does. The
-  spec now says *expected but unmeasured*, names the one command that settles it
-  (`scripts/cache_diagnostics.py --live --model claude-opus-4-8`), and keeps its
-  no-cache-discount cost table as a deliberate upper bound rather than a description of
-  reality. ADR-009's incidental "~2048" reference is left as-written: it is a
-  correct-on-its-date record whose conclusion (caching carries over to the batch path) does
-  not depend on the floor's value.
+  model swapped — so with the real 1024 floor it should cache like the workhorse does.
+  ADR-009's incidental "~2048" reference is left as-written: it is a correct-on-its-date
+  record whose conclusion (caching carries over to the batch path) does not depend on the
+  floor's value.
+
+- **Judge-side caching confirmed live, and the "~2425-token prefix" figure corrected to be
+  per-model** (`src/classify.py`, `docs/specs/global-boundary-clause-rerun.md`). Running
+  `scripts/cache_diagnostics.py --live --model claude-opus-4-8` on 2026-08-02 closed the
+  question the entry above left open: `call 1: cache_creation=3625, cache_read=0` →
+  `call 2: cache_creation=0, cache_read=3625`. **Prompt caching engages on the Opus
+  judge.** The run is also a self-contained disproof of the stale floor — it cached at
+  **3625 tokens, below the 4096** the old table claimed — so the correction stands on
+  measurement, not only on the docs.
+
+  **It also surfaced a second stale number, this one an over-generalization rather than an
+  inference.** The repo quoted a single "~2425-token cacheable prefix" as a property of the
+  prompt. It is not: token counts are model-specific, and the *same* prefix counts **~3700
+  under Opus 4.8** against ~2425 under Sonnet 5 — ~50% larger. Every site that attributed
+  the Sonnet figure to the judge now carries both numbers and the reason they differ, and
+  the rerun spec's step 0 runs the diagnostic **once per model** rather than reporting the
+  workhorse and implying the judge. The spec's cost table is deliberately **not**
+  recomputed: the judge row understates input tokens by ~50% (the tokenizer) and overstates
+  by assuming no cache discount (now measured false), the second dominates, and a spend
+  ceiling is more useful honest-and-high than re-derived from two estimates. What remains
+  genuinely open is narrower than before — not *whether* the prefix caches, but what
+  fraction of ~1300 dispatched calls hit it under the 5-minute TTL and Batches scheduling,
+  which only the run itself can answer.
 
 ---
 

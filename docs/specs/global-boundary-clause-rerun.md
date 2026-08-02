@@ -299,30 +299,39 @@ with the achieved extension size `k`.
 ```bash
 uv run python src/mcnemar_power.py
 uv run --env-file .env python scripts/cache_diagnostics.py
+uv run --env-file .env python scripts/cache_diagnostics.py --model claude-opus-4-8
 ```
 
-The second needs a key but makes no billed call (`count_tokens` is free). Run it, and
-**read the `gap to floor` line** before placing ~1300 calls.
+The cache checks need a key but make no billed call (`count_tokens` is free). **Run both
+— the default reports the workhorse only, and the judge's prefix is a different size**
+(token counts are model-specific). Read the `gap to floor` line on each; both should say
+`caching is ACTIVE` before ~1300 calls are placed.
 
-> **Corrected 2026-08-02 — the "caching is a no-op on the judge passes" claim was wrong.**
-> It rested on a stale floor: `MIN_CACHEABLE_PREFIX_TOKENS` recorded Opus 4.8 at 4096
-> tokens, so a ~2425-token prefix looked like it could never cache. Re-fetched from
-> [Anthropic's prompt-caching docs](https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching),
-> **Opus 4.8's real floor is 1024** (as is Sonnet 5's) — the prefix clears it by ~1400
-> tokens. The judge is not a separate call shape: `gold_eval.py` reaches it through
-> `classify_retry(..., JUDGE_MODEL)`, i.e. `classify()`'s own `cache_control`-marked
-> system block with only the model swapped. So caching is **expected to engage on the
-> judge passes**, and no measurement in this repo ever contradicted that — the one live
-> check on record (`scripts/cache_diagnostics.py --live`, CHANGELOG v2.3.0) ran on the
-> workhorse and showed caching *working* (`cache_creation=2350` then `cache_read=2350`).
-> The no-op line was an inference from the bad floor, never an observation.
+> **Corrected 2026-08-02 — "caching is a no-op on the judge passes" was wrong, and is now
+> disproven by measurement.** It rested on a stale floor: `MIN_CACHEABLE_PREFIX_TOKENS`
+> recorded Opus 4.8 at 4096 tokens, so the prefix looked like it could never cache. Two
+> independent corrections landed:
 >
-> **This has not yet been confirmed on Opus 4.8 specifically.** The authoritative check is
-> `cache_read_input_tokens` in a live response; the one-line way to get it is
-> `scripts/cache_diagnostics.py --live --model claude-opus-4-8` (two billed Opus calls,
-> a few cents). Until someone runs that, treat judge-side caching as *expected but
-> unmeasured*. The cost table below still assumes **no** cache discount, which is now a
-> deliberately conservative upper bound rather than a description of reality.
+> 1. **The published floor.** Re-fetched from
+>    [Anthropic's prompt-caching docs](https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching),
+>    **Opus 4.8's floor is 1024**, as is Sonnet 5's — not 4096.
+> 2. **A live measurement on the judge model itself**
+>    (`scripts/cache_diagnostics.py --live --model claude-opus-4-8`, run 2026-08-02):
+>    `call 1: cache_creation=3625, cache_read=0` → `call 2: cache_creation=0,
+>    cache_read=3625`. **Prompt caching engages on the Opus judge.** Note this run
+>    cached at **3625 tokens — below the 4096 the old table claimed as the floor** — so
+>    the measurement disproves the stale value on its own, without appeal to the docs.
+>
+> The judge was never a separate call shape to begin with: `gold_eval.py` reaches it via
+> `classify_retry(..., JUDGE_MODEL)`, i.e. `classify()`'s own `cache_control`-marked
+> system block with only the model swapped. The no-op line was an inference from the bad
+> floor, never an observation.
+>
+> **The prefix is ~3700 tokens on Opus 4.8, not ~2425.** The ~2425 figure quoted
+> throughout this repo was measured on **Sonnet 5**; token counts are model-specific, and
+> the same prefix counts ~50% larger under Opus 4.8's tokenizer. Wherever this spec sizes
+> the judge line, ~3625–3700 is the right number. Run step 0 **per model** — the default
+> reports the workhorse only.
 
 ### Step 1 — collect the extension (free; DVIDS, no LLM call)
 
@@ -388,6 +397,16 @@ At the target `k = 435` new snippets: **1305 calls** — 870 Sonnet 5 workhorse 
 prefix plus a ~180-token snippet and ~60 output tokens per call, with the Batches API's
 50% discount and **no cache discount assumed**:
 
+> **Two corrections to the table's inputs, 2026-08-02 — both left un-recomputed on
+> purpose, because they push in opposite directions and the net is favorable.** (a) The
+> ~2425-token prefix is a **Sonnet 5** measurement; under Opus 4.8's tokenizer the same
+> prefix is **~3700**, so the judge row understates input tokens by ~50%. (b) Caching is
+> now **measured working on the judge** (step 0), and the table assumes none. A cache
+> read bills at roughly a tenth of base input, and the prefix is ~94% of each judge
+> call's input — so (b) dominates (a) by a wide margin and the judge row should come in
+> **under** $3.15, not over. The numbers stay as written because a spend ceiling is more
+> useful honest-and-high than re-derived from two estimates.
+
 | | Calls | ≈ Cost (batch) | ≈ Cost (synchronous) |
 |---|---:|---:|---:|
 | Sonnet 5 workhorse ×2 arms | 870 | $2.60 | $5.15 |
@@ -402,17 +421,23 @@ tighten it. ADR-023 spent 408 calls for its verdict; this is ~3.2× that, and th
 analysis is the argument for why.
 
 **The table is an upper bound, and the cache is the reason.** Every call in it — both
-arms and the judge — carries the same ~2425-token `cache_control`-marked prefix, which is
-~93% of each call's ~2605 input tokens; the per-call variable part is only the ~180-token
-snippet. With the floors corrected (see step 0), that prefix clears every floor involved,
-and a cache read bills at roughly a tenth of base input. If caching engages across the
-run, the *input* side of every line above falls by most of its value — the ~1300 calls
-would pay the full prefix once per cache window instead of 1300 times. **Do not bank the
-saving in advance**: the 5-minute ephemeral TTL and the Batches API's scheduling mean hit
-rate is a property of how the run is actually dispatched, not something derivable here.
-The honest planning posture is to budget the table's numbers and treat any discount as
-recovered margin — then read `cache_read_input_tokens` off the run and record what
-actually happened, since that measurement is what retires the open question above.
+arms and the judge — carries the same `cache_control`-marked prefix, differing only in
+how each model's tokenizer counts it (~2425 on Sonnet 5, ~3700 on Opus 4.8). That prefix
+is ~93–94% of each call's input; the per-call variable part is only the ~180-token
+snippet. It clears every floor involved, caching is **measured working on both models**
+(step 0), and a cache read bills at roughly a tenth of base input. So the *input* side of
+every line above should fall by most of its value: the ~1300 calls pay the full prefix
+once per cache window rather than 1300 times.
+
+**Do not bank the saving in advance.** What step 0 proves is that the prefix *can* cache
+— two back-to-back identical probes hit. It does not prove a 1300-call production run
+will hit at that rate: the 5-minute ephemeral TTL and the Batches API's scheduling make
+hit rate a property of how the run is actually dispatched, and a batch spread across
+windows re-pays the write each time. That is why the table keeps its no-discount
+numbers. Budget them, treat the discount as recovered margin, and **read
+`cache_read_input_tokens` off the actual run** — the remaining open question is not
+*whether* the prefix caches but *what fraction of 1300 dispatched calls hit*, and only
+the run itself answers that.
 
 ## 8. Explicitly NOT in this branch
 
