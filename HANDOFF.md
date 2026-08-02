@@ -203,20 +203,28 @@ file is a point-in-time snapshot and goes stale the moment work lands._
    `evals/scale_eval_v3.txt`. The `[Unreleased]` CHANGELOG gap flagged in State
    was closed in the same release. **What is left is owner-only: the tag and the
    GitHub release** (below).
-2. **The named `global` cluster still wants a prompt clause — and it now has a
-   ruler.** The v3.2.0 run confirmed the cluster is systematic, not anecdotal: 17
-   of 70 answer-key `global` rows pulled to a specific region, 16 to `americas`,
-   **49% of all region disagreements**. Measure the clause against the n=300
-   interval, not the n=54 one. On the gold 54 all 7 region misses are the same
-   shape: `global` rows the model pulls to a specific region by inferring a
-   theater from the US *actor*. L4 established the cluster is genuinely fixable by
-   evidence checking (it fixed 6 of 7) — but at 4× cost through a pipeline that
-   was declined. A prompt clause is the cheap alternative to test, measure-first
-   like PR #79. **It got less cheap since this job was written:** #137/#142 pinned
-   the published snapshot to the prompt that produced it, so touching
-   `SYSTEM_PROMPT` now hard-reds both `gen_metrics_artifact.py` and
-   `src/eval_gate.py` until a paid gold re-run rewrites the sidecar (or a named
-   waiver is filed). Budget the re-run into the job; do not discover it mid-PR.
+2. ~~**The named `global` cluster still wants a prompt clause.**~~ **DONE — run
+   2026-08-02, clause REVERTED.** Both arms ran (408 calls) against the
+   pre-registered rule in [the spec](docs/specs/global-boundary-clause.md) §6.
+   Scale (n=295 after dropping duplicate snippets from the pairing): region
+   **88.5% → 92.2%**, 12 of 17 named pulls fixed against 7 correct rows dragged to
+   `global`, net +11 — at **McNemar p=0.0522**, missing the pre-registered p<0.05
+   by 0.0022. Guardrails clean (category p=0.75; domain *improved* +3.7%,
+   p=0.0192, which is an unexplained secondary observation and was **not** counted
+   toward shipping — it was registered as a kill condition, not as evidence). Gold
+   (n=54, human labels): region **87.0% → 94.4%**, all 7 named misses fixed
+   against 3 broken, every `thresholds.toml` floor clear. The rule's own text
+   calls a marginal result a revert; San ruled 2026-08-02 to honor it. Verdict,
+   rationale and both arms' tables:
+   [ADR-023](decisions/023-global-boundary-clause-verdict.md). **The shipped
+   classifier is unchanged** (`SYSTEM_PROMPT` still `a59689e8…`), so no published
+   number moved, no version bump, no marker cascade. The harness
+   (`src/region_clause_ab.py`, 51 tests) and the frozen `region_clause_*` eval
+   artifacts merged as the reproducible record; the clause itself did not.
+   **If anyone reopens this:** the only thing that would change the answer is a
+   higher-power ruler (a larger human-labeled or judge-graded key on this
+   boundary), and that is parked as a condition, not scheduled. Do not re-run the
+   same 295 rows to break the tie — that is the p-hacking the rule forbids.
 3. **Option, explicitly NOT a commitment: a structurally narrowed critic.** L4's
    failure was a charter that lived only in the prompt. A critic code-gated to
    fire *only* where triage reports `none stated`, on region alone, is a
@@ -248,7 +256,11 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   `gold_eval.txt`, `gold_confusion*.{md,csv}`, `scale_eval.txt`,
   `route_eval.txt`): never delete, overwrite, or regenerate them. v3 outputs use
   `_v3` names. The same rule now covers `baseline_eval.txt`, `exemplar_eval.txt`,
-  `l4_eval.txt` and their prediction CSVs.
+  `l4_eval.txt` and their prediction CSVs, and the five `region_clause_*`
+  artifacts (ADR-023). The three scale-arm `region_clause_*` files additionally
+  **cannot** be regenerated: `--report` refuses, because
+  `assert_candidate_matches_the_live_prompt` correctly sees that the live prompt
+  is no longer the reverted candidate. That refusal is the guard working.
 - **Published numbers are generated, not typed.** `evals/metrics.json` is the
   artifact outward surfaces assert against; `gen_metrics_artifact.py` reads the
   version from `pyproject.toml`, so a version bump turns CI red until you
@@ -281,9 +293,13 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   `except`-tuple bug is exactly what a sixth local loop reintroduces, and its
   failure mode is silent: the run aborts on a 529, or bills a retry storm against
   an exhausted credit balance.
-- **Measure-first is now five-for-five** (ADR-012, ADR-013, ADR-018, ADR-019,
-  ADR-020): nothing ships past the eval, and thresholds come from measured
-  numbers only. Four of those five declined an escalation with data.
+- **Measure-first is now six-for-six** (ADR-012, ADR-013, ADR-018, ADR-019,
+  ADR-020, ADR-023): nothing ships past the eval, and thresholds come from
+  measured numbers only. Five of the six declined a change with data — and
+  ADR-023 is the hard case, declining a change whose target metric moved the
+  right way with no measured harm, because it missed a **pre-registered**
+  threshold by 0.0022. Do not re-litigate a pre-registered rule after seeing the
+  numbers; that is the whole point of writing it down first.
 - `evals/scale_eval`'s answer key **is the Opus judge** — never grade a
   judge-model variant against it; human gold only for quality verdicts.
 - **Tags never work from containers** (proxy 403). Tag pushes are owner-only;

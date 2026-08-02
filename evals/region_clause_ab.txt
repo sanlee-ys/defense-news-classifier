@@ -1,0 +1,94 @@
+==============================================================
+`global`-BOUNDARY CLAUSE A/B -- workhorse prompt
+==============================================================
+
+Snippets scored   : 295   (data/scale/scale_set.csv)
+  excluded as exact duplicates: 5  (s023, s025, s079, s080, s240)
+Workhorse         : claude-sonnet-5
+Answer key        : claude-opus-4-8 judge labels,
+                    FROZEN, reused from evals/scale_predictions_v3.csv
+Answer-key digest : 346b905682342ed8   (recomputable from the committed CSV)
+
+The judge was NOT re-run. gold_eval.run_predictions classifies each row
+with the workhorse and the judge independently, from the snippet text
+alone -- neither sees the other's answer -- so a judge label cannot
+depend on the workhorse's PREDICTION. Holding it fixed is what makes
+this a paired comparison instead of two runs graded by two rulers.
+(A judge label IS prompt-dependent -- classify() defaults both models
+to SYSTEM_PROMPT -- which is precisely why it must not be re-run here.)
+
+Exact-duplicate snippets are dropped from the PAIRING, not relabelled:
+they violate McNemar's independence assumption, and one duplicate pair
+(s024/s025) carries two DIFFERENT answer-key labels on identical text,
+so at least one of them is unwinnable for any classifier.
+
+Baseline prompt   : a59689e8ac238d655c0b64c8aaaf3fef6d391267e2015f1740f24e120ed903cd
+Candidate prompt  : b0202d06a876cc0641f50e8910368d7c8a4eb0295f662ac472f9fdd6abf4e963
+
+-- Paired comparison, per axis -----------------------------
+Region is the target. Category and domain are GUARDRAILS: ADR-020's
+critic fixed its named region cluster and did significant damage to
+domain (p=0.016) in the same run. Significant harm on either kills
+this clause regardless of what region does.
+
+McNemar p below is computed over ALL discordant pairs on the axis,
+not only over F and B -- a row the clause flips between two specific
+regions counts too. F and B are the named-cluster accounting below.
+
+axis                    base    cand     lift      c/b/tie   McNemar p
+region                 88.5%   92.2%    +3.7%     19/8/268      0.0522
+category               91.5%   92.2%    +0.7%      6/4/285      0.7539
+operational_domain     89.5%   93.2%    +3.7%     15/4/276      0.0192
+
+-- The named `global` cluster ------------------------------
+The rows the clause was written for: answer-key `global` that the
+BASELINE pulled to a specific region (ADR-022 measured 17 at n=300).
+
+Named pulls in the baseline     : 17
+  fixed by the clause           : 12   (71%)
+  still pulled                  : 5
+
+-- The converse, which is how this clause could lose --------
+A clause that moves rows toward `global` buys its fixes with
+over-calls. Both directions or neither.
+
+Over-called `global`, baseline  : 10
+Over-called `global`, candidate : 14
+  of which NEW                  : 7
+
+B, AS THE DECISION RULE DEFINES IT -- rows the baseline got RIGHT
+that the candidate drags to `global`. Distinct from `NEW` above,
+which also counts rows that were already wrong (wrong-region ->
+`global` costs nothing; it was a miss either way).
+
+F (named pulls fixed)           : 12
+B (correct rows dragged global) : 7
+Regressions on any label        : 8
+
+-- Net, on region rows -------------------------------------
+Region correct, baseline        : 261/295
+Region correct, candidate       : 272/295
+Net row change                  : +11
+
+Fixed ids       : s126, s157, s129, s134, s067, s141, s288, s256, s131, s263, s259, s107
+Still pulled    : s020, s271, s204, s070, s283
+Newly over-called: s144, s101, s116, s276, s241, s299, s251
+B ids           : s144, s101, s116, s276, s241, s299, s251
+
+-- Harness health ------------------------------------------
+A lift computed over a harness that dropped rows is not a finding.
+
+  region               groups=295  pairs=295  eligible=295
+                       clean -- every group paired and scored
+  category             groups=295  pairs=295  eligible=295
+                       clean -- every group paired and scored
+  operational_domain   groups=295  pairs=295  eligible=295
+                       clean -- every group paired and scored
+
+-- How to read this ----------------------------------------
+Accuracy here is agreement with the JUDGE, not with a human. ADR-022's
+caveat carries over verbatim: the judge's measured disagreement with
+humans on region was 0/54, and 0/54 is itself a wide interval, so read
+these numbers alongside the human-graded gold figures, never instead of
+them. The gold arm is the human-graded half of this experiment.
+==============================================================

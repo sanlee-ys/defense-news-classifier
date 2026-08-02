@@ -9,7 +9,40 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **The `global`-boundary prompt clause experiment — measured and reverted**
+  ([ADR-023](decisions/023-global-boundary-clause-verdict.md),
+  [spec](docs/specs/global-boundary-clause.md), `src/region_clause_ab.py`). The region axis
+  had one named, systematic error: answer-key `global` rows pulled to a specific region by
+  inferring a theater from the US *actor* — 17 of 70 at n=300, **49% of every region
+  disagreement** (ADR-022), and all seven region misses on the human-graded gold 54. A one-
+  bullet prompt clause was the cheap alternative to ADR-020's declined critic, which fixed
+  6 of the 7 at ~4× cost. The clause and its decision rule were **pre-registered in the spec
+  before a single call was made**, then narrowed after an independent adversarial review
+  returned FIX FIRST: the first draft would have removed the only region evidence from ~14
+  currently-correct rows and contradicted two ratified conventions. Paired exact McNemar
+  against the frozen ADR-022 judge key, duplicates dropped from the pairing (**effective
+  n=295** — one duplicate pair carries two different answer-key labels on identical text),
+  category and domain carried as **kill-condition guardrails** rather than as optional
+  extras, because a region-only report would have scored ADR-020's critic a success.
+
+  **Verdict (same day, 408 calls): MARGINAL → reverted.** Scale region **88.5% → 92.2%**,
+  12 of 17 named pulls fixed against 7 correct rows dragged to `global`, net +11 rows,
+  discordants 19/8 — at **McNemar p=0.0522**, missing the pre-registered p<0.05 by 0.0022.
+  Guardrails clean (category p=0.75; domain *improved* +3.7%, p=0.0192, recorded as an
+  unexplained secondary observation and explicitly not counted toward shipping). Gold arm,
+  human-graded: region **87.0% → 94.4%**, all seven named misses fixed against three broken,
+  `global` recall 1.000, every `thresholds.toml` floor clear. The rule's own text calls a
+  marginal result a revert, and it was honored — a pre-registration that binds only when
+  convenient is theater, and this repo's Goodhart lineage (rung 2's held-out C vetoing the
+  loop's own best iteration; ADR-020's restraint-in-a-prompt failure) is the reason it was
+  written down first. **The shipped classifier is unchanged** — `SYSTEM_PROMPT` still hashes
+  to `a59689e8…`, no published number moves, no version bump. Records:
+  `evals/region_clause_ab.txt`, `evals/region_clause_candidate.csv` (+ sidecar),
+  `evals/region_clause_gold_candidate.csv`, `evals/region_clause_gold_eval.txt`. The harness
+  stays dormant with its 51 tests as the reproducible record and as the ruler a higher-power
+  re-run would reuse (the ADR-013/ADR-019 pattern); what would change the answer is a larger
+  human-labeled key, parked as a condition rather than scheduled.
 
 ---
 
