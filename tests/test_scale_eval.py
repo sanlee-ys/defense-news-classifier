@@ -46,7 +46,7 @@ def test_load_scale_set_requires_id_and_text(tmp_path):
 
 def test_accuracy_row_counts_and_brackets_the_estimate():
     preds = _preds(n_cat_wrong=3, n=60)
-    row = scale_eval._accuracy_row(preds, "pred_category", "judge_category")
+    row = scale_eval.accuracy_row(preds, "pred_category", "judge_category")
     assert row["n"] == 60
     assert row["correct"] == 57  # 3 forced disagreements
     assert row["ci_low"] < row["accuracy"] < row["ci_high"]
@@ -114,7 +114,7 @@ def test_limitations_block_flags_a_skewed_axis_with_a_thin_class():
         for i in range(60)  # 59 operations, 1 industry
     ]
     block = "\n".join(
-        scale_eval._limitations_block(scale_eval.metrics(pd.DataFrame(rows)))
+        scale_eval.limitations_block(scale_eval.metrics(pd.DataFrame(rows)))
     )
     assert "Known limitation" in block
     assert "operations" in block and "industry n=1" in block
@@ -123,4 +123,4 @@ def test_limitations_block_flags_a_skewed_axis_with_a_thin_class():
 
 def test_limitations_block_empty_when_axes_are_balanced():
     # _preds() spreads labels evenly (>= MIN_LABEL_SUPPORT each, none dominant).
-    assert scale_eval._limitations_block(scale_eval.metrics(_preds())) == []
+    assert scale_eval.limitations_block(scale_eval.metrics(_preds())) == []

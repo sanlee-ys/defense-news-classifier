@@ -91,10 +91,27 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 
 ## Next jobs, in order (each its own branch → PR)
 
-1. **`v3.2.0` scaled region eval — unblocked, unscheduled.** n=300 DVIDS snippets
-   graded on region by the validated Opus judge (100.0% judge-vs-human on the
-   gold 54 cleared the gate), same Wilson-CI reporting as v2.1.0. This needs a
-   decision to start, not a measurement. Owner's call.
+1. **`v3.2.0` scaled region eval — SCHEDULED 2026-08-02, harness BUILT, awaiting
+   the live run.** n=300 DVIDS snippets graded on region by the validated Opus
+   judge (100.0% judge-vs-human on the gold 54 cleared the gate), same Wilson-CI
+   reporting as v2.1.0. Design and the full run protocol:
+   [docs/specs/scaled-region-eval.md](docs/specs/scaled-region-eval.md).
+
+   Everything except the paid pass is done and offline-verified. What remains is
+   two owner-driven commands from the repo root:
+
+   ```bash
+   uv run --env-file .env python src/scale_region_eval.py --run --batch
+   uv run python src/scale_region_eval.py --report
+   ```
+
+   600 calls (300 snippets × workhorse + judge), resume-safe; the second command
+   is free and repeatable. Artifacts land at `evals/scale_predictions_v3.csv`
+   (+ its provenance sidecar), `evals/scale_eval_v3.txt`, and
+   `evals/scale_confusion_v3_region.csv`. **No threshold was added** — a floor for
+   the n=300 number is an owner decision after the measurement, not before it
+   (ADR-007). Post-run: read the report, decide on a floor, write the verdict ADR,
+   then the version/CHANGELOG/metrics sweep per the v3.2.0 release runbook.
 2. **The named `global` cluster still wants a prompt clause.** All 7 misses are
    gold-`global` rows the model pulls to a specific region by inferring a theater
    from the US *actor*. L4 established the cluster is genuinely fixable by
@@ -159,8 +176,9 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 
 ## Owner-only actions pending
 
-- Scheduling the `v3.2.0` scaled region eval, which is unblocked but deliberately
-  unscheduled (job 1).
+- **Running** the `v3.2.0` scaled region eval (job 1). Scheduling was the pending
+  decision and it is made; the harness is built and merged, so the outstanding
+  item is now the paid pass itself — the two commands under job 1.
 - Deciding whether the narrowed-critic experiment (job 3) is worth a spec at all.
   The honest default is no. The ladder is complete, measured, and now fully
   published — there is no documentation debt left to trade against, so this

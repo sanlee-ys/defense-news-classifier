@@ -124,8 +124,10 @@ a tally of releases.
 **Not yet shipped:**
 - **Scale the region eval** — n=300 DVIDS snippets graded on region by the Opus judge
   (validated at 100.0% vs human on the gold 54, so the answer-key chain holds); same
-  Wilson-CI reporting as the category/domain scale eval. Unblocked by the measured gate,
-  unscheduled until picked. Additive, contract untouched → MINOR.
+  Wilson-CI reporting as the category/domain scale eval. **Scheduled 2026-08-02; the
+  harness is built** ([spec](docs/specs/scaled-region-eval.md), `src/scale_region_eval.py`)
+  and what remains is the owner-driven live pass — the run protocol is in the spec and in
+  HANDOFF job 1. Additive, contract untouched → MINOR.
 
 **Guiding principle (carried over from v1):** model tier and feature scope are per-task
 cost/quality knobs **decided by the eval, not by default** — measure first, escalate only where

@@ -16,6 +16,12 @@ eval.py's metric + Wilson-interval helpers, so every number is computed the same
 rest of the harness. Resume-safe: predictions append to evals/scale_predictions.csv as they
 complete, so a crash costs at most one snippet.
 
+``accuracy_row``, ``per_label`` and ``limitations_block`` are public because the v3.2.0
+scaled REGION eval (``src/scale_region_eval.py``) computes its numbers with these exact
+functions -- that shared code is what makes the two reports comparable. This module's own
+outputs (``evals/scale_predictions.csv``, ``evals/scale_eval.txt``) are frozen v2 records
+and are never regenerated; the region eval writes ``_v3`` siblings instead.
+
 Run:
     uv run --env-file .env python src/scale_eval.py            # ~2*N synchronous calls
     uv run --env-file .env python src/scale_eval.py --batch    # one Message Batch, ~50% cheaper
@@ -74,7 +80,7 @@ def load_scale_set(path: str = SCALE_SET_PATH) -> pd.DataFrame:
     return df
 
 
-def _accuracy_row(preds: pd.DataFrame, pred_col: str, judge_col: str) -> dict:
+def accuracy_row(preds: pd.DataFrame, pred_col: str, judge_col: str) -> dict:
     """Accuracy of the workhorse vs the judge answer key, with a 95% Wilson CI.
 
     Args:
@@ -97,7 +103,7 @@ def _accuracy_row(preds: pd.DataFrame, pred_col: str, judge_col: str) -> dict:
     }
 
 
-def _per_label(preds: pd.DataFrame, pred_col: str, judge_col: str) -> pd.DataFrame:
+def per_label(preds: pd.DataFrame, pred_col: str, judge_col: str) -> pd.DataFrame:
     """Per-label precision/recall/F1 of the workhorse against the judge answer key.
 
     Reuses ``eval.compute_metrics`` by aliasing the judge column to the ground-truth
@@ -130,12 +136,12 @@ def metrics(preds: pd.DataFrame) -> dict:
     """
     out: dict = {"n": len(preds)}
     for axis, pred_col, judge_col in AXES:
-        acc = _accuracy_row(preds, pred_col, judge_col)
-        per_label = _per_label(preds, pred_col, judge_col)
+        acc = accuracy_row(preds, pred_col, judge_col)
+        labels = per_label(preds, pred_col, judge_col)
         out[axis] = {
             **acc,
-            "macro_f1": macro_average(per_label)["f1"],
-            "per_label": per_label,
+            "macro_f1": macro_average(labels)["f1"],
+            "per_label": labels,
             "distribution": preds[judge_col].value_counts().to_dict(),
         }
     return out
@@ -179,7 +185,14 @@ def _gold_reference() -> dict | None:
 MIN_LABEL_SUPPORT = 10
 
 
-def _limitations_block(m: dict) -> list[str]:
+# The axes v2.1.0 reported. src/scale_region_eval.py passes its own three-axis
+# tuple to the same function rather than re-deriving the caveat rules.
+DEFAULT_LIMITATION_AXES = (("category", "Category"), ("operational_domain", "Domain"))
+
+
+def limitations_block(
+    m: dict, axes: tuple[tuple[str, str], ...] = DEFAULT_LIMITATION_AXES
+) -> list[str]:
     """Data-driven skew caveat, so the numbers can't be misread.
 
     Flags any axis dominated by one class (>50%) or carrying classes below
@@ -189,13 +202,15 @@ def _limitations_block(m: dict) -> list[str]:
 
     Args:
         m: The metrics dict from :func:`metrics`.
+        axes: ``(axis key, report heading)`` pairs to check, defaulting to the two
+            v2.1.0 axes. The v3.2.0 region eval passes all three.
 
     Returns:
         Report lines (empty if every axis is balanced enough to need no caveat).
     """
     out: list[str] = []
     n = m["n"]
-    for axis, heading in (("category", "Category"), ("operational_domain", "Domain")):
+    for axis, heading in axes:
         a = m[axis]
         dist = a["distribution"]
         top_label, top_n = max(dist.items(), key=lambda kv: kv[1])
@@ -285,7 +300,7 @@ def build_report(preds: pd.DataFrame) -> str:
             "Answer-key label distribution (judge): "
             + ", ".join(f"{k} {v}" for k, v in sorted(a["distribution"].items())),
         ]
-    lines += _limitations_block(m)
+    lines += limitations_block(m)
     lines.append("=" * 62)
     return "\n".join(lines)
 
