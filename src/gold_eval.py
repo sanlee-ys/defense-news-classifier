@@ -109,7 +109,11 @@ def load_gold(path: str = GOLD_PATH) -> pd.DataFrame:
 
 
 def classify_retry(
-    client: anthropic.Anthropic, text: str, model: str, max_retries: int = 3
+    client: anthropic.Anthropic,
+    text: str,
+    model: str,
+    max_retries: int = 3,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> dict:
     """classify() with exponential backoff on transient per-call failures.
 
@@ -128,6 +132,12 @@ def classify_retry(
         text: Article snippet to classify.
         model: Which Claude model to classify with.
         max_retries: Maximum number of attempts before re-raising.
+        system_prompt: The instruction block to classify under. Defaults to the
+            shipped ``classify.SYSTEM_PROMPT``, so every existing caller is
+            unchanged. A prompt A/B passes its candidate prompt here rather than
+            editing ``SYSTEM_PROMPT`` on a branch, which keeps the experiment's
+            arm and the shipped classifier from ever being the same object --
+            see ``src/region_clause_rerun.py``.
 
     Returns:
         Dict with keys ``category``, ``operational_domain``, and ``region``.
@@ -149,7 +159,7 @@ def classify_retry(
     # billing); InvalidLabelError stays a caller-supplied extra, since it is a
     # repo-specific judgement call, not a provider-transport classification.
     return api_retry.call_with_retry(
-        lambda: classify(client, text, model=model),
+        lambda: classify(client, text, model=model, system_prompt=system_prompt),
         max_retries=max_retries,
         retry_on=(InvalidLabelError,),
         on_retry=announce,

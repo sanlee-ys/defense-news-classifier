@@ -144,7 +144,7 @@ def patch_anthropic_errors(monkeypatch):
 def test_retry_returns_on_first_success(monkeypatch):
     calls = []
 
-    def fake_classify(client, text, model):
+    def fake_classify(client, text, model, system_prompt=None):
         calls.append((text, model))
         return {"category": "policy", "operational_domain": "multi", "region": "global"}
 
@@ -158,7 +158,7 @@ def test_retry_returns_on_first_success(monkeypatch):
 def test_retry_recovers_after_transient_errors(monkeypatch):
     attempts = {"n": 0}
 
-    def flaky_classify(client, text, model):
+    def flaky_classify(client, text, model, system_prompt=None):
         attempts["n"] += 1
         if attempts["n"] < 3:
             raise _FakeServerError("boom")
@@ -176,7 +176,7 @@ def test_retry_recovers_after_transient_errors(monkeypatch):
 
 
 def test_retry_reraises_after_exhausting_attempts(monkeypatch):
-    def always_fails(_client, _text, model):
+    def always_fails(_client, _text, model, system_prompt=None):
         raise _FakeRateLimit("nope")
 
     monkeypatch.setattr(gold_eval, "classify", always_fails)
@@ -194,7 +194,7 @@ def test_retry_recovers_from_a_transient_invalid_label(monkeypatch):
     """
     attempts = {"n": 0}
 
-    def blips_once(_client, _text, model):
+    def blips_once(_client, _text, model, system_prompt=None):
         attempts["n"] += 1
         if attempts["n"] == 1:
             raise gold_eval.InvalidLabelError("category None is not one of [...]")
@@ -214,12 +214,35 @@ def test_retry_recovers_from_a_transient_invalid_label(monkeypatch):
 def test_retry_reraises_a_persistent_invalid_label(monkeypatch):
     # A blip that never clears is a real API regression -- it must surface,
     # not spin forever.
-    def always_invalid(_client, _text, model):
+    def always_invalid(_client, _text, model, system_prompt=None):
         raise gold_eval.InvalidLabelError("category None is not one of [...]")
 
     monkeypatch.setattr(gold_eval, "classify", always_invalid)
     with pytest.raises(gold_eval.InvalidLabelError):
         gold_eval.classify_retry(None, "x", "claude-opus-4-8", max_retries=2)
+
+
+def test_retry_defaults_to_the_shipped_prompt_and_passes_an_override_through(
+    monkeypatch,
+):
+    """The prompt-A/B seam, and the default that keeps every existing caller honest.
+
+    The higher-power `global`-clause re-run applies its clause at run time rather than
+    by editing SYSTEM_PROMPT on a branch, so the composed prompt has to reach the model
+    through this shared retry path -- and the *default* has to stay the shipped prompt,
+    or a paid gold run would silently classify under someone else's experiment.
+    """
+    seen = []
+
+    def record(_client, _text, model, system_prompt=None):
+        seen.append(system_prompt)
+        return {"category": "policy", "operational_domain": "multi", "region": "global"}
+
+    monkeypatch.setattr(gold_eval, "classify", record)
+    gold_eval.classify_retry(None, "x", "claude-sonnet-4-6")
+    gold_eval.classify_retry(None, "x", "claude-sonnet-4-6", system_prompt="a variant")
+
+    assert seen == [gold_eval.SYSTEM_PROMPT, "a variant"]
 
 
 def test_retry_raises_value_error_when_max_retries_is_zero():
@@ -247,7 +270,7 @@ def test_main_runs_predictions_and_writes_all_outputs(monkeypatch, tmp_path):
     monkeypatch.setattr(
         gold_eval,
         "classify",
-        lambda _client, _text, model: {
+        lambda _client, _text, model, system_prompt=None: {
             "category": "procurement",
             "operational_domain": "air",
             "region": "global",
