@@ -459,12 +459,15 @@ def classify(
     # their dataset, the optimize.py loop across ~354 scoring calls per
     # iteration -- so this is the textbook repeated-prefix caching case.
     # SYSTEM_PROMPT's extended rubric carries the prefix well past the
-    # 1024-token minimum cacheable floor that applies to every model here --
-    # workhorse and Opus judge alike (~2425 measured; verified live on the
-    # workhorse with scripts/cache_diagnostics.py --live: call 2 reads the full
-    # prefix from cache). If a future edit shrinks the prompt back under the
-    # floor, the marker silently reverts to a no-op -- re-run that script
-    # after any prompt change.
+    # 1024-token minimum cacheable floor that applies to every model here.
+    # Both paths are verified live with scripts/cache_diagnostics.py --live
+    # (call 2 reads the full prefix from cache): the workhorse at ~2425 tokens,
+    # and the Opus judge -- which gets here via gold_eval's classify_retry(...,
+    # JUDGE_MODEL), this same block with the model swapped -- at ~3700. The two
+    # numbers differ because token counts are model-specific, not because the
+    # prefix differs; never quote one model's count for another. If a future
+    # edit shrinks the prompt back under the floor, the marker silently reverts
+    # to a no-op -- re-run that script, once per model, after any prompt change.
     system_block: TextBlockParam = {
         "type": "text",
         "text": system_prompt,
@@ -626,10 +629,10 @@ def parse_batch_result(result) -> dict:
 # classify() marks its system block with cache_control, but the cache silently
 # does nothing until the cached prefix (tool schema + system prompt) crosses the
 # model's minimum cacheable-prefix floor -- 1024 tokens for every model this
-# repo calls (see MIN_CACHEABLE_PREFIX_TOKENS). The prefix clears that floor
-# with room to spare today (~2425 tokens, via SYSTEM_PROMPT's extended rubric),
-# so the marker is live -- and these helpers are the guard that a future prompt
-# edit doesn't silently slip back under it, using the free
+# repo calls (see MIN_CACHEABLE_PREFIX_TOKENS). SYSTEM_PROMPT's extended rubric
+# clears that floor with room to spare on both, so the marker is live -- and
+# these helpers are the guard that a future prompt edit doesn't silently slip
+# back under it, using the free
 # /v1/messages/count_tokens
 # endpoint -- so the prompt-optimization loop (which revises the system prompt
 # over iterations) can see whether caching still pays off. The live
