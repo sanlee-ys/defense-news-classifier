@@ -414,10 +414,11 @@ Optionally, the prompt cache floor (`count_tokens` is free but needs a key):
 uv run --env-file .env python scripts/cache_diagnostics.py
 ```
 
-The clause **adds** tokens, so the ~2425-token prefix moves further above Sonnet 5's
-cacheable floor. A confirmation, not a risk. (That floor was written here as 2048; it is
-**1024** — the table in `src/classify.py` was corrected against the live docs on
-2026-08-02. The conclusion is unchanged and the margin is larger.)
+The clause **adds** tokens, so the prefix moves further above Sonnet 5's cacheable floor.
+A confirmation, not a risk. (Two numbers on this line were later found stale, neither
+changing the conclusion: the floor was written as 2048 and is **1024**, and the prefix was
+written as ~2425 — a v2.1.0 measurement obsoleted by v3.0.0's region rubric — against
+**~3764** measured 2026-08-02. The margin is larger than this section assumed.)
 
 ## 8. Expected-red CI on this branch, and exactly why
 

@@ -460,14 +460,18 @@ def classify(
     # iteration -- so this is the textbook repeated-prefix caching case.
     # SYSTEM_PROMPT's extended rubric carries the prefix well past the
     # 1024-token minimum cacheable floor that applies to every model here.
-    # Both paths are verified live with scripts/cache_diagnostics.py --live
-    # (call 2 reads the full prefix from cache): the workhorse at ~2425 tokens,
-    # and the Opus judge -- which gets here via gold_eval's classify_retry(...,
-    # JUDGE_MODEL), this same block with the model swapped -- at ~3700. The two
-    # numbers differ because token counts are model-specific, not because the
-    # prefix differs; never quote one model's count for another. If a future
-    # edit shrinks the prompt back under the floor, the marker silently reverts
-    # to a no-op -- re-run that script, once per model, after any prompt change.
+    # Measured 2026-08-02 via scripts/cache_diagnostics.py: ~3764 tokens on the
+    # workhorse and ~3700 on the Opus judge -- which reaches this same block via
+    # gold_eval's classify_retry(..., JUDGE_MODEL), model swapped. The ~64-token
+    # spread is ordinary tokenizer variation; the prefix is the same text.
+    # Caching is verified live on the judge (call 1 cache_creation=3625, call 2
+    # cache_read=3625).
+    #
+    # Do NOT trust a prefix size quoted in prose: the long-lived "~2425" figure
+    # was measured at v2.1.0 and was obsoleted the next day by v3.0.0's region
+    # rubric. Any prompt edit moves it, so re-run the script rather than citing
+    # a number -- and if an edit ever shrinks the prompt back under the floor,
+    # the marker silently reverts to a no-op with no error.
     system_block: TextBlockParam = {
         "type": "text",
         "text": system_prompt,
