@@ -53,6 +53,7 @@ present. A resume across a prompt or model change is refused rather than blended
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import time
 
@@ -176,18 +177,47 @@ def assert_arms_differ(baseline: dict[str, str], candidate: dict[str, str]) -> N
             )
 
 
-def assert_answer_key_is_frozen(baseline: pd.DataFrame) -> None:
-    """Refuse to grade against an answer key that is not the committed baseline's.
+def judge_digest(baseline: pd.DataFrame) -> str:
+    """A content fingerprint of the answer key itself, printed in every report.
 
-    The whole 300-call saving rests on the judge columns being the ones ADR-022
-    published. This checks the frame actually carries them, so a truncated or
-    hand-assembled baseline file cannot silently become the ruler.
+    Column presence and non-blankness say nothing about *which* labels are in the file.
+    This digests the (id, judge label) pairs for all three axes in id order, so two
+    reports produced against the same answer key carry the same digest and one produced
+    against an edited key does not. It is an auditable value, not a secret: a reviewer
+    can recompute it from the committed CSV.
 
     Args:
         baseline: The loaded baseline predictions frame.
 
+    Returns:
+        A 16-hex-character digest.
+    """
+    ordered = baseline.sort_values("id")
+    payload = "\n".join(
+        "|".join([str(row["id"])] + [str(row[col]) for _axis, col in AXES])
+        for _, row in ordered.iterrows()
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def assert_answer_key_is_complete(baseline: pd.DataFrame, scale: pd.DataFrame) -> None:
+    """Refuse an answer key that is not the whole committed scale set.
+
+    The earlier version of this guard checked only that the judge columns existed and
+    held no empty strings -- which a hand-assembled 50-row file passes, and which the
+    production path could not even fail, because ``pd.read_csv`` turns a blank cell into
+    ``NaN`` rather than ``""``. Both holes are closed here: the key must cover exactly
+    the ids in ``data/scale/scale_set.csv``, with no duplicates and no missing labels,
+    and callers load with ``dtype=str, keep_default_na=False`` so a blank really is
+    ``""``.
+
+    Args:
+        baseline: The loaded baseline predictions frame.
+        scale: The scale set the run is defined over.
+
     Raises:
-        ValueError: If any judge column is missing or any judge cell is blank.
+        ValueError: If a judge column is missing, the id sets differ, ids repeat, or any
+            judge label is blank.
     """
     for _axis, judge_column in AXES:
         if judge_column not in baseline.columns:
@@ -195,13 +225,96 @@ def assert_answer_key_is_frozen(baseline: pd.DataFrame) -> None:
                 f"{BASELINE_PREDS_PATH} has no {judge_column!r} column, so it cannot "
                 "supply the frozen answer key this comparison grades against."
             )
-        blank = (baseline[judge_column].astype(str).str.strip() == "").sum()
+
+    ids = [str(row_id) for row_id in baseline["id"]]
+    duplicated = sorted({row_id for row_id in ids if ids.count(row_id) > 1})
+    if duplicated:
+        raise ValueError(
+            f"{BASELINE_PREDS_PATH} repeats {len(duplicated)} id(s) "
+            f"({duplicated[:5]}). Pairing would drop every one of them."
+        )
+
+    expected = {str(row_id) for row_id in scale["id"]}
+    missing, extra = sorted(expected - set(ids)), sorted(set(ids) - expected)
+    if missing or extra:
+        raise ValueError(
+            f"{BASELINE_PREDS_PATH} is not the committed scale set: "
+            f"{len(missing)} id(s) missing (e.g. {missing[:5]}), "
+            f"{len(extra)} unexpected (e.g. {extra[:5]}). An answer key covering a "
+            "subset silently shrinks the comparison instead of failing it."
+        )
+
+    for _axis, judge_column in AXES:
+        blank = int((baseline[judge_column].astype(str).str.strip() == "").sum())
         if blank:
             raise ValueError(
                 f"{BASELINE_PREDS_PATH} has {blank} blank {judge_column!r} cells. An "
-                "answer key with holes silently shrinks the comparison instead of "
-                "failing it."
+                "answer key with holes silently shrinks the comparison."
             )
+
+
+def assert_candidate_is_complete(
+    baseline: pd.DataFrame, candidate: pd.DataFrame
+) -> None:
+    """Refuse a partial candidate arm.
+
+    The batch path deliberately skips a row it cannot parse and leaves it todo, so an
+    interrupted or partially-failed run produces a perfectly well-formed report over
+    250 rows. Decision rule #4 ("harness health clean") was printed but not enforced;
+    this enforces it.
+
+    Args:
+        baseline: The loaded baseline predictions frame.
+        candidate: The loaded candidate predictions frame.
+
+    Raises:
+        ValueError: If the two arms do not cover exactly the same ids.
+    """
+    base_ids = {str(row_id) for row_id in baseline["id"]}
+    cand_ids = [str(row_id) for row_id in candidate["id"]]
+    duplicated = sorted({row_id for row_id in cand_ids if cand_ids.count(row_id) > 1})
+    if duplicated:
+        raise ValueError(
+            f"{CANDIDATE_PREDS_PATH} repeats {len(duplicated)} id(s) "
+            f"({duplicated[:5]}) -- an appended re-run over rows already present?"
+        )
+    missing = sorted(base_ids - set(cand_ids))
+    extra = sorted(set(cand_ids) - base_ids)
+    if missing or extra:
+        raise ValueError(
+            f"The candidate arm is not complete: {len(missing)} id(s) missing "
+            f"(e.g. {missing[:5]}), {len(extra)} unexpected (e.g. {extra[:5]}). "
+            f"Re-run `--run` to finish it -- it is resume-safe and skips rows already "
+            "present. Reporting a partial arm would compute a clean lift over a "
+            "harness that dropped its hardest rows."
+        )
+
+
+def assert_candidate_matches_the_live_prompt(
+    candidate_recorded: dict[str, str],
+) -> None:
+    """Refuse to report a candidate arm the prompt on disk did not produce.
+
+    ``assert_arms_differ`` only proves the two arms differ from each other -- a
+    candidate CSV produced by some *third* prompt passes it. This pins the candidate to
+    the working tree, so the report describes the clause actually in ``classify.py``.
+
+    Args:
+        candidate_recorded: The ``recorded`` block of the candidate run's sidecar.
+
+    Raises:
+        ValueError: If the candidate's prompt fingerprint is not the live one.
+    """
+    live = provenance.fingerprint(SYSTEM_PROMPT, WORKHORSE_MODEL, JUDGE_MODEL)
+    drift = provenance.divergences(candidate_recorded, live)
+    if drift:
+        raise ValueError(
+            "The candidate arm was not produced by the prompt/models on disk:\n"
+            + "\n".join(drift)
+            + "\n\nThe report would describe a classifier this checkout does not "
+            f"contain. Delete {CANDIDATE_PREDS_PATH} and "
+            f"{CANDIDATE_PROVENANCE_PATH} and re-run."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -376,7 +489,22 @@ def cluster_delta(baseline: pd.DataFrame, candidate: pd.DataFrame) -> dict:
     over_base, over_cand = _over("pred_region_base"), _over("pred_region_cand")
     newly_over = over_cand[~over_cand["id"].isin(set(over_base["id"]))]
 
-    correct_base = int((merged["pred_region_base"] == merged["judge_region"]).sum())
+    # B EXACTLY AS THE DECISION RULE DEFINES IT: rows the baseline got RIGHT that the
+    # candidate drags to `global`. "Newly over-called global" above is a different and
+    # weaker quantity -- it also counts rows whose baseline answer was already wrong
+    # (wrong-region -> global is not a regression, it was a miss either way). Reporting
+    # only the weaker one would understate the cost the pre-registered rule is priced on.
+    was_right = merged["pred_region_base"] == merged["judge_region"]
+    broke_to_global = merged[
+        was_right
+        & (merged["pred_region_cand"] == GLOBAL)
+        & (merged["judge_region"] != GLOBAL)
+    ]
+    broke_any = merged[
+        was_right & (merged["pred_region_cand"] != merged["judge_region"])
+    ]
+
+    correct_base = int(was_right.sum())
     correct_cand = int((merged["pred_region_cand"] == merged["judge_region"]).sum())
     return {
         "n": len(merged),
@@ -390,14 +518,73 @@ def cluster_delta(baseline: pd.DataFrame, candidate: pd.DataFrame) -> dict:
         "over_global_candidate": len(over_cand),
         "newly_over_global": len(newly_over),
         "newly_over_global_ids": [str(i) for i in newly_over["id"]],
+        # The two quantities the decision rule is actually priced on.
+        "F": len(fixed),
+        "B": len(broke_to_global),
+        "B_ids": [str(i) for i in broke_to_global["id"]],
+        "regressions_any_label": len(broke_any),
+        "regressions_any_label_ids": [str(i) for i in broke_any["id"]],
         "region_correct_baseline": correct_base,
         "region_correct_candidate": correct_cand,
         "region_net_rows": correct_cand - correct_base,
     }
 
 
+def duplicate_snippet_ids(scale: pd.DataFrame) -> list[str]:
+    """Ids whose snippet text is byte-identical to an earlier row's, whitespace aside.
+
+    The scale set carries exact-duplicate snippets under different DVIDS ids: s022/s023,
+    s024/s025, s078/s079/s080, s239/s240 -- nine rows in four groups. They matter for
+    two reasons, and only one of them is statistical.
+
+    - **McNemar assumes independent pairs.** Duplicated inputs are not independent
+      observations, so leaving them in makes the significance threshold mildly
+      anti-conservative -- the direction that flatters a positive result.
+    - **s024/s025 are byte-identical and the answer key labels them differently**
+      (``europe`` vs ``middle-east``). At most one can be right, so at least one row is
+      unwinnable for any classifier, including a perfect one.
+
+    The first occurrence is kept and the rest are dropped from the PAIRING only. Nothing
+    is relabelled and no file is rewritten: the answer key is a shipped record and this
+    experiment does not get to edit its own ruler.
+
+    Args:
+        scale: The scale set, with ``id`` and ``text``.
+
+    Returns:
+        Ids to exclude, sorted.
+    """
+    normalized = scale["text"].astype(str).str.strip()
+    return sorted(
+        str(row_id) for row_id in scale[normalized.duplicated(keep="first")]["id"]
+    )
+
+
+def answers_for(baseline: pd.DataFrame, judge_column: str) -> dict[str, str]:
+    """Build ``group key -> answer-key label`` from an in-memory baseline frame.
+
+    ``paired_compare.load_answer_key`` reads from a path, which cannot express "the
+    committed key minus the duplicate rows". This builds the same mapping from a frame
+    using ``paired_compare``'s own public ``derive_group_key``, so the key derivation
+    stays shared even though the loading does not.
+
+    Args:
+        baseline: The (possibly deduplicated) baseline frame.
+        judge_column: Which judge column supplies the labels.
+
+    Returns:
+        Group key to normalized label.
+    """
+    return {
+        paired_compare.derive_group_key(record): str(record[judge_column])
+        .strip()
+        .lower()
+        for record in baseline.to_dict("records")
+    }
+
+
 def axis_comparison(
-    baseline_path: str, candidate_path: str, axis: str, judge_column: str
+    baseline: pd.DataFrame, candidate: pd.DataFrame, axis: str, judge_column: str
 ) -> tuple[paired_compare.PairingResult, paired_compare.CorrectnessLift]:
     """Run one axis's paired comparison through ``paired_compare``.
 
@@ -408,24 +595,20 @@ def axis_comparison(
     existing, tested pairing and McNemar code rather than a private reimplementation.
 
     Args:
-        baseline_path: The committed baseline predictions CSV.
-        candidate_path: The candidate arm's predictions CSV.
+        baseline: The (deduplicated) baseline predictions frame.
+        candidate: The (deduplicated) candidate predictions frame.
         axis: ``region``, ``category``, or ``operational_domain``.
         judge_column: The answer-key column for this axis.
 
     Returns:
         The pairing result and the correctness summary.
     """
-    answers = paired_compare.load_answer_key(
-        baseline_path, axis, truth_column=judge_column
-    )
+    answers = answers_for(baseline, judge_column)
     column = f"pred_{axis}"
     result = paired_compare.pair_observations(
+        paired_compare.observations_from_frame(baseline, "baseline", column, answers),
         paired_compare.observations_from_frame(
-            paired_compare.read_predictions(baseline_path), "baseline", column, answers
-        ),
-        paired_compare.observations_from_frame(
-            paired_compare.read_predictions(candidate_path),
+            candidate,
             "candidate",
             column,
             answers,
@@ -488,6 +671,15 @@ def _cluster_block(delta: dict) -> list[str]:
         f"Over-called `global`, candidate : {delta['over_global_candidate']}",
         f"  of which NEW                  : {delta['newly_over_global']}",
         "",
+        "B, AS THE DECISION RULE DEFINES IT -- rows the baseline got RIGHT",
+        "that the candidate drags to `global`. Distinct from `NEW` above,",
+        "which also counts rows that were already wrong (wrong-region ->",
+        "`global` costs nothing; it was a miss either way).",
+        "",
+        f"F (named pulls fixed)           : {delta['F']}",
+        f"B (correct rows dragged global) : {delta['B']}",
+        f"Regressions on any label        : {delta['regressions_any_label']}",
+        "",
         "-- Net, on region rows -------------------------------------",
         f"Region correct, baseline        : {delta['region_correct_baseline']}"
         f"/{delta['n']}",
@@ -502,6 +694,8 @@ def _cluster_block(delta: dict) -> list[str]:
         lines.append("Still pulled    : " + ", ".join(delta["named_unfixed_ids"]))
     if delta["newly_over_global_ids"]:
         lines.append("Newly over-called: " + ", ".join(delta["newly_over_global_ids"]))
+    if delta["B_ids"]:
+        lines.append("B ids           : " + ", ".join(delta["B_ids"]))
     return lines
 
 
@@ -513,15 +707,19 @@ def build_report(
     ],
     baseline_recorded: dict[str, str],
     candidate_recorded: dict[str, str],
+    excluded: list[str],
+    key_digest: str,
 ) -> str:
     """Assemble the A/B report.
 
     Args:
-        baseline: Baseline predictions frame.
-        candidate: Candidate predictions frame.
+        baseline: Baseline predictions frame (already deduplicated).
+        candidate: Candidate predictions frame (already deduplicated).
         comparisons: ``(axis, pairing result, correctness lift)`` per axis.
         baseline_recorded: The baseline sidecar's ``recorded`` block.
         candidate_recorded: The candidate sidecar's ``recorded`` block.
+        excluded: Ids dropped from the pairing as exact-duplicate snippets.
+        key_digest: Content fingerprint of the answer key actually used.
 
     Returns:
         The report text.
@@ -529,19 +727,29 @@ def build_report(
     delta = cluster_delta(baseline, candidate)
     lines = [
         "=" * 62,
-        "`global`-BOUNDARY CLAUSE A/B -- workhorse prompt, n=300",
+        "`global`-BOUNDARY CLAUSE A/B -- workhorse prompt",
         "=" * 62,
         "",
-        f"Snippets          : {delta['n']}   ({SCALE_SET_PATH})",
+        f"Snippets scored   : {delta['n']}   ({SCALE_SET_PATH})",
+        f"  excluded as exact duplicates: {len(excluded)}"
+        + (f"  ({', '.join(excluded)})" if excluded else ""),
         f"Workhorse         : {candidate_recorded.get('workhorse_model')}",
         f"Answer key        : {candidate_recorded.get('judge_model')} judge labels,",
         f"                    FROZEN, reused from {BASELINE_PREDS_PATH}",
+        f"Answer-key digest : {key_digest}   (recomputable from the committed CSV)",
         "",
         "The judge was NOT re-run. gold_eval.run_predictions classifies each row",
         "with the workhorse and the judge independently, from the snippet text",
         "alone -- neither sees the other's answer -- so a judge label cannot",
-        "depend on the workhorse's prompt. Holding it fixed is what makes this a",
-        "paired comparison instead of two runs graded by two different rulers.",
+        "depend on the workhorse's PREDICTION. Holding it fixed is what makes",
+        "this a paired comparison instead of two runs graded by two rulers.",
+        "(A judge label IS prompt-dependent -- classify() defaults both models",
+        "to SYSTEM_PROMPT -- which is precisely why it must not be re-run here.)",
+        "",
+        "Exact-duplicate snippets are dropped from the PAIRING, not relabelled:",
+        "they violate McNemar's independence assumption, and one duplicate pair",
+        "(s024/s025) carries two DIFFERENT answer-key labels on identical text,",
+        "so at least one of them is unwinnable for any classifier.",
         "",
         f"Baseline prompt   : {baseline_recorded.get('prompt_sha256')}",
         f"Candidate prompt  : {candidate_recorded.get('prompt_sha256')}",
@@ -551,6 +759,10 @@ def build_report(
         "critic fixed its named region cluster and did significant damage to",
         "domain (p=0.016) in the same run. Significant harm on either kills",
         "this clause regardless of what region does.",
+        "",
+        "McNemar p below is computed over ALL discordant pairs on the axis,",
+        "not only over F and B -- a row the clause flips between two specific",
+        "regions counts too. F and B are the named-cluster accounting below.",
         "",
         f"{'axis':<20}{'base':>8}{'cand':>8}{'lift':>9}"
         f"{'c/b/tie':>13}{'McNemar p':>12}",
@@ -621,12 +833,19 @@ def run(batch: bool = False) -> None:
     )
     if done_ids:
         print(f"Resuming: {len(done_ids)} already predicted.\n")
-    if not set(scale["id"]) - done_ids:
-        print("All predictions already present -- skipping API calls.\n")
-        return
 
+    # BEFORE the "nothing to do" early return, not after. An existing complete CSV
+    # produced by a different prompt is exactly the case that most needs catching, and
+    # returning early would have skipped the check and left a stale arm in place for
+    # report() to compare -- where assert_arms_differ would pass it, because it only
+    # proves the two arms differ from EACH OTHER, not that either is the live prompt.
     live = provenance.fingerprint(SYSTEM_PROMPT, WORKHORSE_MODEL, JUDGE_MODEL)
     assert_resume_is_honest(done_ids, live)
+
+    remaining = set(scale["id"]) - done_ids
+    if not remaining:
+        print("All predictions already present -- skipping API calls.\n")
+        return
 
     client = make_client()
     # Passed explicitly rather than relying on the default: a default argument binds at
@@ -641,6 +860,20 @@ def run(batch: bool = False) -> None:
     # assert that today's prompt produced yesterday's rows.
     provenance.write(live, CANDIDATE_PREDS_PATH, path=CANDIDATE_PROVENANCE_PATH)
     print(f"Recorded run provenance to {CANDIDATE_PROVENANCE_PATH}\n")
+
+    # The sidecar is written even on a partial pass, because the resume guard needs it
+    # to exist before the NEXT append can be checked. So say plainly that it describes
+    # an incomplete arm; `--report` refuses one outright (assert_candidate_is_complete).
+    landed = set(pd.read_csv(CANDIDATE_PREDS_PATH)["id"])
+    still_missing = set(scale["id"]) - landed
+    if still_missing:
+        print(
+            f"PARTIAL RUN -- {len(still_missing)} of {len(scale)} rows did not land "
+            f"(e.g. {sorted(str(i) for i in still_missing)[:5]}).\n"
+            f"{CANDIDATE_PROVENANCE_PATH} now describes an INCOMPLETE arm. Re-run "
+            "`--run` to finish it; `--report` will refuse until it is complete.\n",
+            flush=True,
+        )
 
 
 def report() -> str:
@@ -657,21 +890,40 @@ def report() -> str:
         ValueError: If a guard finds the comparison would not mean what it claims.
     """
     os.makedirs("evals", exist_ok=True)
-    baseline = pd.read_csv(BASELINE_PREDS_PATH)
-    candidate = pd.read_csv(CANDIDATE_PREDS_PATH)
-    assert_answer_key_is_frozen(baseline)
+    # dtype=str, keep_default_na=False (via paired_compare.read_predictions): with a
+    # bare read_csv a blank cell arrives as NaN, so the answer-key blank check compared
+    # the string "nan" against "" and could never fire on the production path.
+    baseline = paired_compare.read_predictions(BASELINE_PREDS_PATH)
+    candidate = paired_compare.read_predictions(CANDIDATE_PREDS_PATH)
+    scale = scale_eval.load_scale_set(SCALE_SET_PATH)
+
+    assert_answer_key_is_complete(baseline, scale)
+    assert_candidate_is_complete(baseline, candidate)
 
     baseline_recorded = provenance.load(BASELINE_PROVENANCE_PATH)["recorded"]
     candidate_recorded = provenance.load(CANDIDATE_PROVENANCE_PATH)["recorded"]
     assert_arms_differ(baseline_recorded, candidate_recorded)
+    assert_candidate_matches_the_live_prompt(candidate_recorded)
+
+    # Exact-duplicate snippets leave the PAIRING (not the files): they break McNemar's
+    # independence assumption, and one duplicate pair is labelled inconsistently by the
+    # answer key itself. See duplicate_snippet_ids.
+    excluded = duplicate_snippet_ids(scale)
+    baseline = baseline[~baseline["id"].astype(str).isin(excluded)]
+    candidate = candidate[~candidate["id"].astype(str).isin(excluded)]
 
     comparisons = [
-        (axis, *axis_comparison(BASELINE_PREDS_PATH, CANDIDATE_PREDS_PATH, axis, col))
-        for axis, col in AXES
+        (axis, *axis_comparison(baseline, candidate, axis, col)) for axis, col in AXES
     ]
     text = (
         build_report(
-            baseline, candidate, comparisons, baseline_recorded, candidate_recorded
+            baseline,
+            candidate,
+            comparisons,
+            baseline_recorded,
+            candidate_recorded,
+            excluded,
+            judge_digest(baseline),
         )
         + "\n"
     )

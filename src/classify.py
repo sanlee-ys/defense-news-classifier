@@ -146,12 +146,12 @@ unnamed "contested strait" is global.
 base or waters off a named US coast is americas. No-anchor means the story has no \
 meaningful geography at all -- a budget line, a doctrine change, an enterprise-wide \
 program -- not "the geography is the United States".
-- An organization is not a theater. Commands, program offices, unit designations, \
-contractors, and named officials say who is acting, not where -- and neither does a \
-geographic word inside an organization's name, the site of its headquarters, or a \
-story's dateline. A snippet whose only geography is of that kind has named no place: \
-label it global. A specific region still needs a place the snippet puts the described \
-activity in.
+- A US institution is not an American theater. Naming a service, command, program \
+office, contractor, unit, or official identifies the actor, not a place: a story whose \
+only geography is institutional has no anchor, so it is global rather than americas. \
+This does not narrow the evidence above -- a named command's or fleet's area of \
+operations or responsibility names a theater, and so do a named base, installation, \
+city, country, or body of water, wherever the story places the activity.
 - Two or more theaters with none dominant is global -- the same test as multi on the \
 domain axis. Pick a single region only when the story is primarily about that theater.
 - Orbital/space and cyberspace stories with no terrestrial theater in view are global.

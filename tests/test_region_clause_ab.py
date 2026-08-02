@@ -77,23 +77,55 @@ def _candidate(baseline: pd.DataFrame, fixed: int = 0, new_over: int = 0):
     return candidate
 
 
-def _sidecars(tmp_path, monkeypatch, baseline_prompt="old", candidate_prompt="new"):
-    """Write both arms' provenance sidecars and point the module at them."""
+def _scale_set(baseline: pd.DataFrame, duplicates: dict | None = None):
+    """A scale set matching `baseline`'s ids; `duplicates` maps id -> id-to-copy-text."""
+    rows = [{"id": i, "text": f"snippet for {i}"} for i in baseline["id"]]
+    for target, source in (duplicates or {}).items():
+        src = next(r["text"] for r in rows if r["id"] == source)
+        for row in rows:
+            if row["id"] == target:
+                row["text"] = src
+    return pd.DataFrame(rows)
+
+
+def _sidecars(tmp_path, monkeypatch, baseline_prompt="old", candidate_prompt=None):
+    """Write both arms' provenance sidecars and point the module at them.
+
+    The candidate defaults to the LIVE prompt so `assert_candidate_matches_the_live_prompt`
+    passes; pass an explicit string to exercise the failure paths.
+    """
     base = tmp_path / "baseline.provenance.json"
     cand = tmp_path / "candidate.provenance.json"
     provenance.write(
-        provenance.fingerprint(baseline_prompt, "claude-sonnet-5", "claude-opus-4-8"),
+        provenance.fingerprint(
+            baseline_prompt, gold_eval.WORKHORSE_MODEL, gold_eval.JUDGE_MODEL
+        ),
         "evals/baseline.csv",
         path=str(base),
     )
     provenance.write(
-        provenance.fingerprint(candidate_prompt, "claude-sonnet-5", "claude-opus-4-8"),
+        provenance.fingerprint(
+            candidate_prompt if candidate_prompt is not None else ab.SYSTEM_PROMPT,
+            gold_eval.WORKHORSE_MODEL,
+            gold_eval.JUDGE_MODEL,
+        ),
         "evals/candidate.csv",
         path=str(cand),
     )
     monkeypatch.setattr(ab, "BASELINE_PROVENANCE_PATH", str(base))
     monkeypatch.setattr(ab, "CANDIDATE_PROVENANCE_PATH", str(cand))
     return base, cand
+
+
+def _roundtrip(frame: pd.DataFrame, path):
+    """Write then re-read through the production loader.
+
+    Tests that hand a frame straight to a guard cannot catch a defect that only exists
+    after a CSV round trip -- which is exactly how the blank-cell check was dead on the
+    production path (bare read_csv turns "" into NaN).
+    """
+    frame.to_csv(path, index=False)
+    return paired_compare.read_predictions(str(path))
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +163,36 @@ def test_judge_is_classified_from_the_snippet_alone(monkeypatch, tmp_path):
     assert {text for _, text in seen} == {"a snippet"}
 
 
+def test_judge_is_snippet_only_on_the_BATCH_path_too(tmp_path, batch_client):
+    """The protocol uses --batch, so the batch path is the one that must be pinned.
+
+    The synchronous assertion above covers a path the run protocol does not take. Both
+    are asserted, because "the tested path is not the used path" is exactly how a
+    load-bearing premise quietly stops holding.
+    """
+    payload = {
+        "category": "operations",
+        "operational_domain": "air",
+        "region": "global",
+    }
+    frame = pd.DataFrame([{"id": "s001", "text": "the only text there is"}])
+    client = batch_client(
+        {"s001__workhorse": payload, "s001__judge": payload},
+    )
+    gold_eval.run_predictions_batch(
+        client, frame, set(), poll_interval=0, preds_path=str(tmp_path / "p.csv")
+    )
+
+    requests = client.messages.batches.created_requests
+    assert len(requests) == 2  # one workhorse, one judge
+    models = {r["params"]["model"] for r in requests}
+    assert models == {gold_eval.WORKHORSE_MODEL, gold_eval.JUDGE_MODEL}
+    # Every request's user content is the raw snippet: no prediction rides along.
+    for request in requests:
+        content = request["params"]["messages"][0]["content"]
+        assert content == "the only text there is"
+
+
 # ---------------------------------------------------------------------------
 # Guards.
 # ---------------------------------------------------------------------------
@@ -166,20 +228,99 @@ def test_arms_differ_refuses_a_judge_swap():
 
 
 def test_answer_key_guard_accepts_the_committed_shape():
-    ab.assert_answer_key_is_frozen(_baseline())
+    base = _baseline()
+    ab.assert_answer_key_is_complete(base, _scale_set(base))
 
 
 def test_answer_key_guard_rejects_a_missing_judge_column():
-    frame = _baseline().drop(columns=["judge_region"])
+    base = _baseline()
+    frame = base.drop(columns=["judge_region"])
     with pytest.raises(ValueError, match="judge_region"):
-        ab.assert_answer_key_is_frozen(frame)
+        ab.assert_answer_key_is_complete(frame, _scale_set(base))
 
 
-def test_answer_key_guard_rejects_holes_in_the_key():
-    frame = _baseline()
-    frame.loc[0, "judge_region"] = ""
+def test_answer_key_guard_rejects_a_hand_made_subset(tmp_path):
+    """The defect this replaced: a 5-row hand-assembled key used to pass."""
+    base = _baseline(n=20)
+    subset = base.head(5)
+    with pytest.raises(ValueError, match="not the committed scale set"):
+        ab.assert_answer_key_is_complete(subset, _scale_set(base))
+
+
+def test_answer_key_guard_rejects_duplicate_ids():
+    base = _baseline(n=20)
+    doubled = pd.concat([base, base.head(1)], ignore_index=True)
+    with pytest.raises(ValueError, match="repeats"):
+        ab.assert_answer_key_is_complete(doubled, _scale_set(doubled))
+
+
+def test_answer_key_guard_rejects_holes_after_a_csv_round_trip(tmp_path):
+    """A blank cell must still be blank after the production loader sees it.
+
+    Round-tripped on purpose: a bare read_csv turns "" into NaN, and the old blank
+    check compared "nan" against "", so it could never fire in production.
+    """
+    base = _baseline()
+    base.loc[0, "judge_region"] = ""
+    loaded = _roundtrip(base, tmp_path / "baseline.csv")
     with pytest.raises(ValueError, match="blank"):
-        ab.assert_answer_key_is_frozen(frame)
+        ab.assert_answer_key_is_complete(loaded, _scale_set(base))
+
+
+def test_bare_read_csv_would_have_hidden_the_hole(tmp_path):
+    """Pins the mechanism, so a future refactor back to read_csv fails here."""
+    base = _baseline()
+    base.loc[0, "judge_region"] = ""
+    base.to_csv(tmp_path / "b.csv", index=False)
+    naive = pd.read_csv(tmp_path / "b.csv")
+    assert str(naive.loc[0, "judge_region"]) == "nan"  # the defect, made visible
+    assert (
+        paired_compare.read_predictions(str(tmp_path / "b.csv")).loc[0, "judge_region"]
+        == ""
+    )
+
+
+def test_candidate_completeness_guard_rejects_a_partial_arm():
+    base = _baseline(n=20)
+    partial = _candidate(base).head(15)
+    with pytest.raises(ValueError, match="not complete"):
+        ab.assert_candidate_is_complete(base, partial)
+
+
+def test_candidate_completeness_guard_rejects_appended_duplicates():
+    base = _baseline(n=20)
+    cand = _candidate(base)
+    doubled = pd.concat([cand, cand.head(1)], ignore_index=True)
+    with pytest.raises(ValueError, match="repeats"):
+        ab.assert_candidate_is_complete(base, doubled)
+
+
+def test_candidate_completeness_guard_accepts_a_full_arm():
+    base = _baseline(n=20)
+    ab.assert_candidate_is_complete(base, _candidate(base))
+
+
+def test_live_prompt_guard_accepts_the_working_tree():
+    ab.assert_candidate_matches_the_live_prompt(
+        provenance.fingerprint(
+            ab.SYSTEM_PROMPT, gold_eval.WORKHORSE_MODEL, gold_eval.JUDGE_MODEL
+        )
+    )
+
+
+def test_live_prompt_guard_rejects_a_third_prompt():
+    """assert_arms_differ only proves the arms differ from EACH OTHER."""
+    third = provenance.fingerprint(
+        "some other prompt", gold_eval.WORKHORSE_MODEL, gold_eval.JUDGE_MODEL
+    )
+    ab.assert_arms_differ(
+        provenance.fingerprint(
+            "baseline", gold_eval.WORKHORSE_MODEL, gold_eval.JUDGE_MODEL
+        ),
+        third,
+    )
+    with pytest.raises(ValueError, match="not produced by the prompt/models on disk"):
+        ab.assert_candidate_matches_the_live_prompt(third)
 
 
 def test_resume_guard_allows_a_fresh_run():
@@ -254,6 +395,81 @@ def test_cluster_delta_nets_positive_for_a_clause_that_only_fixes():
     assert delta["region_correct_candidate"] - delta["region_correct_baseline"] == 5
 
 
+def test_B_counts_only_rows_the_baseline_had_RIGHT():
+    """The defect this fixes: `newly over-called global` is not B.
+
+    A row whose baseline answer was already wrong on some other region costs nothing
+    when it moves to `global` -- it was a miss either way -- but it inflates the
+    over-call delta. B, as the decision rule prices it, is regressions only.
+    """
+    base = _baseline(n=20, pulls=5, over_calls=2)
+    # Make one row wrong on ANOTHER specific region (judge=indo-pacific, said africa).
+    already_wrong = base[base["pred_region"] == base["judge_region"]]["id"].iloc[0]
+    base.loc[base["id"] == already_wrong, "pred_region"] = "africa"
+    cand = _candidate(base, fixed=5)
+    # Moving that already-wrong row to `global` costs nothing -- it was a miss either way.
+    cand.loc[cand["id"] == already_wrong, "pred_region"] = "global"
+    # ...but dragging a genuinely-correct row over IS a regression: that is B.
+    correct_row = base[base["pred_region"] == base["judge_region"]]["id"].iloc[0]
+    cand.loc[cand["id"] == correct_row, "pred_region"] = "global"
+
+    delta = ab.cluster_delta(base, cand)
+    assert delta["B"] == 1
+    assert delta["B_ids"] == [str(correct_row)]
+    # The weaker quantity counts the already-wrong row too, which is why it is not B.
+    assert delta["newly_over_global"] == 2
+    assert delta["newly_over_global"] > delta["B"]
+
+
+def test_regressions_on_any_label_is_a_superset_of_B():
+    base = _baseline(n=20, pulls=5, over_calls=2)
+    cand = _candidate(base, fixed=5)
+    correct_rows = list(base[base["pred_region"] == base["judge_region"]]["id"])
+    cand.loc[cand["id"] == correct_rows[0], "pred_region"] = "global"
+    cand.loc[cand["id"] == correct_rows[1], "pred_region"] = "africa"  # not global
+    delta = ab.cluster_delta(base, cand)
+    assert delta["B"] == 1
+    assert delta["regressions_any_label"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Deduplication of exact-duplicate snippets.
+# ---------------------------------------------------------------------------
+
+
+def test_duplicate_snippets_are_found_and_the_first_is_kept():
+    base = _baseline(n=6)
+    scale = _scale_set(base, duplicates={"s003": "s001", "s005": "s001"})
+    assert ab.duplicate_snippet_ids(scale) == ["s003", "s005"]
+
+
+def test_no_duplicates_means_nothing_is_dropped():
+    base = _baseline(n=6)
+    assert ab.duplicate_snippet_ids(_scale_set(base)) == []
+
+
+def test_duplicates_leave_the_pairing_and_shrink_the_effective_n(tmp_path, monkeypatch):
+    base = _baseline(n=20, pulls=5, over_calls=2)
+    scale = _scale_set(base, duplicates={"s019": "s018"})
+    base_path = tmp_path / "scale_predictions_v3.csv"
+    cand_path = tmp_path / "candidate.csv"
+    scale_path = tmp_path / "scale_set.csv"
+    base.to_csv(base_path, index=False)
+    _candidate(base, fixed=4).to_csv(cand_path, index=False)
+    scale.to_csv(scale_path, index=False)
+
+    monkeypatch.setattr(ab, "BASELINE_PREDS_PATH", str(base_path))
+    monkeypatch.setattr(ab, "CANDIDATE_PREDS_PATH", str(cand_path))
+    monkeypatch.setattr(ab, "SCALE_SET_PATH", str(scale_path))
+    monkeypatch.setattr(ab, "REPORT_PATH", str(tmp_path / "out.txt"))
+    _sidecars(tmp_path, monkeypatch)
+
+    text = ab.report()
+    assert "excluded as exact duplicates: 1" in text
+    assert "s019" in text
+    assert "Snippets scored   : 19" in text
+
+
 # ---------------------------------------------------------------------------
 # The paired comparison runs through paired_compare, not a private copy.
 # ---------------------------------------------------------------------------
@@ -267,7 +483,10 @@ def test_axis_comparison_grades_against_the_frozen_judge_column(tmp_path):
     _candidate(base, fixed=5).to_csv(cand_path, index=False)
 
     result, lift = ab.axis_comparison(
-        str(base_path), str(cand_path), "region", "judge_region"
+        paired_compare.read_predictions(str(base_path)),
+        paired_compare.read_predictions(str(cand_path)),
+        "region",
+        "judge_region",
     )
     assert result.total_groups == 20
     assert lift.eligible_pairs == 20
@@ -287,7 +506,10 @@ def test_axis_comparison_uses_the_shared_pairing_module(tmp_path):
     _candidate(base, fixed=3).to_csv(cand_path, index=False)
 
     _, lift = ab.axis_comparison(
-        str(base_path), str(cand_path), "region", "judge_region"
+        paired_compare.read_predictions(str(base_path)),
+        paired_compare.read_predictions(str(cand_path)),
+        "region",
+        "judge_region",
     )
     _, direct, _ = paired_compare.compare_prediction_files(
         str(base_path),
@@ -321,16 +543,20 @@ def _report_text(tmp_path, fixed=5, new_over=0):
     base.to_csv(base_path, index=False)
     cand = _candidate(base, fixed=fixed, new_over=new_over)
     cand.to_csv(cand_path, index=False)
+    base_df = paired_compare.read_predictions(str(base_path))
+    cand_df = paired_compare.read_predictions(str(cand_path))
     comparisons = [
-        (axis, *ab.axis_comparison(str(base_path), str(cand_path), axis, col))
+        (axis, *ab.axis_comparison(base_df, cand_df, axis, col))
         for axis, col in ab.AXES
     ]
     return ab.build_report(
-        base,
-        cand,
+        base_df,
+        cand_df,
         comparisons,
         provenance.fingerprint("old", "claude-sonnet-5", "claude-opus-4-8"),
         provenance.fingerprint("new", "claude-sonnet-5", "claude-opus-4-8"),
+        [],
+        ab.judge_digest(base_df),
     )
 
 
@@ -381,9 +607,12 @@ def test_report_writes_the_artifact_and_makes_no_call(tmp_path, monkeypatch):
     out = tmp_path / "region_clause_ab.txt"
     base.to_csv(base_path, index=False)
     _candidate(base, fixed=4).to_csv(cand_path, index=False)
+    scale_path = tmp_path / "scale_set.csv"
+    _scale_set(base).to_csv(scale_path, index=False)
 
     monkeypatch.setattr(ab, "BASELINE_PREDS_PATH", str(base_path))
     monkeypatch.setattr(ab, "CANDIDATE_PREDS_PATH", str(cand_path))
+    monkeypatch.setattr(ab, "SCALE_SET_PATH", str(scale_path))
     monkeypatch.setattr(ab, "REPORT_PATH", str(out))
     _sidecars(tmp_path, monkeypatch)
     monkeypatch.setattr(
@@ -401,8 +630,11 @@ def test_report_refuses_when_both_arms_share_a_prompt(tmp_path, monkeypatch):
     cand_path = tmp_path / "candidate.csv"
     base.to_csv(base_path, index=False)
     _candidate(base, fixed=2).to_csv(cand_path, index=False)
+    scale_path = tmp_path / "scale_set.csv"
+    _scale_set(base).to_csv(scale_path, index=False)
     monkeypatch.setattr(ab, "BASELINE_PREDS_PATH", str(base_path))
     monkeypatch.setattr(ab, "CANDIDATE_PREDS_PATH", str(cand_path))
+    monkeypatch.setattr(ab, "SCALE_SET_PATH", str(scale_path))
     monkeypatch.setattr(ab, "REPORT_PATH", str(tmp_path / "out.txt"))
     _sidecars(tmp_path, monkeypatch, baseline_prompt="same", candidate_prompt="same")
     with pytest.raises(ValueError, match="SAME prompt"):
@@ -415,8 +647,11 @@ def test_report_refuses_when_a_sidecar_is_missing(tmp_path, monkeypatch):
     cand_path = tmp_path / "candidate.csv"
     base.to_csv(base_path, index=False)
     _candidate(base).to_csv(cand_path, index=False)
+    scale_path = tmp_path / "scale_set.csv"
+    _scale_set(base).to_csv(scale_path, index=False)
     monkeypatch.setattr(ab, "BASELINE_PREDS_PATH", str(base_path))
     monkeypatch.setattr(ab, "CANDIDATE_PREDS_PATH", str(cand_path))
+    monkeypatch.setattr(ab, "SCALE_SET_PATH", str(scale_path))
     monkeypatch.setattr(ab, "BASELINE_PROVENANCE_PATH", str(tmp_path / "nope.json"))
     with pytest.raises(FileNotFoundError):
         ab.report()
@@ -575,8 +810,11 @@ def test_cli_report_never_builds_a_client(monkeypatch, tmp_path, capsys):
     cand_path = tmp_path / "candidate.csv"
     base.to_csv(base_path, index=False)
     _candidate(base, fixed=3).to_csv(cand_path, index=False)
+    scale_path = tmp_path / "scale_set.csv"
+    _scale_set(base).to_csv(scale_path, index=False)
     monkeypatch.setattr(ab, "BASELINE_PREDS_PATH", str(base_path))
     monkeypatch.setattr(ab, "CANDIDATE_PREDS_PATH", str(cand_path))
+    monkeypatch.setattr(ab, "SCALE_SET_PATH", str(scale_path))
     monkeypatch.setattr(ab, "REPORT_PATH", str(tmp_path / "out.txt"))
     _sidecars(tmp_path, monkeypatch)
     monkeypatch.setattr(
@@ -611,4 +849,25 @@ def test_the_clause_is_inside_the_frozen_region_block():
 
     block = extract_region_block(ab.SYSTEM_PROMPT)
     assert block is not None
-    assert "An organization is not a theater." in block
+    assert "A US institution is not an American theater." in block
+
+
+def test_the_clause_preserves_the_evidence_forms_it_could_have_broken():
+    """The narrowing, pinned.
+
+    An earlier draft disqualified a command's area of operations, a headquarters site,
+    and a dateline. That killed the region evidence for ~14 currently-correct rows
+    (5th Fleet AO, CENTCOM/EUCOM AOR, "based on Peterson AFB", a PHILIPPINE SEA
+    dateline) and flatly contradicted the ratified "Mediterranean counts as europe
+    (6th Fleet / EUCOM water)" convention in data/gold/README.md. The replacement must
+    keep saying what it protects, or the same over-reach walks back in.
+    """
+    from optimize import extract_region_block
+
+    # The prompt is a backslash-continued literal, so compare on collapsed whitespace.
+    joined = " ".join(extract_region_block(ab.SYSTEM_PROMPT).split())
+    assert "area of operations or responsibility names a theater" in joined
+    assert "named base, installation, city, country, or body of water" in joined
+    # And the over-reaching phrases must stay gone.
+    assert "the site of its headquarters" not in joined
+    assert "story's dateline" not in joined
