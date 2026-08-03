@@ -845,23 +845,26 @@ def test_cli_report_never_builds_a_client(monkeypatch, tmp_path, capsys):
 # ---------------------------------------------------------------------------
 
 
-def test_the_clause_is_not_in_the_shipped_prompt():
-    """The revert, pinned.
+def test_the_clause_is_now_in_the_shipped_prompt():
+    """The adoption, pinned -- and this pin is the inverse of the one it replaces.
 
-    The clause is measurement history, not shipped behavior. If it reappears in
-    `SYSTEM_PROMPT` this test fails, and the fix is a new ADR superseding ADR-023 --
-    not a green build.
+    ADR-023 measured this clause at p=0.0522 against a pre-registered p<0.05 and
+    reverted it, and this test pinned its ABSENCE so it could not drift back in
+    without a decision. That was correct on its date. The higher-power re-run
+    (n=595, p=0.0002) then cleared all four rules, and ADR-024 adopted it -- so the
+    assertion flips rather than being deleted, and the reason it flipped is on the
+    record in both ADRs.
 
-    Placement note for whoever re-runs this at higher power: the clause belongs
-    INSIDE the region block, because ADR-020's critic embeds
+    The placement requirement is unchanged and is why the check reads the region
+    block rather than the whole prompt: ADR-020's critic embeds
     `extract_region_block(SYSTEM_PROMPT)` verbatim and `optimize.region_rubric_violations`
-    freezes that same block. A clause outside it is invisible to both.
+    freezes that same block, so a clause outside it would be invisible to both.
     """
     from optimize import extract_region_block
 
     block = extract_region_block(ab.SYSTEM_PROMPT)
     assert block is not None, "the region block must still be extractable"
-    assert "A US institution is not an American theater." not in block
+    assert "A US institution is not an American theater." in block
 
 
 def test_the_shipped_prompt_still_licenses_the_evidence_forms_the_draft_would_have_killed():
