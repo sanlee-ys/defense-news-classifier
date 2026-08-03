@@ -4,6 +4,20 @@
 **Date:** 2026-08-02
 **Deciders:** San Lee
 
+> **Amendment 1 (2026-08-03) — pointer only; nothing below is edited.**
+> The condition this ADR named for re-testing ("a higher-power ruler, and essentially nothing
+> else") was met. The same clause, byte-identical and pinned by digest, was re-registered and
+> re-run at **effective n=595** and cleared all four rules — region 89.9% → 94.1% at **McNemar
+> p=0.0002**, design power 0.837 — and **has been adopted** into `classify.SYSTEM_PROMPT` as
+> `v3.2.1`. See **[ADR-024](024-global-boundary-clause-adopted.md)**.
+>
+> **This record is not superseded and is not wrong.** Its verdict was correct on its date and
+> under its design: at p=0.0522 against a pre-registered p<0.05, marginal reverts. What ADR-024
+> adds is the reason the question was still open — this run had about **49% power** against the
+> effect it observed, so it was never able to decide either way. The finding was *underpowered*,
+> not *refuted*, and honoring the rule here is what made the adoption there mean anything. The
+> body below stays verbatim, deliberately.
+
 **Related:** [ADR-022](022-scaled-region-eval-verdict.md) (the n=300 ruler this was measured
 against, and the cluster counts) · [ADR-014](014-region-field-design.md) (the ratified region
 conventions the clause restated) · [ADR-020](020-l4-multi-agent-pipeline.md) (the declined

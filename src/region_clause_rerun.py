@@ -9,7 +9,30 @@ numbers -- at n=295 the completed design had about **49%** power against the
 effect it observed, which is a coin flip. This module is the harness that runs the
 same clause against an expanded ruler.
 
-THE FOUR THINGS THAT MAKE THIS DECIDABLE RATHER THAN A RE-ROLL
+STATUS: THE EXPERIMENT IS OVER AND THE CLAUSE SHIPPED (ADR-024)
+===============================================================
+
+It ran, all four pre-registered rules passed -- effective n=595 at 0.837 power,
+region 89.9% -> 94.1% at **McNemar p=0.0002**, guardrails clean, gold 87.0% ->
+92.6% on human labels -- and the clause was adopted into
+``classify.SYSTEM_PROMPT``. This module is now the reproducible description of how
+that was measured, not a thing to run again.
+
+**Every run and report entry point refuses**, via
+:func:`assert_the_clause_has_not_shipped_yet`. Both arms of both rulers were
+produced before the adoption, against a baseline prompt
+(:data:`PRE_ADR024_BASELINE_PROMPT_SHA256`) this checkout no longer contains, so
+there is no honest comparison left to derive. The committed reports
+``evals/region_clause_rerun.txt`` and ``evals/region_clause_gold_rerun.txt`` are
+frozen records, read rather than regenerated -- the same treatment ADR-023 gave
+``evals/region_clause_ab.txt`` when the verdict went the other way.
+
+The sections below describe the design as it was run, and are left in the present
+tense deliberately: they are the record of a completed experiment. Point 1's claim
+that ``main`` never carries the clause is the one thing adoption reversed, and
+:func:`candidate_prompt` now returns the shipped prompt unchanged.
+
+THE FOUR THINGS THAT MADE THIS DECIDABLE RATHER THAN A RE-ROLL
 ==============================================================
 
 **1. The clause is applied at run time, and `main` never carries it.** ADR-023's
@@ -170,6 +193,68 @@ ADR023_CANDIDATE_PROMPT_SHA256 = (
     "b0202d06a876cc0641f50e8910368d7c8a4eb0295f662ac472f9fdd6abf4e963"
 )
 
+# The prompt this experiment used as its BASELINE: the v3.0.0 rubric that shipped
+# from v3.0.0 through v3.2.0, recorded in evals/scale_predictions_v3.provenance.json
+# and evals/gold_predictions_v3.provenance.json. Kept as a named constant because
+# after ADR-024 it is no longer reconstructable from classify.py -- which is exactly
+# why every run and report path below refuses once the clause has shipped.
+PRE_ADR024_BASELINE_PROMPT_SHA256 = (
+    "a59689e8ac238d655c0b64c8aaaf3fef6d391267e2015f1740f24e120ed903cd"
+)
+
+
+def clause_is_adopted() -> bool:
+    """Whether the live shipped prompt already carries the clause (ADR-024).
+
+    Returns:
+        ``True`` once :data:`REVISED_CLAUSE` is part of ``classify.SYSTEM_PROMPT``.
+    """
+    return REVISED_CLAUSE in SYSTEM_PROMPT
+
+
+def assert_the_clause_has_not_shipped_yet() -> None:
+    """Refuse every run and report path once the clause is part of the shipped prompt.
+
+    ADR-024 adopted the clause into ``classify.SYSTEM_PROMPT``, and that ends this
+    experiment rather than continuing it. Both arms of both rulers were produced
+    *before* the adoption: the answer key and the gold baseline under the v3.0.0
+    prompt (:data:`PRE_ADR024_BASELINE_PROMPT_SHA256`), the candidate arms under the
+    composed clause prompt. This checkout can reconstruct the second but not the
+    first, so there is no honest way to re-derive a baseline-vs-candidate comparison
+    from here.
+
+    The trap this closes is specific and quiet. After the adoption re-run,
+    ``evals/gold_predictions_v3.csv`` is produced by the clause prompt, so
+    :func:`assert_gold_baseline_is_the_shipped_arm` would *pass* -- and
+    ``--gold-report`` would cheerfully compare the candidate arm against itself and
+    print a 0.0-point lift as though it had measured something.
+
+    This is ADR-023's precedent applied at adoption instead of at revert: the
+    committed reports (``evals/region_clause_rerun.txt``,
+    ``evals/region_clause_gold_rerun.txt``) are frozen records, read rather than
+    regenerated, and the harness stays as the reproducible description of how they
+    were produced.
+
+    Raises:
+        ValueError: If the clause is already in ``classify.SYSTEM_PROMPT``.
+    """
+    if not clause_is_adopted():
+        return
+    raise ValueError(
+        "The `global`-boundary clause has SHIPPED (ADR-024): it is part of "
+        "classify.SYSTEM_PROMPT, which now hashes to "
+        f"{ADR023_CANDIDATE_PROMPT_SHA256[:16]}... -- the candidate prompt this "
+        "experiment measured.\n\n"
+        "Every arm this module scores was produced before that adoption, against a "
+        f"baseline prompt ({PRE_ADR024_BASELINE_PROMPT_SHA256[:16]}...) this "
+        "checkout no longer contains. Re-deriving a comparison from here would "
+        "compare the shipped classifier against itself.\n\n"
+        "The results are frozen records and are read, not regenerated:\n"
+        f"  {REPORT_PATH}      (the scale arm, effective n=595)\n"
+        f"  {GOLD_REPORT_PATH} (the gold arm, human-graded n=54)\n"
+        "See decisions/024-global-boundary-clause-adopted.md."
+    )
+
 
 def apply_clause(prompt: str = SYSTEM_PROMPT) -> str:
     """Insert the revised clause into a prompt's region-rules block.
@@ -185,8 +270,18 @@ def apply_clause(prompt: str = SYSTEM_PROMPT) -> str:
         ValueError: If the anchor bullet is not present exactly once. Both zero
             matches (the rubric was reworded) and several (an ambiguous insertion
             point) mean the placement claim no longer holds, and a clause in the
-            wrong place is a different experiment wearing this one's name.
+            wrong place is a different experiment wearing this one's name. Also if
+            the base prompt already carries the clause -- inserting it twice would
+            compose a prompt no run ever used, and the digest pin would then report
+            a drift whose real cause was this function.
     """
+    if REVISED_CLAUSE in prompt:
+        raise ValueError(
+            "The base prompt already carries the clause, so applying it again would "
+            "compose a double-clause prompt that no arm was ever measured under. If "
+            "this is classify.SYSTEM_PROMPT, the clause has shipped (ADR-024) and "
+            "candidate_prompt() returns it unchanged."
+        )
     occurrences = prompt.count(ANCHOR_BULLET)
     if occurrences != 1:
         raise ValueError(
@@ -202,7 +297,19 @@ def apply_clause(prompt: str = SYSTEM_PROMPT) -> str:
 
 
 def candidate_prompt() -> str:
-    """The candidate arm's prompt: the live shipped prompt plus the clause."""
+    """The candidate arm's prompt.
+
+    Before ADR-024 this composed the live shipped prompt plus the clause. After the
+    adoption the shipped prompt *is* the candidate, so it is returned unchanged --
+    and :func:`assert_clause_reproduces_the_recorded_arm` consequently keeps passing,
+    which turns the ADR-023 digest pin into the standing proof that what ships is
+    byte-for-byte the arm that was measured.
+
+    Returns:
+        The clause-carrying prompt, composed or shipped.
+    """
+    if clause_is_adopted():
+        return SYSTEM_PROMPT
     return apply_clause(SYSTEM_PROMPT)
 
 
@@ -502,6 +609,7 @@ def run_key(batch: bool = False) -> None:
     Raises:
         ValueError: If resuming would blend two classifiers.
     """
+    assert_the_clause_has_not_shipped_yet()
     os.makedirs("evals", exist_ok=True)
     snippets = extension_set()
     live = provenance.fingerprint(SYSTEM_PROMPT, WORKHORSE_MODEL, JUDGE_MODEL)
@@ -537,6 +645,7 @@ def run_candidate(batch: bool = False) -> None:
         ValueError: If the composed prompt is not ADR-023's, or resuming would
             blend two classifiers.
     """
+    assert_the_clause_has_not_shipped_yet()
     assert_clause_reproduces_the_recorded_arm()
     os.makedirs("evals", exist_ok=True)
     snippets = extension_set()
@@ -683,13 +792,18 @@ def assert_prompt_carries_the_clause(prompt: str) -> None:
     useless -- re-measuring the baseline and reporting it as the candidate, which is
     precisely what the old step 5 did -- cannot happen without raising.
 
+    The check is on the clause's *presence*, not on the prompt's inequality with
+    ``SYSTEM_PROMPT``. It used to be both, because before ADR-024 "is the shipped
+    prompt" and "lacks the clause" were the same statement. Adoption made them
+    opposite, and the identity half would now reject the correct prompt.
+
     Args:
         prompt: The system prompt about to be sent.
 
     Raises:
-        ValueError: If the prompt is the shipped one, or does not carry the clause.
+        ValueError: If the prompt does not carry the clause.
     """
-    if prompt == SYSTEM_PROMPT or REVISED_CLAUSE not in prompt:
+    if REVISED_CLAUSE not in prompt:
         raise ValueError(
             "The gold arm was about to run under a prompt that does not carry the "
             "clause. That measures the BASELINE and reports it as the candidate -- "
@@ -764,6 +878,7 @@ def run_gold(batch: bool = False) -> None:
             if resuming would blend two classifiers.
     """
     # Ahead of make_client, so any drift costs nothing.
+    assert_the_clause_has_not_shipped_yet()
     assert_clause_reproduces_the_recorded_arm()
     assert_writable_gold_artifact(GOLD_CANDIDATE_PATH)
     assert_writable_gold_artifact(GOLD_CANDIDATE_PROVENANCE_PATH)
@@ -971,6 +1086,7 @@ def gold_report() -> str:
     Raises:
         ValueError: If a guard finds the comparison would not mean what it claims.
     """
+    assert_the_clause_has_not_shipped_yet()
     assert_writable_gold_artifact(GOLD_REPORT_PATH)
     os.makedirs("evals", exist_ok=True)
     assert_clause_reproduces_the_recorded_arm()
@@ -1119,6 +1235,7 @@ def report() -> str:
     Raises:
         ValueError: If a guard finds the comparison would not mean what it claims.
     """
+    assert_the_clause_has_not_shipped_yet()
     os.makedirs("evals", exist_ok=True)
     assert_clause_reproduces_the_recorded_arm()
     assert_frozen_arms_are_still_ours()

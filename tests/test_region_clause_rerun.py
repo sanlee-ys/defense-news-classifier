@@ -36,6 +36,41 @@ CATS = ["operations", "technology", "procurement", "policy", "industry"]
 DOMS = ["air", "land", "sea", "cyber", "multi", "space"]
 
 
+def _pre_adoption_prompt() -> str:
+    """Reconstruct the v3.0.0-through-v3.2.0 baseline: the shipped prompt, clause removed.
+
+    ADR-024 moved the clause into ``classify.SYSTEM_PROMPT``, so the prompt this
+    experiment used as its *baseline* is no longer in the tree. Every guard below
+    was written against that baseline, and the guards are worth keeping under test
+    even though the run paths they protect are now closed -- they are the record of
+    what the harness actually enforced.
+
+    The reconstruction is verified against the digest the paid runs recorded in
+    ``evals/scale_predictions_v3.provenance.json``, so this is a checked
+    reconstruction rather than a plausible-looking string.
+    """
+    assert rr.REVISED_CLAUSE in SYSTEM_PROMPT, "the clause should be adopted (ADR-024)"
+    base = SYSTEM_PROMPT.replace("\n" + rr.REVISED_CLAUSE, "", 1)
+    digest = hashlib.sha256(base.encode("utf-8")).hexdigest()
+    assert digest == rr.PRE_ADR024_BASELINE_PROMPT_SHA256, (
+        "the reconstructed baseline is not the prompt the frozen arms were measured "
+        f"against: {digest} != {rr.PRE_ADR024_BASELINE_PROMPT_SHA256}"
+    )
+    return base
+
+
+@pytest.fixture
+def pre_adoption(monkeypatch):
+    """Put the module back in the classifier state the experiment ran in.
+
+    Only ``region_clause_rerun``'s own view of the shipped prompt is moved.
+    ``classify.SYSTEM_PROMPT`` stays adopted, because that is what ships.
+    """
+    baseline = _pre_adoption_prompt()
+    monkeypatch.setattr(rr, "SYSTEM_PROMPT", baseline)
+    return baseline
+
+
 # ---------------------------------------------------------------------------
 # The clause: composed, placed, and proven to be the one that was measured.
 # ---------------------------------------------------------------------------
@@ -56,16 +91,96 @@ def test_the_composed_prompt_is_byte_identical_to_the_arm_adr023_paid_for():
     rr.assert_clause_reproduces_the_recorded_arm()
 
 
-def test_the_shipped_prompt_still_does_not_carry_the_clause():
-    """`main` ships the v3.0.0 prompt, and this module must not be why that changes.
+def test_the_shipped_prompt_now_carries_the_clause():
+    """The adoption, pinned -- this pin is inverted from the one ADR-023 left.
 
-    The counterpart pin in tests/test_region_clause_ab.py survived ADR-023's revert;
-    this one states the same thing from the follow-up's side, because the follow-up is
-    the next thing that would plausibly break it.
+    Through ADR-023 and the whole of this re-run, `main` shipped the v3.0.0 prompt
+    and this test asserted the clause's *absence*. ADR-024 adopted it after all four
+    pre-registered rules passed, so the assertion flips: the shipped prompt carries
+    the clause, and it is the same clause, in the same place, that was measured.
+
+    If this fails, the fix is a new ADR superseding ADR-024 -- not a green build.
     """
-    assert rr.REVISED_CLAUSE not in SYSTEM_PROMPT
-    assert "A US institution is not an American theater" not in SYSTEM_PROMPT
-    assert rr.candidate_prompt() != SYSTEM_PROMPT
+    assert rr.REVISED_CLAUSE in SYSTEM_PROMPT
+    assert rr.candidate_prompt() == SYSTEM_PROMPT
+    assert rr.clause_is_adopted()
+
+
+def test_the_adopted_prompt_is_byte_identical_to_the_measured_candidate():
+    """What ships is the arm that was measured, not a retyping of it.
+
+    This is the ADR-023 digest pin doing its second job. Before adoption it proved
+    the composed candidate was the prompt that produced the discordants; after
+    adoption the composed candidate *is* `SYSTEM_PROMPT`, so the same check now
+    proves the shipped classifier is the one the 595-row report describes.
+    """
+    live = hashlib.sha256(SYSTEM_PROMPT.encode("utf-8")).hexdigest()
+    assert live == rr.ADR023_CANDIDATE_PROMPT_SHA256
+    rr.assert_clause_reproduces_the_recorded_arm()
+
+
+def test_the_clause_sits_inside_the_region_block_of_the_shipped_prompt():
+    """Placement is load-bearing and adoption is where it would silently move.
+
+    `l4_pipeline` embeds `extract_region_block(SYSTEM_PROMPT)` verbatim and
+    `optimize.region_rubric_violations` freezes that same block, so a clause that
+    landed outside the region rules would be invisible to both -- and the 595-row
+    measurement would not describe what ships.
+    """
+    from optimize import extract_region_block
+
+    block = extract_region_block(SYSTEM_PROMPT)
+    assert block is not None, "the region block must still be extractable"
+    assert rr.REVISED_CLAUSE in block
+
+
+def test_the_pre_adoption_baseline_is_still_reconstructable():
+    """The other half of the arms: the prompt the frozen baseline rows were measured under.
+
+    Nothing in `classify.py` contains it any more, so this pins that stripping the
+    clause reproduces it exactly -- which is what lets the guard tests below keep
+    running against the classifier state the experiment actually ran in.
+    """
+    base = _pre_adoption_prompt()
+    assert rr.REVISED_CLAUSE not in base
+    assert (
+        hashlib.sha256(base.encode("utf-8")).hexdigest()
+        == rr.PRE_ADR024_BASELINE_PROMPT_SHA256
+    )
+
+
+def test_apply_clause_refuses_a_base_that_already_carries_it():
+    """Inserting it twice would compose a prompt no arm was ever measured under."""
+    with pytest.raises(ValueError, match="already carries the clause"):
+        rr.apply_clause(SYSTEM_PROMPT)
+
+
+def test_every_run_and_report_entry_point_refuses_once_the_clause_has_shipped():
+    """The experiment is over, and the harness has to say so rather than improvise.
+
+    Both arms of both rulers were bought against a baseline prompt this checkout no
+    longer contains, so nothing here can re-derive an honest comparison. The trap
+    this closes is the quiet one: after the adoption gold re-run,
+    `evals/gold_predictions_v3.csv` is produced BY the clause prompt, so
+    `assert_gold_baseline_is_the_shipped_arm` would pass and `--gold-report` would
+    compare the candidate arm against itself and print a 0.0-point lift.
+
+    Same treatment ADR-023 gave `region_clause_ab --report` when the verdict went the
+    other way: the committed reports are frozen records, read not regenerated.
+    """
+    for entry in (rr.run_key, rr.run_candidate, rr.run_gold, rr.report, rr.gold_report):
+        with pytest.raises(ValueError, match="has SHIPPED"):
+            entry()
+
+
+def test_the_refusal_names_the_frozen_reports_and_the_adr():
+    """A refusal that does not say where the answer lives is a dead end."""
+    with pytest.raises(ValueError) as excinfo:
+        rr.assert_the_clause_has_not_shipped_yet()
+    message = str(excinfo.value)
+    assert "evals/region_clause_rerun.txt" in message
+    assert "evals/region_clause_gold_rerun.txt" in message
+    assert "024-global-boundary-clause-adopted.md" in message
 
 
 def test_the_clause_lands_inside_the_region_rules_block_right_after_its_anchor():
@@ -91,12 +206,16 @@ def test_the_digest_guard_fires_when_the_clause_drifts(monkeypatch):
         rr.assert_clause_reproduces_the_recorded_arm()
 
 
-def test_the_candidate_fingerprint_describes_the_composed_classifier():
-    """Not SYSTEM_PROMPT's -- otherwise the sidecar would claim the arms are the same."""
+def test_the_candidate_fingerprint_describes_the_composed_classifier(pre_adoption):
+    """Not the baseline's -- otherwise the sidecar would claim the arms are the same.
+
+    Run against the pre-adoption baseline, because that is when the two prompts were
+    different and the distinction this guard makes was load-bearing.
+    """
     fingerprint = rr.candidate_fingerprint()
     assert fingerprint["prompt_sha256"] == rr.ADR023_CANDIDATE_PROMPT_SHA256
     assert fingerprint["workhorse_model"] == WORKHORSE_MODEL
-    live = provenance.fingerprint(SYSTEM_PROMPT, WORKHORSE_MODEL, JUDGE_MODEL)
+    live = provenance.fingerprint(pre_adoption, WORKHORSE_MODEL, JUDGE_MODEL)
     assert fingerprint["prompt_sha256"] != live["prompt_sha256"]
 
 
@@ -201,12 +320,13 @@ def test_frozen_arm_reuse_is_refused_when_a_sidecar_no_longer_matches(
         rr.assert_frozen_arms_are_still_ours()
 
 
-def test_the_frozen_arms_on_disk_pass_their_own_guard():
-    """The committed ADR-022/ADR-023 sidecars must still describe this checkout.
+def test_the_frozen_arms_on_disk_pass_their_own_guard(pre_adoption):
+    """The committed ADR-022/ADR-023 sidecars describe the classifier that made them.
 
-    If this fails on `main`, the reuse this module is built on has silently expired --
-    which is exactly the condition worth learning about from a test rather than from a
-    600-row report.
+    Checked against the reconstructed pre-adoption baseline, which is the honest
+    frame: those arms were bought under that prompt. Against the *shipped* prompt
+    this guard now fails by design, and that failure is what closes `--report` --
+    see `test_the_report_refuses_once_the_clause_has_shipped`.
     """
     rr.assert_frozen_arms_are_still_ours()
 
@@ -235,7 +355,7 @@ def _payload():
 
 
 def test_the_candidate_pass_sends_the_composed_prompt(
-    tmp_path, monkeypatch, batch_client
+    tmp_path, monkeypatch, batch_client, pre_adoption
 ):
     """The arm under test must actually carry the clause on the wire."""
     _batch_env(tmp_path, monkeypatch, ["s301", "s302"])
@@ -254,13 +374,22 @@ def test_the_candidate_pass_sends_the_composed_prompt(
 
 
 def test_the_answer_key_pass_sends_the_SHIPPED_prompt_to_both_models(
-    tmp_path, monkeypatch, batch_client
+    tmp_path, monkeypatch, batch_client, pre_adoption
 ):
-    """The judge grades under the baseline prompt, or the key means two things.
+    """The judge grades under the shipped prompt, or the key means two things.
 
-    ``classify()`` defaults both models to ``SYSTEM_PROMPT``; this pins that the
-    re-run does not quietly reroute the key pass through the candidate prompt to save
-    a code path.
+    ``classify()`` defaults both models to ``classify.SYSTEM_PROMPT``; this pins that
+    the re-run does not quietly reroute the key pass through the candidate prompt to
+    save a code path.
+
+    Note what adoption did to the *clause-absence* half of this pin: it deleted it.
+    Before ADR-024 "the shipped prompt" and "the prompt without the clause" named the
+    same string, so one assertion covered both. They are now the same string in the
+    other direction, and no assertion here can tell the two routings apart. That is
+    not a hole -- it is the reason `run_key` refuses outright on the shipped prompt
+    (`test_the_answer_key_pass_refuses_once_the_clause_has_shipped`). What is still
+    worth pinning, and is pinned here, is that the key pass reaches BOTH models
+    through `classify()`'s own default rather than a prompt this module composed.
     """
     _batch_env(tmp_path, monkeypatch, ["s301"])
     client = batch_client({"s301__workhorse": _payload(), "s301__judge": _payload()})
@@ -275,7 +404,6 @@ def test_the_answer_key_pass_sends_the_SHIPPED_prompt_to_both_models(
     }
     for request in sent:
         assert request["params"]["system"][0]["text"] == SYSTEM_PROMPT
-        assert rr.REVISED_CLAUSE not in request["params"]["system"][0]["text"]
 
 
 def test_the_candidate_pass_refuses_before_spending_when_the_clause_drifted(
@@ -294,7 +422,7 @@ def test_the_candidate_pass_refuses_before_spending_when_the_clause_drifted(
 
 
 def test_a_resume_across_a_classifier_change_is_refused_not_blended(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, pre_adoption
 ):
     """Half yesterday's prompt and half today's is a blend no fingerprint describes."""
     _batch_env(tmp_path, monkeypatch, ["s301", "s302"])
@@ -308,7 +436,9 @@ def test_a_resume_across_a_classifier_change_is_refused_not_blended(
         rr.run_candidate(batch=True)
 
 
-def test_a_complete_extension_makes_no_calls(tmp_path, monkeypatch, capsys):
+def test_a_complete_extension_makes_no_calls(
+    tmp_path, monkeypatch, capsys, pre_adoption
+):
     """Re-running a finished pass must not re-buy it."""
     _batch_env(tmp_path, monkeypatch, ["s301"])
     _arm(["s301"], judge=False).to_csv(rr.EXT_CANDIDATE_PATH, index=False)
@@ -384,7 +514,9 @@ def _report_env(tmp_path, monkeypatch, n, fixed=0, broken=0):
     monkeypatch.setattr(rr, "assert_frozen_arms_are_still_ours", lambda: None)
 
 
-def test_the_report_refuses_below_the_pre_registered_floor(tmp_path, monkeypatch):
+def test_the_report_refuses_below_the_pre_registered_floor(
+    tmp_path, monkeypatch, pre_adoption
+):
     """An underpowered run cannot decide the question, so the rule says do not spend.
 
     Enforced rather than printed: ADR-007's standing rule in this repo is that an
@@ -396,7 +528,7 @@ def test_the_report_refuses_below_the_pre_registered_floor(tmp_path, monkeypatch
 
 
 def test_the_report_scores_the_combined_arms_once_the_floor_is_cleared(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, pre_adoption
 ):
     """The happy path, and the numbers a reader would check first."""
     _report_env(tmp_path, monkeypatch, n=rr.MIN_EFFECTIVE_N, fixed=20, broken=4)
@@ -411,7 +543,9 @@ def test_the_report_scores_the_combined_arms_once_the_floor_is_cleared(
         assert handle.read() == text
 
 
-def test_the_report_refuses_a_partial_arm_rather_than_scoring_it(tmp_path, monkeypatch):
+def test_the_report_refuses_a_partial_arm_rather_than_scoring_it(
+    tmp_path, monkeypatch, pre_adoption
+):
     """Rule 4 of every version of this experiment: harness health is a gate."""
     _report_env(tmp_path, monkeypatch, n=rr.MIN_EFFECTIVE_N, fixed=20, broken=4)
     trimmed = pd.read_csv(rr.FROZEN_CANDIDATE_PATH).iloc[:-1]
@@ -447,7 +581,12 @@ def _gold_env(tmp_path, monkeypatch, spec, write_candidate=True):
 
     Every path this arm reads or writes is repointed into tmp_path, so a test can
     never touch the real published record even if a guard were removed.
+
+    The baseline sidecar is fingerprinted with the PRE-ADOPTION prompt, because that
+    is what the published 87.0% record was produced by and what these guards were
+    written to check. Callers pair this with the ``pre_adoption`` fixture.
     """
+    shipped_then = _pre_adoption_prompt()
     ids = [f"g{i:03d}" for i in range(1, len(spec) + 1)]
     gold, baseline, candidate = [], [], []
     for row_id, (human, base, cand) in zip(ids, spec):
@@ -488,7 +627,7 @@ def _gold_env(tmp_path, monkeypatch, spec, write_candidate=True):
     pd.DataFrame(gold).to_csv(gold_path, index=False)
     pd.DataFrame(baseline).to_csv(base_path, index=False)
     provenance.write(
-        provenance.fingerprint(SYSTEM_PROMPT, WORKHORSE_MODEL, JUDGE_MODEL),
+        provenance.fingerprint(shipped_then, WORKHORSE_MODEL, JUDGE_MODEL),
         str(base_path),
         path=str(base_prov),
     )
@@ -514,13 +653,14 @@ def _gold_env(tmp_path, monkeypatch, spec, write_candidate=True):
 
 
 def test_the_gold_pass_sends_the_clause_applied_prompt(
-    tmp_path, monkeypatch, batch_client
+    tmp_path, monkeypatch, batch_client, pre_adoption
 ):
     """The arm under test must carry the clause on the wire, or it measures nothing.
 
-    This is the defect the old step 5 had: it re-ran `gold_eval` under the SHIPPED
-    prompt, which on `main` carries no clause, so it would have re-measured the
-    baseline and reported it as the candidate.
+    This is the defect the old step 5 had: it re-ran `gold_eval` under the shipped
+    prompt, which at the time carried no clause, so it would have re-measured the
+    baseline and reported it as the candidate. `pre_adoption` restores that frame --
+    the distinction only exists while the two prompts differ.
     """
     _gold_env(tmp_path, monkeypatch, _PASS_SPEC, write_candidate=False)
     ids = [f"g{i:03d}" for i in range(1, len(_PASS_SPEC) + 1)]
@@ -533,15 +673,21 @@ def test_the_gold_pass_sends_the_clause_applied_prompt(
     for request in sent:
         assert request["params"]["system"][0]["text"] == rr.candidate_prompt()
         assert rr.REVISED_CLAUSE in request["params"]["system"][0]["text"]
-        assert request["params"]["system"][0]["text"] != SYSTEM_PROMPT
+        assert request["params"]["system"][0]["text"] != pre_adoption
     recorded = provenance.load(rr.GOLD_CANDIDATE_PROVENANCE_PATH)["recorded"]
     assert recorded["prompt_sha256"] == rr.ADR023_CANDIDATE_PROMPT_SHA256
 
 
-def test_the_clause_assertion_refuses_the_shipped_prompt_outright():
-    """The assertion itself, isolated from the digest pin that also guards it."""
+def test_the_clause_assertion_refuses_a_prompt_without_the_clause():
+    """The assertion itself, isolated from the digest pin that also guards it.
+
+    It used to be handed `SYSTEM_PROMPT`, because before ADR-024 that was the
+    clause-free prompt. Adoption inverted that, so the pre-adoption baseline is now
+    the string that has to be refused -- the guard's subject was always "a prompt
+    without the clause", not "the shipped prompt".
+    """
     with pytest.raises(ValueError, match="does not carry the clause"):
-        rr.assert_prompt_carries_the_clause(SYSTEM_PROMPT)
+        rr.assert_prompt_carries_the_clause(_pre_adoption_prompt())
     with pytest.raises(ValueError, match="does not carry the clause"):
         rr.assert_prompt_carries_the_clause("some other prompt entirely")
     rr.assert_prompt_carries_the_clause(rr.candidate_prompt())
@@ -563,7 +709,7 @@ def test_the_gold_pass_refuses_before_spending_when_the_clause_drifted(
 
 
 def test_the_gold_report_refuses_an_arm_produced_by_the_shipped_prompt(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, pre_adoption
 ):
     """The report-side half of "this cannot run under the shipped prompt".
 
@@ -572,7 +718,7 @@ def test_the_gold_report_refuses_an_arm_produced_by_the_shipped_prompt(
     """
     _gold_env(tmp_path, monkeypatch, _PASS_SPEC)
     provenance.write(
-        provenance.fingerprint(SYSTEM_PROMPT, WORKHORSE_MODEL, JUDGE_MODEL),
+        provenance.fingerprint(pre_adoption, WORKHORSE_MODEL, JUDGE_MODEL),
         rr.GOLD_CANDIDATE_PATH,
         path=rr.GOLD_CANDIDATE_PROVENANCE_PATH,
     )
@@ -581,7 +727,7 @@ def test_the_gold_report_refuses_an_arm_produced_by_the_shipped_prompt(
 
 
 def test_the_gold_report_refuses_a_baseline_the_shipped_prompt_did_not_make(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, pre_adoption
 ):
     """Rule 3 compares to the PUBLISHED 87.0%, so that half must be the shipped arm."""
     _gold_env(tmp_path, monkeypatch, _PASS_SPEC)
@@ -647,7 +793,7 @@ def test_this_rounds_gold_paths_are_new_and_collide_with_nothing_frozen():
 
 
 def test_the_gold_pass_refuses_before_spending_if_it_would_write_the_published_record(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, pre_adoption
 ):
     """The end-to-end version: a mis-set constant stops the run, it does not delete."""
     _gold_env(tmp_path, monkeypatch, _PASS_SPEC, write_candidate=False)
@@ -664,7 +810,7 @@ def test_the_gold_pass_refuses_before_spending_if_it_would_write_the_published_r
 
 
 def test_the_published_gold_record_is_untouched_by_a_whole_run_and_report(
-    tmp_path, monkeypatch, batch_client
+    tmp_path, monkeypatch, batch_client, pre_adoption
 ):
     """The property San actually cares about: the bytes on disk do not move."""
     before = {
@@ -686,7 +832,7 @@ def test_the_published_gold_record_is_untouched_by_a_whole_run_and_report(
 
 
 def test_the_gold_pass_makes_one_workhorse_call_per_row_and_no_judge_call(
-    tmp_path, monkeypatch, batch_client
+    tmp_path, monkeypatch, batch_client, pre_adoption
 ):
     """54 calls, not 108. The judge answers no part of a human-graded check."""
     _gold_env(tmp_path, monkeypatch, _PASS_SPEC, write_candidate=False)
@@ -702,7 +848,9 @@ def test_the_gold_pass_makes_one_workhorse_call_per_row_and_no_judge_call(
     assert JUDGE_MODEL not in {request["params"]["model"] for request in sent}
 
 
-def test_the_synchronous_gold_pass_also_never_reaches_the_judge(tmp_path, monkeypatch):
+def test_the_synchronous_gold_pass_also_never_reaches_the_judge(
+    tmp_path, monkeypatch, pre_adoption
+):
     """The batch and sync paths are different call builders; both need the pin."""
     _gold_env(tmp_path, monkeypatch, _PASS_SPEC, write_candidate=False)
     calls = []
@@ -748,7 +896,7 @@ def test_rule_three_is_computed_against_the_human_labels(tmp_path, monkeypatch):
 
 
 def test_the_gold_report_states_the_bar_the_verdict_and_the_adoption_caveat(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, pre_adoption
 ):
     """A pass, and every claim a reader would check first."""
     _gold_env(tmp_path, monkeypatch, _PASS_SPEC)
@@ -763,7 +911,9 @@ def test_the_gold_report_states_the_bar_the_verdict_and_the_adoption_caveat(
         assert handle.read() == text
 
 
-def test_the_gold_report_says_FAILS_when_the_bar_is_missed(tmp_path, monkeypatch):
+def test_the_gold_report_says_FAILS_when_the_bar_is_missed(
+    tmp_path, monkeypatch, pre_adoption
+):
     """The bar has to be able to fail, or reporting it is decoration."""
     _gold_env(tmp_path, monkeypatch, _FAIL_SPEC)
     text = rr.gold_report()
@@ -772,7 +922,7 @@ def test_the_gold_report_says_FAILS_when_the_bar_is_missed(tmp_path, monkeypatch
 
 
 def test_the_gold_report_carries_the_prior_rounds_number_when_it_is_present(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, pre_adoption
 ):
     """ADR-023 already measured this byte-identical clause on these same rows."""
     _gold_env(tmp_path, monkeypatch, _PASS_SPEC)
@@ -784,7 +934,7 @@ def test_the_gold_report_carries_the_prior_rounds_number_when_it_is_present(
 
 
 def test_the_gold_report_refuses_a_partial_arm_rather_than_scoring_it(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, pre_adoption
 ):
     """Same rule-4 logic as the scale arm: a short arm is a shrunken comparison."""
     _gold_env(tmp_path, monkeypatch, _PASS_SPEC)
@@ -795,7 +945,9 @@ def test_the_gold_report_refuses_a_partial_arm_rather_than_scoring_it(
         rr.gold_report()
 
 
-def test_a_complete_gold_arm_makes_no_calls(tmp_path, monkeypatch, capsys):
+def test_a_complete_gold_arm_makes_no_calls(
+    tmp_path, monkeypatch, capsys, pre_adoption
+):
     """Re-running a finished pass must not re-buy it."""
     _gold_env(tmp_path, monkeypatch, _PASS_SPEC)
 
@@ -810,7 +962,7 @@ def test_a_complete_gold_arm_makes_no_calls(tmp_path, monkeypatch, capsys):
 # --- the CLI ---------------------------------------------------------------
 
 
-def test_neither_report_flag_ever_builds_a_client(tmp_path, monkeypatch):
+def test_neither_report_flag_ever_builds_a_client(tmp_path, monkeypatch, pre_adoption):
     """The offline guarantee, checked through main() rather than the functions."""
     _report_env(tmp_path, monkeypatch, n=rr.MIN_EFFECTIVE_N, fixed=20, broken=4)
     _gold_env(tmp_path, monkeypatch, _PASS_SPEC)

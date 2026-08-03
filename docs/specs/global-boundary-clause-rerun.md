@@ -1,10 +1,11 @@
 # Feature Spec — the `global`-boundary clause, re-registered at adequate power
 
-**Version:** 1.1
-**Status:** **PRE-REGISTERED — steps 1–4 RUN (owner-driven, 2026-08-02); step 5
-outstanding.** §6 was written before any number existed, and is **unchanged since**;
-that is what makes it a pre-registration rather than a summary. See *Run status* below
-for what has landed and which rules already pass.
+**Version:** 1.2
+**Status:** **COMPLETE — all steps run, all four rules PASSED, clause ADOPTED as
+`v3.2.1` on 2026-08-03 ([ADR-024](../../decisions/024-global-boundary-clause-adopted.md)).**
+§6 was written before any number existed and is **unchanged since** — including through
+the verdict; that is what makes it a pre-registration rather than a summary. See
+*Run status* below.
 **Author:** San Lee
 **Last updated:** 2026-08-02
 **Roadmap fit:** unversioned until measured. A shipped clause would be a **PATCH**
@@ -317,8 +318,25 @@ for every number here.
 | 0. Effective n ≥ 545 | ✅ **passes** (595) |
 | 1. Region `F − B > 0` and p < 0.05 | ✅ **passes** (+12 net, p = 0.0002) |
 | 2. No significant guardrail harm | ✅ **passes** (kill condition never fired) |
-| 3. Gold region ≥ 87.0%, no gated floor breached | ⏳ **outstanding — this is step 5** |
+| 3. Gold region ≥ 87.0%, no gated floor breached | ✅ **passes** (92.6%; all eight floors clear) |
 | 4. Harness health clean | ✅ **passes** |
+
+**Step 5 ran 2026-08-03** through the guarded `--run-gold` path — 54 workhorse calls, zero
+judge calls, nothing published written. Human-graded region **87.0% → 92.6%** (47/54 →
+50/54) against the pre-registered 87.0% bar. Report:
+[`evals/region_clause_gold_rerun.txt`](../../evals/region_clause_gold_rerun.txt).
+
+**Rule 3's second half was answered at adoption**, as §7 step 5 said it had to be: the clause
+entered `SYSTEM_PROMPT`, the full gold record was re-run (workhorse *and* judge, 108 calls),
+and `src/eval_gate.py` graded all eight floors under the adopted prompt. **All pass, none
+moved or waived.** `judge_region_agreement` — the floor this rule names explicitly — fell
+100.0% → **96.3%** against its 0.93 floor, i.e. 2 judge-vs-human disagreements against a
+budget of 3. That is the number that would have stopped the release.
+
+**VERDICT: all four rules pass → SHIP.** The clause is adopted, `SYSTEM_PROMPT` moves
+`a59689e8…` → `b0202d06…`, and the version is `v3.2.1` (PATCH) exactly as §9 planned. The
+adoption record, including the §9 marker cascade, is
+[ADR-024](../../decisions/024-global-boundary-clause-adopted.md).
 
 **The domain improvement is recorded, not banked** — §6.1's registration rule is
 unchanged and an unregistered gain still cannot contribute to shipping.
