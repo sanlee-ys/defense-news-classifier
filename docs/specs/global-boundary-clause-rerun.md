@@ -1,9 +1,10 @@
 # Feature Spec — the `global`-boundary clause, re-registered at adequate power
 
-**Version:** 1.0
-**Status:** **PRE-REGISTERED — run-ready, not yet run.** No API call has been made
-against this design. §6 is the decision rule and is written before any number exists;
-that is what makes it a pre-registration rather than a summary.
+**Version:** 1.1
+**Status:** **PRE-REGISTERED — steps 1–4 RUN (owner-driven, 2026-08-02); step 5
+outstanding.** §6 was written before any number existed, and is **unchanged since**;
+that is what makes it a pre-registration rather than a summary. See *Run status* below
+for what has landed and which rules already pass.
 **Author:** San Lee
 **Last updated:** 2026-08-02
 **Roadmap fit:** unversioned until measured. A shipped clause would be a **PATCH**
@@ -294,6 +295,40 @@ rate):
 Every command from the repo root. **Step 1 is free.** Steps 2–3 spend; the counts scale
 with the achieved extension size `k`.
 
+### Run status *(record of what has happened — the rules above are unchanged)*
+
+**Steps 1–4 ran on 2026-08-02, owner-driven** (PR #164). The report is committed at
+[`evals/region_clause_rerun.txt`](../../evals/region_clause_rerun.txt) and is the source
+for every number here.
+
+| | Achieved |
+|---|---|
+| Effective n (post-deduplication) | **595** (295 frozen + 300 extension, 5 exact duplicates excluded) |
+| Design power at the observed effect | **0.837** |
+| Scale region, baseline → candidate | 89.9% → **94.1%** (**+4.2%**) |
+| Region discordants (cand / base) | **35 / 10**, **McNemar p = 0.0002** |
+| Category (guardrail) | +0.7%, p = 0.4807 — flat |
+| Operational domain (guardrail) | +3.5%, p = 0.0011 — an *improvement* |
+| Named pulls fixed / correct rows broken | **F = 20** of 32, **B = 8** |
+| Harness health | clean: 595 groups / 595 pairs / 595 eligible on all three axes |
+
+| Rule (§6) | Status |
+|---|---|
+| 0. Effective n ≥ 545 | ✅ **passes** (595) |
+| 1. Region `F − B > 0` and p < 0.05 | ✅ **passes** (+12 net, p = 0.0002) |
+| 2. No significant guardrail harm | ✅ **passes** (kill condition never fired) |
+| 3. Gold region ≥ 87.0%, no gated floor breached | ⏳ **outstanding — this is step 5** |
+| 4. Harness health clean | ✅ **passes** |
+
+**The domain improvement is recorded, not banked** — §6.1's registration rule is
+unchanged and an unregistered gain still cannot contribute to shipping.
+
+**Step 5 is the only outstanding work, and its procedure was rewritten** on 2026-08-03
+after the original instruction ("run ADR-023 spec §7 step 2 verbatim") was found to be
+both destructive and uninformative under this spec's own §3 design. Step 5 below carries
+the correction and the reasoning. **No pre-registered rule, threshold, power floor, or
+verdict wording was changed** — only the procedure that answers rule 3.
+
 ### Step 0 — free pre-checks
 
 ```bash
@@ -381,11 +416,90 @@ gold arm was run alongside the scale arm and cost 108 calls plus a delete-and-re
 dance across the published `evals/gold_predictions_v3.csv`, whose numbers five repos'
 markers hang off — for an arm that could not decide anything on its own at n=54. Rule 3
 is a *non-regression* check on the human labels, so it only has to be answered if rule 1
-passes. If it does, run the ADR-023 spec's §7 step 2 verbatim, including its undo line:
+passes.
 
 ```bash
-git checkout -- evals/gold_predictions_v3.csv evals/gold_predictions_v3.provenance.json
+uv run --env-file .env python src/region_clause_rerun.py --run-gold
+uv run python src/region_clause_rerun.py --gold-report
 ```
+
+**54 workhorse calls. Zero judge calls. Nothing published is written.** Add `--batch`
+for the ~50% discount if an unattended run is preferred; at n=54 the synchronous path
+is usually the better trade, because batch results land only when the whole batch ends.
+
+**Cost: ≈$0.32 synchronous, ≈$0.16 batch** — derived from this spec's own per-call rate
+below (870 Sonnet 5 workhorse calls at $5.15 sync / $2.60 batch), so it inherits the
+same caveats: the ~2425-token prefix sizing is stale-low and caching is not banked, and
+those push in opposite directions. Under $0.50 either way. `--gold-report` is free and
+repeatable.
+
+#### Why this step was rewritten *(procedure only — the rule in §6 is untouched)*
+
+The earlier text said to run "the ADR-023 spec's §7 step 2 verbatim, including its undo
+line". **That instruction was written for a design that no longer exists, and following
+it here would have been destructive and uninformative at the same time.** ADR-023's arm
+lived inside `classify.SYSTEM_PROMPT` on a branch, so deleting the published gold record
+and re-running `src/gold_eval.py` genuinely measured the candidate — the shipped prompt
+*was* the candidate prompt on that checkout. §3 of this spec replaced that with run-time
+clause application, and step 5 was never updated to match. On `main`, verbatim, it would:
+
+1. **Delete `evals/gold_predictions_v3.csv` and its sidecar** — the published v3.2.0
+   record, restored only by a hand-typed `git checkout --` that an aborted run leaves
+   unrun. A convention, not a guard.
+2. **Spend ~108 calls** — `gold_eval.main()` re-runs the workhorse *and* the Opus judge.
+3. **Measure the BASELINE.** `main`'s `SYSTEM_PROMPT` carries no clause, and neither
+   `src/gold_eval.py`'s CLI (`--batch` only) nor `src/region_clause_rerun.py`'s
+   (`--run-key`, `--run-candidate`, `--report`) had any way to point a gold pass at the
+   clause-applied prompt. The run would have answered nothing about the clause.
+
+The corrected protocol fixes all three, and each fix is enforced in code rather than
+written down:
+
+- **The clause, pinned.** `--run-gold` composes the candidate prompt through the same
+  run-time mechanism `--run-candidate` uses, under the same `sha256` pin to
+  `b0202d06…`, plus `assert_prompt_carries_the_clause` on the exact string going on the
+  wire. The report side refuses a candidate arm whose sidecar records the shipped
+  prompt, so "this cannot run under the shipped prompt" holds end to end.
+- **The published record is unwritable.** `assert_writable_gold_artifact` refuses any
+  destination resolving to `gold_predictions_v3.csv`, its sidecar, `gold_eval_v3.txt`,
+  `metrics.json`, or ADR-023's frozen gold arm. **There is therefore no undo line, and
+  the one that used to be here is deleted rather than reworded** — a restore step is
+  only needed by a protocol that breaks something first. New artifacts, in the
+  `region_clause_gold_*` family ADR-023 established for paid gold data, with this
+  round's `_rerun` suffix: `evals/region_clause_gold_rerun.csv`, its
+  `.provenance.json`, and `evals/region_clause_gold_rerun.txt`.
+- **54 calls, not 108.** Rule 3's answer key is the **frozen human labels** in
+  `data/gold/gold.csv`, which no API call produces. ADR-023's 108 came from `gold_eval`
+  re-running a judge pass; the judge is a *scalable stand-in* for human labels and is
+  simply not needed where the human labels themselves are the ruler. The pass runs
+  through `region_clause_ab.run_workhorse`, which has no judge request to build, and a
+  test pins that no call carries `JUDGE_MODEL`.
+
+#### What the report says, and what it deliberately does not
+
+`--gold-report` prints candidate human-graded region accuracy against the published
+87.0% baseline, the per-claim fixed/broken id lists, the human-graded named-`global`
+cluster accounting, and category/domain as **secondary context, not gates** — the
+pre-registered guardrail test is rule 2 and it runs on the scale arm, where it has power.
+
+**Rule 3's second half — "no gated floor in `evals/thresholds.toml` is breached,
+including `judge_region_agreement`" — is an adoption-time question, and this arm cannot
+breach it.** `src/eval_gate.py` grades those floors against
+`evals/gold_predictions_v3.csv`, the published record produced by `classify.SYSTEM_PROMPT`,
+which this measurement leaves byte-identical; `judge_region_agreement` is a judge-vs-human
+number no call here produces. Those floors can only move when the clause enters
+`SYSTEM_PROMPT` and the full gold re-run happens — see §9.
+
+**Context the report also prints, and which is worth reading before spending.** ADR-023's
+paid gold arm ran this **byte-identical** clause over these **same 54 rows** and scored
+**94.4%** region against the human labels; rule 3 passed there. That arm is frozen at
+`evals/region_clause_gold_candidate.csv` and is not re-bought. So step 5 is an
+*independent confirmatory draw*, not the only evidence available — and a disagreement
+between the two should be read as n=54 sampling noise before it is read as an effect.
+Whether that prior arm alone is sufficient to answer rule 3 for this round is an owner
+call this spec does not make: it has no provenance sidecar (ADR-023 §*Where the
+candidate's gold numbers live* explains why), so its reuse can be argued but not
+*guarded*, and this repo's practice is guarded reuse.
 
 ### Step 6 — free verification
 
