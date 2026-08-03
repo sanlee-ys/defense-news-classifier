@@ -1,0 +1,91 @@
+==============================================================
+`global`-BOUNDARY CLAUSE -- HIGHER-POWER RE-RUN (ADR-023 follow-up)
+==============================================================
+
+Snippets scored   : 595   (effective, after duplicate removal)
+  frozen ADR-022 set          : 295   (data/scale/scale_set.csv)
+  extension                   : 300   (data/scale/scale_set_ext.csv)
+  excluded as exact duplicates: 5  (s023, s025, s079, s080, s240)
+Workhorse         : claude-sonnet-5
+Answer key        : claude-opus-4-8 judge labels, baseline prompt
+Answer-key digest : 4148a7d7cf8dcaa3   (recomputable from the committed CSVs)
+
+-- Design power, stated before the numbers -----------------
+Computed by src/mcnemar_power.py at this exact n, under the
+ADR-023 discordant rates. This is a DESIGN figure: it says what
+this n can decide, not how much to believe the result below.
+
+  power at the observed effect (19/8) : 0.837
+  power if the true effect is 75% of it: 0.575
+  (ADR-023 ran at n=295, power 0.490)
+
+The clause is applied at RUN TIME from a recorded source, and its
+composed prompt is pinned to the fingerprint the paid ADR-023 run
+recorded (b0202d06a876cc06...). classify.SYSTEM_PROMPT
+is the shipped prompt here and on main -- no branch carries the clause.
+
+-- Paired comparison, per axis -----------------------------
+Region is the target. Category and domain are GUARDRAILS (ADR-020).
+McNemar p is over ALL discordant pairs on the axis, not only F and B.
+
+axis                    base    cand     lift      c/b/tie   McNemar p
+region                 89.9%   94.1%    +4.2%    35/10/550      0.0002
+category               93.4%   94.1%    +0.7%     11/7/577      0.4807
+operational_domain     89.4%   92.9%    +3.5%     30/9/556      0.0011
+
+-- The named `global` cluster ------------------------------
+The rows the clause was written for: answer-key `global` that the
+BASELINE pulled to a specific region (ADR-022 measured 17 at n=300).
+
+Named pulls in the baseline     : 32
+  fixed by the clause           : 20   (62%)
+  still pulled                  : 12
+
+-- The converse, which is how this clause could lose --------
+A clause that moves rows toward `global` buys its fixes with
+over-calls. Both directions or neither.
+
+Over-called `global`, baseline  : 20
+Over-called `global`, candidate : 18
+  of which NEW                  : 8
+
+B, AS THE DECISION RULE DEFINES IT -- rows the baseline got RIGHT
+that the candidate drags to `global`. Distinct from `NEW` above,
+which also counts rows that were already wrong (wrong-region ->
+`global` costs nothing; it was a miss either way).
+
+F (named pulls fixed)           : 20
+B (correct rows dragged global) : 8
+Regressions on any label        : 10
+
+-- Net, on region rows -------------------------------------
+Region correct, baseline        : 535/595
+Region correct, candidate       : 560/595
+Net row change                  : +25
+
+Fixed ids       : s126, s157, s129, s134, s067, s141, s288, s256, s131, s263, s259, s107, s404, s361, s327, s364, s360, s326, s390, s396
+Still pulled    : s020, s271, s204, s070, s283, s359, s487, s387, s366, s373, s491, s312
+Newly over-called: s144, s101, s116, s276, s241, s299, s251, s320
+B ids           : s144, s101, s116, s276, s241, s299, s251, s320
+
+-- Harness health ------------------------------------------
+A lift computed over a harness that dropped rows is not a finding.
+
+  region               groups=595  pairs=595  eligible=595
+                       clean -- every group paired and scored
+  category             groups=595  pairs=595  eligible=595
+                       clean -- every group paired and scored
+  operational_domain   groups=595  pairs=595  eligible=595
+                       clean -- every group paired and scored
+
+-- How to read this ----------------------------------------
+Accuracy is agreement with the JUDGE, not with a human. ADR-022's
+caveat carries: the judge's measured disagreement with humans on
+region was 0/54, itself a wide interval. More rows buy power, not
+a better-calibrated ruler -- the answer key's documented
+self-inconsistencies (ADR-023 section 2.1) reproduce at the same
+rate in a larger sample from the same source.
+
+The decision rule is pre-registered in
+docs/specs/global-boundary-clause-rerun.md and is canonical there.
+==============================================================
