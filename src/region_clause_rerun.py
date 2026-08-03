@@ -52,21 +52,56 @@ to it, so a run with the clause installed globally would grade the new rows unde
 the candidate prompt while the frozen 295 stayed graded under the baseline. The
 answer key would then mean two different things in one file.
 
+THE GOLD ARM (rule 3), AND WHY IT IS A PURPOSE-BUILT PATH RATHER THAN ``gold_eval``
+==================================================================================
+
+Rule 3 of the pre-registration is a **non-regression check on the human labels**:
+candidate human-graded region accuracy must stay at or above the published 87.0%.
+The spec's step 5 originally said to run "ADR-023 spec section 7 step 2 verbatim",
+which was written for the ADR-023 *design*, where the clause lived inside
+``classify.SYSTEM_PROMPT`` on a branch. Under that design, deleting
+``evals/gold_predictions_v3.csv`` and re-running ``gold_eval.py`` did measure the
+candidate, because the shipped prompt *was* the candidate prompt on that branch.
+
+PR #160 replaced that design with run-time clause application, and step 5 was never
+updated. Followed verbatim on `main` it would now (a) delete the published v3.2.0
+gold record that markers in several repos depend on, (b) spend ~108 calls, and
+(c) measure the BASELINE, because ``main``'s ``SYSTEM_PROMPT`` carries no clause --
+answering nothing about the clause. :func:`run_gold` is the corrected protocol:
+
+- **The clause-applied prompt, pinned.** Same run-time mechanism and the same
+  sha256 pin to ADR-023's ``b0202d06...`` that ``--run-candidate`` uses, plus
+  :func:`assert_prompt_carries_the_clause` on the exact string about to go on the
+  wire, so the shipped prompt cannot be sent by accident.
+- **54 calls, not 108, and no judge call at all.** ADR-023's 108 came from
+  ``gold_eval`` re-running the workhorse *and* judge passes. The judge is
+  irrelevant to rule 3: the answer key is the **frozen human labels** in
+  ``data/gold/gold.csv``, which no API call can produce. The pass therefore runs
+  through ``region_clause_ab.run_workhorse``, which has no judge request to build.
+- **The published record is unwritable, mechanically.**
+  :func:`assert_writable_gold_artifact` refuses any write whose destination
+  resolves to a published or frozen gold artifact, so there is no delete-and-restore
+  dance and no undo line to remember.
+
 WHAT IS NEVER TOUCHED. ``data/scale/scale_set.csv``, ``evals/scale_predictions_v3.csv``
 and its sidecar, ``evals/region_clause_candidate.csv`` and its sidecar,
-``evals/region_clause_ab.txt``, the gold set, ``evals/metrics.json``,
-``evals/thresholds.toml``, and ``classify.SYSTEM_PROMPT``. New snippets land in a
-NEW file (``data/scale/scale_set_ext.csv``) rather than being appended to the
-frozen set, because appending would silently redefine what every committed
-``s001..s300`` artifact is a measurement *of* -- and would break
+``evals/region_clause_ab.txt``, the gold set, ``evals/gold_predictions_v3.csv`` and its
+sidecar, ``evals/gold_eval_v3.txt``, ADR-023's frozen gold arm
+(``evals/region_clause_gold_candidate.csv``, ``evals/region_clause_gold_eval.txt``),
+``evals/metrics.json``, ``evals/thresholds.toml``, and ``classify.SYSTEM_PROMPT``. New
+snippets land in a NEW file (``data/scale/scale_set_ext.csv``) rather than being
+appended to the frozen set, because appending would silently redefine what every
+committed ``s001..s300`` artifact is a measurement *of* -- and would break
 ``region_clause_ab``'s answer-key completeness guard, which requires the key to
 cover exactly the committed scale set.
 
-Run -- every live pass is owner-driven; the report is free and offline:
+Run -- every live pass is owner-driven; both reports are free and offline:
 
     uv run --env-file .env python src/region_clause_rerun.py --run-key --batch
     uv run --env-file .env python src/region_clause_rerun.py --run-candidate --batch
     uv run python src/region_clause_rerun.py --report
+    uv run --env-file .env python src/region_clause_rerun.py --run-gold
+    uv run python src/region_clause_rerun.py --gold-report
 
 The decision rule this measures against is pre-registered in
 ``docs/specs/global-boundary-clause-rerun.md`` and is canonical there.
@@ -80,6 +115,7 @@ import os
 
 import pandas as pd
 
+import gold_eval
 import mcnemar_power
 import paired_compare
 import provenance
@@ -234,9 +270,58 @@ EXT_CANDIDATE_PROVENANCE_PATH = "evals/region_clause_ext_candidate.provenance.js
 
 REPORT_PATH = "evals/region_clause_rerun.txt"
 
+# --- The gold arm (step 5 / rule 3) ----------------------------------------
+#
+# Naming: the `region_clause_gold_*` family ADR-023 established for paid gold data,
+# with this round's `_rerun` suffix -- the same suffix the scale side of this round
+# already uses (`evals/region_clause_rerun.txt`). It cannot collide with ADR-023's
+# `region_clause_gold_candidate.csv` / `region_clause_gold_eval.txt`, which are frozen
+# records of the PREVIOUS round and are listed below as unwritable.
+GOLD_SET_PATH = gold_eval.GOLD_PATH
+GOLD_BASELINE_PATH = gold_eval.PREDS_PATH
+GOLD_BASELINE_PROVENANCE_PATH = provenance.PROVENANCE_PATH
+GOLD_CANDIDATE_PATH = "evals/region_clause_gold_rerun.csv"
+GOLD_CANDIDATE_PROVENANCE_PATH = "evals/region_clause_gold_rerun.provenance.json"
+GOLD_REPORT_PATH = "evals/region_clause_gold_rerun.txt"
+
+# ADR-023's paid gold arm, run under this same byte-identical clause. Read-only, and
+# printed as context in the report: rule 3 already passed once at 94.4% on these same
+# 54 rows, so this round's gold arm is an independent confirmatory draw rather than
+# the only evidence. Nothing is computed FROM it -- see gold_report().
+ADR023_GOLD_CANDIDATE_PATH = "evals/region_clause_gold_candidate.csv"
+
+# Rule 3's pre-registered bar, quoted from the spec's section 6: "human-graded region
+# accuracy >= 87.0%". A constant rather than a recomputation, because the bar is
+# pre-registered text and must not silently follow the file it was derived from.
+GOLD_REGION_BAR = 0.870
+
+# Destinations this module refuses to write, resolved as paths rather than compared as
+# strings. The first three are the published v3.2.0 gold record and the surface
+# generated from it -- what ADR-023's step 2 deleted and had to restore from git, and
+# what markers in several repos hang off. The last two are ADR-023's frozen gold arm.
+# Enforced rather than documented: a frozen record protected only by a naming
+# convention is one careless constant away from being regenerated.
+FROZEN_GOLD_ARTIFACTS = (
+    gold_eval.PREDS_PATH,
+    provenance.PROVENANCE_PATH,
+    gold_eval.REPORT_PATH,
+    "evals/metrics.json",
+    ADR023_GOLD_CANDIDATE_PATH,
+    "evals/region_clause_gold_eval.txt",
+)
+
 AXES = ab.AXES
 GLOBAL = ab.GLOBAL
 PRIMARY_AXIS = ab.PRIMARY_AXIS
+
+# (axis, human-label column in the gold set after `domain` -> `operational_domain`).
+# Region is the target of rule 3; the other two are reported as secondary context, not
+# as gates -- the pre-registered guardrail test is rule 2, and it runs on the scale arm.
+GOLD_AXES = [
+    ("region", "region"),
+    ("category", "category"),
+    ("operational_domain", "operational_domain"),
+]
 
 # The pre-registered floor from the spec: below this many EFFECTIVE (deduplicated)
 # pairs, the follow-up is not worth its own cost, because the design would still
@@ -545,6 +630,374 @@ def _report_partial(preds_path: str, snippets: pd.DataFrame) -> None:
 
 
 # ---------------------------------------------------------------------------
+# The gold arm (step 5 / rule 3): 54 workhorse calls, no judge call, and no way
+# to reach the published record.
+# ---------------------------------------------------------------------------
+
+
+def _resolve(path: str) -> str:
+    """Normalize a path for identity comparison, case-insensitively on Windows."""
+    return os.path.normcase(os.path.normpath(os.path.abspath(path)))
+
+
+def assert_writable_gold_artifact(path: str) -> None:
+    """Refuse a write whose destination is a published or frozen gold artifact.
+
+    ADR-023's step 2 wrote the candidate's gold numbers straight into
+    ``evals/gold_predictions_v3.csv`` and relied on a hand-typed ``git checkout --``
+    to put the published record back. That is a convention, not a guard, and it fails
+    in exactly the case it is needed: an aborted run nobody restored. This makes the
+    published record unreachable from this module instead.
+
+    Compared as resolved paths rather than strings, so ``evals/../evals/metrics.json``
+    and a differently-cased Windows spelling are caught too.
+
+    Args:
+        path: The destination about to be written.
+
+    Raises:
+        ValueError: If the destination resolves to a frozen or published artifact.
+    """
+    target = _resolve(path)
+    for frozen in FROZEN_GOLD_ARTIFACTS:
+        if target == _resolve(frozen):
+            raise ValueError(
+                f"Refusing to write {path!r}: it resolves to {frozen}, a published or "
+                "frozen record.\n\nThe gold arm of this re-run writes only NEW "
+                f"artifacts ({GOLD_CANDIDATE_PATH}, {GOLD_REPORT_PATH}). The published "
+                "v3.2.0 gold record is what several repos' markers hang off, and "
+                "ADR-023's frozen gold arm is the previous round's evidence -- neither "
+                "is a scratch file this experiment gets to re-baseline. If the clause "
+                "is ADOPTED, the full gold re-run happens under the adopted "
+                "SYSTEM_PROMPT via src/gold_eval.py, on purpose and with the marker "
+                "cascade in docs/v3.2.0-release-runbook.md."
+            )
+
+
+def assert_prompt_carries_the_clause(prompt: str) -> None:
+    """Refuse to send the gold arm out under the shipped prompt.
+
+    :func:`assert_clause_reproduces_the_recorded_arm` proves the *composed* prompt is
+    ADR-023's; it says nothing about which string a caller then hands to the wire. This
+    checks the actual argument, so the one failure that would make step 5 silently
+    useless -- re-measuring the baseline and reporting it as the candidate, which is
+    precisely what the old step 5 did -- cannot happen without raising.
+
+    Args:
+        prompt: The system prompt about to be sent.
+
+    Raises:
+        ValueError: If the prompt is the shipped one, or does not carry the clause.
+    """
+    if prompt == SYSTEM_PROMPT or REVISED_CLAUSE not in prompt:
+        raise ValueError(
+            "The gold arm was about to run under a prompt that does not carry the "
+            "clause. That measures the BASELINE and reports it as the candidate -- "
+            "rule 3 would then be answered by the shipped classifier grading itself. "
+            "The candidate prompt must come from candidate_prompt()."
+        )
+
+
+def assert_gold_candidate_is_the_clause_arm() -> None:
+    """Refuse to score a gold arm that some other classifier produced.
+
+    The run-side counterpart is :func:`assert_prompt_carries_the_clause`; this is the
+    report side, and it is what makes "this path cannot run under the shipped prompt"
+    true end to end rather than only at dispatch. A hand-placed CSV at
+    :data:`GOLD_CANDIDATE_PATH` is refused here even though no call was made.
+
+    Raises:
+        FileNotFoundError: If the sidecar is absent -- an unknown arm must not read as
+            a verified one.
+        ValueError: If the recorded fingerprint is not the composed candidate's.
+    """
+    recorded = provenance.load(GOLD_CANDIDATE_PROVENANCE_PATH)["recorded"]
+    drift = provenance.divergences(recorded, candidate_fingerprint())
+    if drift:
+        raise ValueError(
+            f"{GOLD_CANDIDATE_PATH} was not produced by the clause-applied prompt this "
+            "module composes:\n"
+            + "\n".join(drift)
+            + "\n\nIf the recorded prompt is the SHIPPED one, this file is a baseline "
+            "re-measurement wearing the candidate's name -- delete it and its sidecar "
+            "and re-run --run-gold."
+        )
+
+
+def assert_gold_baseline_is_the_shipped_arm() -> None:
+    """Refuse to grade against a published record the shipped classifier did not make.
+
+    Rule 3 compares the candidate to the *published* 87.0%, so the baseline half has to
+    still describe ``classify.SYSTEM_PROMPT``. Read-only: this checks the record, it
+    never rewrites it.
+
+    Raises:
+        ValueError: If the published gold record's sidecar has drifted from the code.
+    """
+    live = provenance.fingerprint(SYSTEM_PROMPT, WORKHORSE_MODEL, JUDGE_MODEL)
+    recorded = provenance.load(GOLD_BASELINE_PROVENANCE_PATH)["recorded"]
+    drift = provenance.divergences(recorded, live)
+    if drift:
+        raise ValueError(
+            f"{GOLD_BASELINE_PATH} was produced by a different prompt or model than "
+            "this checkout, so it is not the shipped classifier's 87.0% and rule 3 "
+            "would be measured against the wrong baseline:\n" + "\n".join(drift)
+        )
+
+
+def run_gold(batch: bool = False) -> None:
+    """Classify the 54 gold snippets under the clause-applied prompt.
+
+    Spends **one workhorse call per gold snippet and nothing else**. No judge call is
+    made, because rule 3's answer key is the frozen human labels in
+    ``data/gold/gold.csv``; ADR-023's 108 calls came from ``gold_eval`` re-running a
+    judge pass that this question does not use.
+
+    Args:
+        batch: Submit via the Message Batches API instead of synchronous calls. At
+            n=54 the synchronous path is usually the better trade -- batch results land
+            only when the whole batch ends -- so this defaults off.
+
+    Raises:
+        ValueError: If the composed prompt is not ADR-023's, if the prompt about to be
+            sent does not carry the clause, if a destination is a frozen artifact, or
+            if resuming would blend two classifiers.
+    """
+    # Ahead of make_client, so any drift costs nothing.
+    assert_clause_reproduces_the_recorded_arm()
+    assert_writable_gold_artifact(GOLD_CANDIDATE_PATH)
+    assert_writable_gold_artifact(GOLD_CANDIDATE_PROVENANCE_PATH)
+
+    os.makedirs("evals", exist_ok=True)
+    snippets = gold_eval.load_gold(GOLD_SET_PATH)
+    live = candidate_fingerprint()
+    done = _resume_guard(GOLD_CANDIDATE_PATH, GOLD_CANDIDATE_PROVENANCE_PATH, live)
+    remaining = set(snippets["id"].astype(str)) - done
+    if not remaining:
+        print("Gold arm already complete -- no calls made.\n")
+        return
+
+    prompt = candidate_prompt()
+    assert_prompt_carries_the_clause(prompt)
+    print(
+        f"Classifying {len(remaining)} gold snippets under the clause "
+        f"({len(remaining)} calls, workhorse only -- NO judge call: the answer key "
+        f"is the frozen human labels in {GOLD_SET_PATH}).\n",
+        flush=True,
+    )
+    client = make_client()
+    if batch:
+        ab.run_workhorse_batch(
+            client, snippets, done, preds_path=GOLD_CANDIDATE_PATH, system_prompt=prompt
+        )
+    else:
+        ab.run_workhorse(
+            client, snippets, done, preds_path=GOLD_CANDIDATE_PATH, system_prompt=prompt
+        )
+    provenance.write(live, GOLD_CANDIDATE_PATH, path=GOLD_CANDIDATE_PROVENANCE_PATH)
+    _report_partial(GOLD_CANDIDATE_PATH, snippets)
+
+
+def gold_comparison(
+    gold: pd.DataFrame, baseline: pd.DataFrame, candidate: pd.DataFrame
+) -> dict:
+    """Score both arms against the human labels, per axis and per row.
+
+    Args:
+        gold: The human-labeled gold set, with ``category``/``domain``/``region``.
+        baseline: The published gold predictions (``pred_*``, plus judge columns).
+        candidate: This round's clause arm (``pred_*`` only).
+
+    Returns:
+        Dict with ``n``, per-axis ``{axis}_baseline`` / ``{axis}_candidate``
+        accuracies, the region ``fixed_ids`` / ``broken_ids``, and the named
+        ``global``-cluster accounting.
+    """
+    merged = (
+        gold.rename(columns={"domain": "operational_domain"})
+        .merge(baseline, on="id")
+        .merge(candidate, on="id", suffixes=("_base", "_cand"))
+    )
+    out: dict = {"n": len(merged)}
+    for axis, truth in GOLD_AXES:
+        base_ok = merged[truth] == merged[f"pred_{axis}_base"]
+        cand_ok = merged[truth] == merged[f"pred_{axis}_cand"]
+        out[f"{axis}_baseline"] = float(base_ok.mean()) if len(merged) else 0.0
+        out[f"{axis}_candidate"] = float(cand_ok.mean()) if len(merged) else 0.0
+        if axis == PRIMARY_AXIS:
+            out["fixed_ids"] = [str(i) for i in merged[~base_ok & cand_ok]["id"]]
+            out["broken_ids"] = [str(i) for i in merged[base_ok & ~cand_ok]["id"]]
+            out["region_correct_baseline"] = int(base_ok.sum())
+            out["region_correct_candidate"] = int(cand_ok.sum())
+
+    # The named cluster, defined against the HUMAN labels rather than the judge's --
+    # this arm's whole point is that the ruler is human. Same shape as
+    # region_clause_ab.cluster_delta so the two reports can be read side by side.
+    named = merged[
+        (merged["region"] == GLOBAL) & (merged["pred_region_base"] != GLOBAL)
+    ]
+    fixed = named[named["pred_region_cand"] == GLOBAL]
+    was_right = merged["pred_region_base"] == merged["region"]
+    dragged = merged[
+        was_right
+        & (merged["pred_region_cand"] == GLOBAL)
+        & (merged["region"] != GLOBAL)
+    ]
+    out["named_pulls"] = len(named)
+    out["named_fixed_ids"] = [str(i) for i in fixed["id"]]
+    out["named_unfixed_ids"] = [
+        str(i) for i in named[named["pred_region_cand"] != GLOBAL]["id"]
+    ]
+    out["B_ids"] = [str(i) for i in dragged["id"]]
+    return out
+
+
+def build_gold_report(scores: dict, prior_round: float | None) -> str:
+    """Assemble the rule-3 report.
+
+    Args:
+        scores: Output of :func:`gold_comparison`.
+        prior_round: ADR-023's gold region accuracy under this same clause, or
+            ``None`` when that frozen artifact is not present.
+
+    Returns:
+        The report text.
+    """
+    candidate = scores["region_candidate"]
+    passes = candidate >= GOLD_REGION_BAR
+    verdict = "PASSES" if passes else "FAILS"
+    lines = [
+        "=" * 62,
+        "`global`-BOUNDARY CLAUSE -- GOLD ARM, RULE 3 (ADR-023 follow-up)",
+        "=" * 62,
+        "",
+        f"Snippets scored   : {scores['n']}   ({GOLD_SET_PATH}, human labels)",
+        f"Workhorse         : {WORKHORSE_MODEL}",
+        "Answer key        : the FROZEN HUMAN LABELS -- no judge, no model grading",
+        f"Candidate arm     : {GOLD_CANDIDATE_PATH}",
+        f"Baseline arm      : {GOLD_BASELINE_PATH}   (published v3.2.0 record,",
+        "                    read-only; this run does not and cannot write it)",
+        f"Candidate prompt  : {ADR023_CANDIDATE_PROMPT_SHA256[:16]}...   (the clause,",
+        "                    applied at run time and pinned to ADR-023's fingerprint)",
+        "",
+        f"Cost of this arm  : {scores['n']} workhorse calls. ZERO judge calls.",
+        "ADR-023's gold arm cost 108 because gold_eval re-runs a judge pass. Rule 3",
+        "is a HUMAN-graded non-regression check, so the judge answers no part of it;",
+        "re-running it would have doubled the spend to reproduce an unused column.",
+        "",
+        "-- Rule 3, first half: gold region does not regress ---------",
+        "Pre-registered bar (spec section 6): human-graded region accuracy >= 87.0%.",
+        "",
+        f"  region accuracy, baseline (published) : "
+        f"{scores['region_baseline']:.1%}   "
+        f"({scores['region_correct_baseline']}/{scores['n']})",
+        f"  region accuracy, candidate (clause)   : "
+        f"{candidate:.1%}   "
+        f"({scores['region_correct_candidate']}/{scores['n']})",
+        f"  pre-registered bar                    : {GOLD_REGION_BAR:.1%}",
+        "",
+        f"  RULE 3 (first half): {verdict}"
+        f"   -- {candidate:.1%} "
+        f"{'>=' if passes else '<'} {GOLD_REGION_BAR:.1%}",
+        "",
+        "-- Rule 3, second half: no gated floor breached -------------",
+        "That half is about the SHIPPED prompt and this arm CANNOT breach it.",
+        "src/eval_gate.py grades evals/thresholds.toml against",
+        f"{GOLD_BASELINE_PATH}, the published record produced by",
+        "classify.SYSTEM_PROMPT -- which this measurement leaves byte-identical.",
+        "judge_region_agreement in particular is a judge-vs-human number that no",
+        "call here produces. Both are ADOPTION-time questions: they can only move",
+        "when the clause enters SYSTEM_PROMPT and the full gold re-run happens.",
+        "",
+        "-- Per-claim rows, against the human labels -----------------",
+        "",
+        f"Fixed  (baseline wrong -> candidate right): {len(scores['fixed_ids'])}",
+        "  " + (", ".join(scores["fixed_ids"]) or "(none)"),
+        f"Broken (baseline right -> candidate wrong): {len(scores['broken_ids'])}",
+        "  " + (", ".join(scores["broken_ids"]) or "(none)"),
+        "",
+        "The named `global` cluster (human-graded): rows the humans labelled",
+        "`global` that the BASELINE pulled to a specific region.",
+        "",
+        f"  named pulls in the baseline : {scores['named_pulls']}",
+        f"  fixed by the clause         : {len(scores['named_fixed_ids'])}",
+        "    " + (", ".join(scores["named_fixed_ids"]) or "(none)"),
+        f"  still pulled                : {len(scores['named_unfixed_ids'])}",
+        "    " + (", ".join(scores["named_unfixed_ids"]) or "(none)"),
+        f"  B (correct rows dragged to `global`) : {len(scores['B_ids'])}",
+        "    " + (", ".join(scores["B_ids"]) or "(none)"),
+        "",
+        "-- Secondary context, NOT gates -----------------------------",
+        "The pre-registered guardrail test is rule 2 and it runs on the scale arm",
+        "(n=595, where it has power). These n=54 figures are context only.",
+        "",
+        f"  category accuracy : {scores['category_baseline']:.1%} -> "
+        f"{scores['category_candidate']:.1%}",
+        f"  domain accuracy   : {scores['operational_domain_baseline']:.1%} -> "
+        f"{scores['operational_domain_candidate']:.1%}",
+        "",
+        "-- How to read this ----------------------------------------",
+        "n=54 is the small, human-graded ruler ADR-022 exists to supplement, not the",
+        "one rule 1 is decided on. Rule 3 is a NON-REGRESSION check by design: it can",
+        "veto the clause, it cannot carry it.",
+    ]
+    if prior_round is not None:
+        lines += [
+            "",
+            f"Prior round, same byte-identical clause on these same {scores['n']} rows:",
+            f"ADR-023's paid gold arm scored {prior_round:.1%} region "
+            f"({ADR023_GOLD_CANDIDATE_PATH}),",
+            "and rule 3 passed there too. This arm is an independent confirmatory",
+            "draw, not the only evidence -- read a disagreement between the two as",
+            "n=54 sampling noise before reading it as an effect.",
+        ]
+    lines += [
+        "",
+        "The decision rule is pre-registered in",
+        "docs/specs/global-boundary-clause-rerun.md and is canonical there.",
+        "=" * 62,
+    ]
+    return "\n".join(lines)
+
+
+def gold_report() -> str:
+    """Score the gold arm against the human labels and write the report.
+
+    Offline; no key, no calls, and no write outside :data:`GOLD_REPORT_PATH`.
+
+    Returns:
+        The report text.
+
+    Raises:
+        ValueError: If a guard finds the comparison would not mean what it claims.
+    """
+    assert_writable_gold_artifact(GOLD_REPORT_PATH)
+    os.makedirs("evals", exist_ok=True)
+    assert_clause_reproduces_the_recorded_arm()
+    assert_gold_candidate_is_the_clause_arm()
+    assert_gold_baseline_is_the_shipped_arm()
+
+    gold = gold_eval.load_gold(GOLD_SET_PATH)
+    baseline = paired_compare.read_predictions(GOLD_BASELINE_PATH)
+    candidate = paired_compare.read_predictions(GOLD_CANDIDATE_PATH)
+    assert_complete(baseline, gold, GOLD_BASELINE_PATH)
+    assert_complete(candidate, gold, GOLD_CANDIDATE_PATH)
+    assert_no_blank_labels(baseline, GOLD_BASELINE_PATH)
+    assert_no_blank_labels(candidate, GOLD_CANDIDATE_PATH)
+
+    prior = None
+    if os.path.exists(ADR023_GOLD_CANDIDATE_PATH):
+        prior_arm = paired_compare.read_predictions(ADR023_GOLD_CANDIDATE_PATH)
+        merged = gold.merge(prior_arm, on="id")
+        if len(merged) == len(gold):
+            prior = float((merged["region"] == merged["pred_region"]).mean())
+
+    text = build_gold_report(gold_comparison(gold, baseline, candidate), prior) + "\n"
+    atomic_write_text(GOLD_REPORT_PATH, text)
+    return text
+
+
+# ---------------------------------------------------------------------------
 # Report.
 # ---------------------------------------------------------------------------
 
@@ -717,7 +1170,7 @@ def report() -> str:
 
 
 def main() -> None:
-    """CLI entrypoint. ``--run-*`` spend API budget; ``--report`` never does."""
+    """CLI entrypoint. ``--run-*`` spend API budget; the ``*report`` flags never do."""
     parser = argparse.ArgumentParser(
         description="Higher-power re-run of the ADR-023 `global`-boundary clause A/B."
     )
@@ -734,6 +1187,12 @@ def main() -> None:
         "prompt (1 call per new snippet).",
     )
     parser.add_argument(
+        "--run-gold",
+        action="store_true",
+        help="LIVE: workhorse over the 54 GOLD snippets under the clause-applied "
+        "prompt (1 call per snippet; NO judge call). Step 5 / rule 3.",
+    )
+    parser.add_argument(
         "--batch",
         action="store_true",
         help="with a --run-* flag, submit via the Message Batches API "
@@ -744,18 +1203,32 @@ def main() -> None:
         action="store_true",
         help="OFFLINE: score the combined arms and write the report.",
     )
+    parser.add_argument(
+        "--gold-report",
+        action="store_true",
+        help="OFFLINE: score the gold arm against the human labels and write the "
+        "rule-3 report.",
+    )
     args = parser.parse_args()
 
-    if not (args.run_key or args.run_candidate or args.report):
-        parser.error("nothing to do: pass --run-key, --run-candidate and/or --report")
-    if args.batch and not (args.run_key or args.run_candidate):
+    live_flags = (args.run_key, args.run_candidate, args.run_gold)
+    if not (any(live_flags) or args.report or args.gold_report):
+        parser.error(
+            "nothing to do: pass --run-key, --run-candidate, --run-gold, --report "
+            "and/or --gold-report"
+        )
+    if args.batch and not any(live_flags):
         parser.error("--batch only applies to a --run-* flag")
     if args.run_key:
         run_key(batch=args.batch)
     if args.run_candidate:
         run_candidate(batch=args.batch)
+    if args.run_gold:
+        run_gold(batch=args.batch)
     if args.report:
         print(report())
+    if args.gold_report:
+        print(gold_report())
 
 
 if __name__ == "__main__":

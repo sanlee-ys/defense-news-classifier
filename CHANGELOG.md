@@ -72,6 +72,33 @@ Versions are tagged by milestone; individual commits are noted where relevant.
   human-labeled key, parked as a condition rather than scheduled.
 
 ### Fixed
+- **The re-run's step 5 would have deleted the published gold record, spent 108 calls,
+  and measured the baseline** (`src/region_clause_rerun.py`,
+  `docs/specs/global-boundary-clause-rerun.md`, `tests/test_region_clause_rerun.py`).
+  The spec's step 5 said to run "ADR-023 spec §7 step 2 verbatim" — an instruction
+  written for the ADR-023 design, where the clause lived inside `classify.SYSTEM_PROMPT`
+  on a branch, so deleting `evals/gold_predictions_v3.csv` and re-running `gold_eval.py`
+  really did measure the candidate. The spec's own §3 replaced that with **run-time**
+  clause application and step 5 was never updated. On `main` it would have (a) deleted
+  the published v3.2.0 gold record that markers in several repos hang off, restored only
+  by a hand-typed `git checkout --` that an aborted run leaves unrun, (b) spent ~108
+  calls, and (c) measured the **baseline** — `main`'s prompt carries no clause, and
+  neither CLI had any way to point a gold pass at the clause-applied prompt.
+
+  **A purpose-built gold arm replaces it: `--run-gold` / `--gold-report`.** The clause is
+  composed through the same run-time mechanism and the same `sha256` pin to ADR-023's
+  `b0202d06…` that `--run-candidate` uses, plus an assertion on the exact string going on
+  the wire and a report-side refusal of any arm whose sidecar records the shipped prompt
+  — so the pass cannot run under the shipped prompt at either end. `evals/metrics.json`,
+  `evals/gold_predictions_v3.*`, `evals/gold_eval_v3.txt` and ADR-023's frozen gold arm
+  are made **mechanically unwritable** (resolved-path comparison, not a naming
+  convention), which is what deletes the undo line rather than rewording it. And the cost
+  halves to **54 calls with zero judge calls**: rule 3's answer key is the frozen *human*
+  labels, so the judge — a scalable stand-in for exactly those labels — answers no part
+  of it. The report states rule 3's verdict against the pre-registered 87.0% bar with the
+  per-claim fixed/broken ids, and says plainly that rule 3's "no gated floor breached"
+  half is an **adoption-time** question the shipped prompt owns. **No pre-registered rule,
+  threshold, or verdict wording changed** — the procedure was broken, not the bar.
 - **`MIN_CACHEABLE_PREFIX_TOKENS` carried inferred floors that were both wrong, and the
   "caching is a no-op on the judge passes" claim rested on one of them** (`src/classify.py`,
   `scripts/cache_diagnostics.py`, `docs/specs/global-boundary-clause-rerun.md`). The table
