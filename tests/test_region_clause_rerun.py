@@ -19,6 +19,7 @@ new rows under the clause it is supposed to be testing.
 
 import hashlib
 import json
+import os
 import sys
 
 import pandas as pd
@@ -608,7 +609,25 @@ def test_the_published_record_is_refused_however_the_path_is_spelled():
     for spelling in (
         "evals/../evals/gold_predictions_v3.csv",
         "./evals/gold_predictions_v3.csv",
+        os.path.abspath("evals/gold_predictions_v3.csv"),
+    ):
+        with pytest.raises(ValueError, match="published or frozen record"):
+            rr.assert_writable_gold_artifact(spelling)
+
+
+@pytest.mark.skipif(
+    os.sep != "\\", reason="backslash is a path separator on Windows only"
+)
+def test_the_published_record_is_refused_in_windows_spellings_too():
+    r"""Separator and case only fold on Windows.
+
+    Deliberately NOT asserted cross-platform: on POSIX a backslash is a legal
+    character *inside* a filename, so ``evals\\gold_predictions_v3.csv`` really is a
+    different file there and refusing it would be the bug.
+    """
+    for spelling in (
         "evals\\gold_predictions_v3.csv",
+        "EVALS/GOLD_PREDICTIONS_V3.CSV",
     ):
         with pytest.raises(ValueError, match="published or frozen record"):
             rr.assert_writable_gold_artifact(spelling)
