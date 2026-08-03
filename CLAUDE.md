@@ -121,13 +121,20 @@ The reset rule is the whole game: a digit goes back to 0 every time a digit to i
 moves (`2.1.0` -> `2.2.0` -> `3.0.0`). A version number is a promise about what changed, not
 a tally of releases.
 
-**Not yet shipped:** nothing on the roadmap. The scaled region eval shipped as `v3.2.0`
-(2026-08-02, [ADR-022](decisions/022-scaled-region-eval-verdict.md)) — the last item that
-was carrying a version slot. Open work now lives in HANDOFF's job list, not here. The
-nearest candidate *was* the `global`-boundary prompt clause; it was measured against that
-n=300 ruler on 2026-08-02 and **reverted** as marginal (p=0.0522 against a pre-registered
-p<0.05), so it never claimed a version at all —
-[ADR-023](decisions/023-global-boundary-clause-verdict.md).
+**Not yet shipped:** nothing on the roadmap. Open work now lives in HANDOFF's job list, not
+here. The scaled region eval shipped as `v3.2.0` (2026-08-02,
+[ADR-022](decisions/022-scaled-region-eval-verdict.md)), and the `global`-boundary prompt
+clause shipped as `v3.2.1` (2026-08-03,
+[ADR-024](decisions/024-global-boundary-clause-adopted.md)) — a **PATCH**, and the textbook
+case for why that digit exists: the classifier got more correct, the `{category,
+operational_domain, region}` contract did not move at all.
+
+That clause is worth knowing as a two-round story, because the versioning is the visible half
+of it. It was measured against the n=300 ruler on 2026-08-02 and **reverted** as marginal
+(p=0.0522 against a pre-registered p<0.05), claiming no version
+([ADR-023](decisions/023-global-boundary-clause-verdict.md)). The re-run at n=595 cleared all
+four rules (p=0.0002) and it was adopted unchanged. **A version number is a promise about what
+changed** — and across those two rounds what changed was the ruler, never the bar.
 
 **Guiding principle (carried over from v1):** model tier and feature scope are per-task
 cost/quality knobs **decided by the eval, not by default** — measure first, escalate only where

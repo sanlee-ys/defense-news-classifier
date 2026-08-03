@@ -9,6 +9,66 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
+---
+
+## [3.2.1] — 2026-08-03
+
+### Fixed
+- **The `global`-boundary prompt clause — re-run at adequate power, and adopted**
+  ([ADR-024](decisions/024-global-boundary-clause-adopted.md),
+  [spec](docs/specs/global-boundary-clause-rerun.md), `src/region_clause_rerun.py`).
+  ADR-023 measured this clause and reverted it at **p=0.0522** against a
+  pre-registered p<0.05. It then named the one thing that would change the answer —
+  a higher-power ruler — and that condition has now been met. The **same clause**,
+  byte-identical and pinned by `sha256` to the fingerprint the paid ADR-023 run
+  recorded, was re-registered and re-run against an extended ruler at **effective
+  n=595** (295 frozen rows reused, 300 new, 5 exact duplicates excluded before
+  anything was graded).
+
+  **All four pre-registered rules passed.** Region **89.9% → 94.1%** (+4.2),
+  discordants 35/10, **McNemar p=0.0002**, at a design power of **0.837** — computed
+  before the numbers, not after. Guardrails clean: category flat (p=0.4807) and
+  operational domain *improved* +3.5% (p=0.0011), so the kill condition never fired.
+  Harness health clean on all three axes, 595 groups / 595 pairs / 595 eligible. The
+  human-graded gold arm cleared its non-regression bar at **92.6%** against 87.0%.
+  Named `global` pulls fixed: **20 of 32** on the scale ruler, 6 of 7 on the human one.
+
+  **The honest lesson is about the first run's design, not its verdict.**
+  `src/mcnemar_power.py` shows ADR-023 ran at about **49% power** against the effect
+  it observed — a coin flip on whether it could detect its own effect. So that
+  finding was *underpowered*, not *refuted*; the rule was right and honoring it was
+  right, and it is precisely because the threshold was not renegotiated in the moment
+  that this adoption means anything. ADR-023 is amended with a dated **pointer**
+  rather than rewritten — its body stands verbatim, correct on its date.
+
+### Changed
+- **`classify.SYSTEM_PROMPT` carries the clause**, inside the region-rules block
+  immediately after the "concrete identifiable location" bullet (the placement is
+  load-bearing: `l4_pipeline` and `optimize` both freeze that block). The shipped
+  prompt fingerprint moves `a59689e8…` → **`b0202d06…`** — byte-for-byte the
+  candidate arm that was measured, pinned by a test so what ships is the arm the
+  595-row report describes rather than a retyping of it.
+- **The published n=54 human-graded gold record was re-run under the adopted prompt**
+  (workhorse *and* judge — `judge_region_agreement` is a gated floor and had to be
+  re-measured, not inherited). **Region accuracy 87.0% → 94.4%**, category 92.6% →
+  94.4%, operational domain 92.6% → 98.1%. **All eight gated floors pass as written;
+  none was moved, waived, or added.** The floor with real authority here was
+  `judge_region_agreement`, which fell 100.0% → **96.3%** against a 0.93 floor — 2
+  judge-vs-human disagreements against a budget of 3. Expected, since the clause is
+  now in the judge's prompt too, but it is the number that would have stopped the
+  release.
+- **First `metrics.json` change since v3.0.0 where gold values actually move**, so the
+  published-marker cascade is real this time: architecture, portfolio, learning-notes
+  and kb-agent all carry figures that had been stable across two releases.
+- **The re-run harness goes dormant and says so.** Every run and report entry point in
+  `src/region_clause_rerun.py` now refuses once the clause is in `SYSTEM_PROMPT`. Both
+  arms of both rulers were bought against the pre-adoption baseline, which the tree no
+  longer contains, so no honest comparison can be re-derived — and specifically,
+  `--gold-report` would otherwise have compared the candidate arm against itself and
+  printed a 0.0-point lift. The committed reports are frozen records, read rather than
+  regenerated; guard coverage is preserved by a fixture that reconstructs the baseline
+  and verifies it against the recorded digest.
+
 ### Added
 - **The higher-power re-run of the `global`-boundary clause — pre-registered and
   run-ready, not yet run**
@@ -724,7 +784,8 @@ First complete version of the defense news classifier. All v1 success criteria m
 
 ---
 
-[Unreleased]: https://github.com/sanlee-ys/defense-news-classifier/compare/v3.2.0...HEAD
+[Unreleased]: https://github.com/sanlee-ys/defense-news-classifier/compare/v3.2.1...HEAD
+[3.2.1]: https://github.com/sanlee-ys/defense-news-classifier/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/sanlee-ys/defense-news-classifier/compare/v2.2.0...v3.0.0

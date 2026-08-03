@@ -35,50 +35,63 @@ re-measured on the same gold set. Those are the current numbers, directly below.
 | **Retrieval** | none | BM25 over a 62-doc corpus, tried and cited — then measured and **retired** ([ADR-012](decisions/012-retire-bm25-grounding.md)) |
 | **Honest read** | in-distribution *consistency* | real-world *accuracy* |
 
-### Current state — v3.2.0: three axes, human-graded
+### Current state — v3.2.1: three axes, human-graded
 
-The current release is **v3.2.0**, and the numbers below were measured at v3.0.0. Both are
-true at once: everything v3.1.0 and v3.2.0 added is eval and experiment machinery, so the
-shipped prompt and the single classify call are byte-for-byte what produced these results.
-(v3.2.0's own headline — the region axis re-measured at n=300 against the Opus judge — is
-[further down](#tighter-error-bars-the-scaled-evals), where the scaled evals live; it shrinks
-the error bar around the region number below rather than replacing it.) v3.0.0 was the
-roadmap's planned breaking change: output becomes
-`{category, operational_domain, region}` ([ADR-014](decisions/014-region-field-design.md)).
-The gold set gained a hand-labeled `region` column, and every label on **all three axes** was
-then adversarially verified against each snippet's source article — category and domain
-survived 108/108 (the v2 hand labels stand untouched); region took two review corrections
-before anything was measured against it. The numbers below are the first live three-axis run
+The current release is **v3.2.1**, and **the numbers below were measured at v3.2.1** — the
+first time since v3.0.0 that they moved. v3.1.0 and v3.2.0 added eval and experiment machinery
+only, so for two releases the shipped prompt was byte-for-byte the one that produced the v3.0.0
+results. v3.2.1 changed the classifier: it adopted a one-bullet `global`-boundary clause into
+the region rubric after a pre-registered re-run cleared all four of its rules at n=595
+([ADR-024](decisions/024-global-boundary-clause-adopted.md)), which forced a full paid re-run
+of this human-graded gold snapshot. v3.0.0 remains the roadmap's planned breaking change:
+output becomes `{category, operational_domain, region}`
+([ADR-014](decisions/014-region-field-design.md)). The gold set gained a hand-labeled `region`
+column, and every label on **all three axes** was then adversarially verified against each
+snippet's source article — category and domain survived 108/108 (the v2 hand labels stand
+untouched); region took two review corrections before anything was measured against it. **The
+answer key has not been touched since**, including by this release: the numbers below moved
+because the classifier changed, not because the ruler did
 (`evals/gold_eval_v3.txt`, n=54, human answer key):
 
 <!-- BEGIN GENERATED: gold-metrics (scripts/gen_readme_metrics.py) -->
 
 | Axis | Accuracy | Macro-F1 | Judge vs human |
 |---|---|---|---|
-| Category | **92.6%** | 0.911 | 92.6% |
-| Operational domain | **92.6%** | 0.933 | 98.1% |
-| Region | **87.0%** | 0.927* | **100.0%** |
+| Category | **94.4%** | 0.93 | 94.4% |
+| Operational domain | **98.1%** | 0.982 | 92.6% |
+| Region | **94.4%** | 0.975* | 96.3% |
 
 <!-- END GENERATED: gold-metrics -->
 
 \* Region macro-F1 is support-limited (`europe` n=1, `africa` n=2 on a US-wire gold set) —
 read the per-label table in the report before quoting it.
 
-Two things worth saying plainly. First, the **region misses are one named cluster**: all seven
-are rows whose gold label is `global` (no identifiable theater in the snippet) that the model
-pulled to a specific region — six to `americas`, one to `indo-pacific`
-(`evals/gold_confusion_v3.md` names them). The rubric forbids inferring a theater from the US
-*actor* when the text states no place; the model does it anyway. That's a precise target for a
-prompt clause, the same shape as the tech-vs-ops fix that lifted v2 — and one was written,
-measured against the n=300 ruler, and **reverted** as marginal
-([ADR-023](decisions/023-global-boundary-clause-verdict.md); the numbers are further down).
-Second, category
-dipped one row from the v2-era 94.4% — consistent with the schema-perturbation effect the
-routing experiment measured (adding one field moved 2/54 there) and inside n=54 noise.
+Two things worth saying plainly. First, **the named region cluster is largely closed, and the
+error mode has inverted.** Through v3.2.0 all seven region misses were rows whose gold label is
+`global` (no identifiable theater in the snippet) that the model pulled to a specific region,
+inferring a theater from the US *actor* where the text names no place — a behavior the rubric
+forbade in intent but never in words. The adopted clause says it in words. Region is now 3
+misses instead of 7, and **only one of the three is still that cluster** (g054); the other two
+are the converse — `americas` rows the clause over-called to `global` (g024, g037), which is
+exactly the collateral its second sentence exists to bound and which the pre-registration
+priced as `B` before the run. `evals/gold_confusion_v3.md` names all three. Trading five
+under-calls for two over-calls is the shape of the win, and it is worth being explicit that it
+*is* a trade rather than a free fix.
 
-The **100.0% judge-vs-human region agreement** is the load-bearing number: it cleared ADR-014's
-gate for scaling the region eval to n=300 with the Opus judge as answer key, which is what
-v3.2.0 then ran ([ADR-022](decisions/022-scaled-region-eval-verdict.md)).
+Second, **operational domain rose to 98.1% on an axis the clause says nothing about.** The same
+unexplained move showed up on the scale ruler in both rounds (+3.7% at ADR-023, +3.5% here at
+p=0.0011). It was registered as a *guardrail*, so it contributed nothing to the decision to
+ship — reading an unregistered gain as support is the outcome-switching the pre-registration
+exists to prevent — and it stays an open question rather than a result.
+
+The **96.3% judge-vs-human region agreement** is the load-bearing number, and it is the one to
+read carefully. It was 100.0% at v3.0.0, which is what cleared ADR-014's gate for scaling the
+region eval to n=300 with the Opus judge as answer key
+([ADR-022](decisions/022-scaled-region-eval-verdict.md)). It is now 2 disagreements in 54,
+against a CI floor of 0.93 that budgets at most 3 — the floor with real authority over the
+v3.2.1 release, and the one that would have stopped it. The drop is expected rather than
+alarming: `classify()` defaults *both* models to the same system prompt, so the clause is in
+the judge's prompt too, and a perfect 100.0% at n=54 was always a wide interval.
 
 ### Why an LLM at all — the classical baseline, finally measured
 
@@ -208,8 +221,11 @@ metric** ([ADR-022](decisions/022-scaled-region-eval-verdict.md), full report in
 | Category | 91.7% (275/300) | [88.0%, 94.3%] | ±6pts |
 | Domain | 89.3% (268/300) | [85.3%, 92.3%] | ±7pts |
 
-**The interval is the deliverable, not the accuracy.** 88.3% against the gold set's 87.0% is
-corroboration; what changed is that the number is now known to within 7 points instead of 18.
+**The interval is the deliverable, not the accuracy.** 88.3% against the gold set's *then*
+87.0% is corroboration; what changed is that the number is now known to within 7 points instead
+of 18. (Both figures are v3.2.0-era and are left as measured — the frozen record of the run
+that justified building the bigger ruler. v3.2.1 later moved the gold number to 94.4%; see the
+next block.)
 
 And it settles the open question about the **named `global` cluster**. On the gold 54, all
 seven region misses were rows whose true label is `global` that the model pulled to a specific
@@ -219,21 +235,43 @@ answer-key `global` rows, **17 were pulled to a region** (16 of them to `america
 **49% of all 35 region disagreements**. That is one identified failure mode accounting for half
 the region error, and it is now a measurable target for a prompt clause rather than an anecdote.
 
-**And it was measured.** A one-bullet prompt clause was pre-registered — clause, decision rule
-and p-value table written down *before* any call was made — then run against this ruler on
-2026-08-02. It worked, and it still did not ship: scale region **88.5% → 92.2%** (12 of 17
-named pulls fixed against 7 correct rows dragged the other way, net +11 rows) at **McNemar
-p=0.0522**, missing the pre-registered p<0.05 by 0.0022, with the human-graded gold arm moving
-87.0% → 94.4%. The rule's own text calls a marginal result a revert, so the clause was
-reverted and the shipped prompt is unchanged. The reasoning, both arms in full, and what would
-change the answer are in [ADR-023](decisions/023-global-boundary-clause-verdict.md); the
-record is `evals/region_clause_ab.txt`. Renegotiating a threshold after seeing the number is
-the failure this project is built to avoid.
+**And it was measured — twice, and the second time it shipped.** A one-bullet prompt clause was
+pre-registered — clause, decision rule and p-value table written down *before* any call was
+made — then run against this ruler on 2026-08-02. It worked, and it still did not ship: scale
+region **88.5% → 92.2%** (12 of 17 named pulls fixed against 7 correct rows dragged the other
+way, net +11 rows) at **McNemar p=0.0522**, missing the pre-registered p<0.05 by 0.0022, with
+the human-graded gold arm moving 87.0% → 94.4%. The rule's own text calls a marginal result a
+revert, so it was reverted ([ADR-023](decisions/023-global-boundary-clause-verdict.md), record
+in `evals/region_clause_ab.txt`). Renegotiating a threshold after seeing the number is the
+failure this project is built to avoid.
+
+That ADR then named the one thing that would change the answer — *a higher-power ruler* — and
+the arithmetic was unflattering: at n=295 the run had about **49% power** against the effect it
+observed. It was a coin flip on whether it could detect its own effect, so the finding was
+*underpowered*, not *refuted*. So the ruler was extended to **595 effective pairs** (295 rows
+reused rather than re-bought, 300 new, 5 exact duplicates dropped before grading), the
+**identical** clause was re-registered — pinned by `sha256` so a one-character drift refuses the
+run — and it was re-run at a design power of **0.837**:
+
+| | ADR-023 (n=295) | ADR-024 (n=595) |
+|---|---|---|
+| Scale region | 88.5% → 92.2% (+3.7) | 89.9% → **94.1%** (+4.2) |
+| Discordants | 19 / 8 | **35 / 10** |
+| **McNemar p** | 0.0522 | **0.0002** |
+| Design power | 0.490 | **0.837** |
+| Verdict | marginal → **revert** | **all four rules pass → adopt** |
+
+**All four pre-registered rules passed, so the clause shipped as `v3.2.1`**
+([ADR-024](decisions/024-global-boundary-clause-adopted.md), record in
+`evals/region_clause_rerun.txt`). It is the project's first measure-first *adoption* after six
+declines — and it only means anything because the same rule reverted the same clause the first
+time. The bar was not moved; the ruler was.
 
 The same two caveats as above apply, plus one more. This is workhorse-vs-judge agreement, and
-on region the judge's measured disagreement with humans was 0/54 — which is itself a wide
-interval, so read these numbers **alongside** the human-graded n=54 figures at the top of this
-section, never instead of them. And the DVIDS wire is US-actor-heavy: `americas` is 148/300 and
+at the time of this run the judge's measured disagreement with humans on region was 0/54 —
+itself a wide interval, and now 2/54 under the v3.2.1 prompt, which is the point: read these
+numbers **alongside** the human-graded n=54 figures at the top of this section, never instead
+of them. And the DVIDS wire is US-actor-heavy: `americas` is 148/300 and
 `africa` is n=3, which drags the region macro-F1 (0.904) down through thin classes rather than
 through a quality drop.
 

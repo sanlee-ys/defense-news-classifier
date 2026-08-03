@@ -216,15 +216,40 @@ file is a point-in-time snapshot and goes stale the moment work lands._
    against 3 broken, every `thresholds.toml` floor clear. The rule's own text
    calls a marginal result a revert; San ruled 2026-08-02 to honor it. Verdict,
    rationale and both arms' tables:
-   [ADR-023](decisions/023-global-boundary-clause-verdict.md). **The shipped
-   classifier is unchanged** (`SYSTEM_PROMPT` still `a59689e8…`), so no published
-   number moved, no version bump, no marker cascade. The harness
-   (`src/region_clause_ab.py`, 51 tests) and the frozen `region_clause_*` eval
-   artifacts merged as the reproducible record; the clause itself did not.
-   **This was reopened deliberately on 2026-08-02 — see job 3.** Do not re-run the
-   same 295 rows to break the tie; that is the p-hacking the rule forbids, and the
-   follow-up does not do it.
-3. **The higher-power re-run — RUN-READY, awaiting owner-driven execution.**
+   [ADR-023](decisions/023-global-boundary-clause-verdict.md). At that point the
+   shipped classifier was unchanged (`SYSTEM_PROMPT` still `a59689e8…`), so nothing
+   published moved. **This was reopened deliberately on 2026-08-02 — see job 3 —
+   and job 3 then closed it the other way.**
+
+   **CLOSED 2026-08-03 as ADOPTED, and both halves of that are the record.** The
+   higher-power re-run (job 3) cleared all four pre-registered rules at effective
+   **n=595**: region **89.9% → 94.1%**, discordants 35/10, **McNemar p=0.0002**, at
+   a design power of **0.837**; guardrails clean (category p=0.4807, domain +3.5%
+   p=0.0011, still recorded rather than banked); harness clean; human-graded gold
+   **92.6%** against an 87.0% bar. The **identical** clause — pinned by digest, not
+   retyped — is now in `classify.SYSTEM_PROMPT` (`a59689e8…` → **`b0202d06…`**) and
+   shipped as **`v3.2.1`**, with a full paid gold re-run, all eight floors passing
+   as written, and the marker cascade executed across architecture, portfolio,
+   learning-notes and kb-agent.
+   [ADR-024](decisions/024-global-boundary-clause-adopted.md).
+
+   **Do not read this as "the revert was a mistake."** ADR-023's verdict was right
+   on its date and under its design; what was wrong was the design, at ~49% power.
+   The revert is *why* the adoption means something, and ADR-023 keeps its body
+   verbatim with a dated pointer rather than being rewritten. Do not re-run the
+   same 295 rows to break a tie — that is still the p-hacking the rule forbids.
+3. ~~**The higher-power re-run.**~~ **DONE — run 2026-08-02/03, clause ADOPTED as
+   `v3.2.1`.** All four rules passed at effective n=595; see job 2 for the numbers
+   and [ADR-024](decisions/024-global-boundary-clause-adopted.md) for the verdict.
+   Reports: `evals/region_clause_rerun.txt` (scale) and
+   `evals/region_clause_gold_rerun.txt` (the rule-3 gold arm, 54 workhorse calls,
+   zero judge calls). **The harness is now dormant and refuses every run and report
+   entry point** — see Standing cautions. What remains is owner-only: the `v3.2.1`
+   tag and GitHub release.
+
+   The original brief is kept below, because it is the record of how the run was
+   designed before it produced a number.
+
    ADR-023's own named condition, now costed. `src/mcnemar_power.py` prices it
    exactly: at n=295 that experiment had **~49% power** against the effect it
    observed, so p=0.0522 is what a coin flip looks like when it lands on the wrong
@@ -280,11 +305,19 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   `gold_eval.txt`, `gold_confusion*.{md,csv}`, `scale_eval.txt`,
   `route_eval.txt`): never delete, overwrite, or regenerate them. v3 outputs use
   `_v3` names. The same rule now covers `baseline_eval.txt`, `exemplar_eval.txt`,
-  `l4_eval.txt` and their prediction CSVs, and the five `region_clause_*`
-  artifacts (ADR-023). The three scale-arm `region_clause_*` files additionally
-  **cannot** be regenerated: `--report` refuses, because
-  `assert_candidate_matches_the_live_prompt` correctly sees that the live prompt
-  is no longer the reverted candidate. That refusal is the guard working.
+  `l4_eval.txt` and their prediction CSVs, and every `region_clause_*` artifact —
+  ADR-023's five, plus the re-run's `region_clause_rerun.txt` and the three
+  `region_clause_gold_rerun.*` files (ADR-024).
+- **Both clause harnesses are dormant, and both refuse rather than regenerate.**
+  `region_clause_ab --report` refuses because the live prompt is no longer the
+  reverted candidate; `region_clause_rerun`'s run *and* report paths all refuse
+  because the clause has now SHIPPED, so the pre-adoption baseline
+  (`a59689e8…`) is no longer in the tree and no honest comparison can be
+  re-derived. The specific trap the second refusal closes: after the adoption gold
+  re-run, `evals/gold_predictions_v3.csv` is produced *by* the clause prompt, so
+  `--gold-report` would otherwise compare the candidate arm against itself and
+  print a 0.0-point lift. Both refusals are the guard working, not a bug — and the
+  committed reports are the answer.
 - **Published numbers are generated, not typed.** `evals/metrics.json` is the
   artifact outward surfaces assert against; `gen_metrics_artifact.py` reads the
   version from `pyproject.toml`, so a version bump turns CI red until you

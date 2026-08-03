@@ -76,13 +76,21 @@ def test_artifact_matches_the_committed_report():
 def test_version_reflects_what_was_measured():
     """A number without the version it came from is a number you cannot place.
 
-    The numbers themselves were measured at v3.0.0 and are unchanged here: v3.1.0
-    added eval and experiment harnesses only, and v3.2.0 measured the region axis at
-    n=300 against the judge (ADR-022) without touching the n=54 human-graded gold run
-    this artifact publishes. The shipped prompt and the single classify call that
-    produced these results are byte-for-byte the same across all three.
+    **v3.2.1 is the first release since v3.0.0 where these numbers actually move.**
+    v3.1.0 and v3.2.0 added eval and experiment machinery only, so the artifact's
+    gold block was byte-identical except for the version string across all three --
+    and that standing diff was itself the proof the published numbers still described
+    what shipped.
+
+    v3.2.1 changes the classifier. ADR-024 adopted the `global`-boundary clause into
+    `classify.SYSTEM_PROMPT` after a pre-registered re-run cleared all four rules at
+    n=595 (region 89.9% -> 94.1%, McNemar p=0.0002), which moved the prompt
+    fingerprint from `a59689e8...` to `b0202d06...` and forced a full paid re-run of
+    this n=54 human-graded gold snapshot -- workhorse and judge both, because
+    `judge_region_agreement` is a gated floor and had to be re-measured rather than
+    inherited. Region accuracy 87.0% -> 94.4%; all eight floors still pass.
     """
-    assert _committed()["version"] == "3.2.0"
+    assert _committed()["version"] == "3.2.1"
 
 
 def test_region_keys_present_on_the_v3_snapshot():
