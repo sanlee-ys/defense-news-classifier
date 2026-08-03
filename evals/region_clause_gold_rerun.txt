@@ -1,0 +1,75 @@
+==============================================================
+`global`-BOUNDARY CLAUSE -- GOLD ARM, RULE 3 (ADR-023 follow-up)
+==============================================================
+
+Snippets scored   : 54   (data/gold/gold.csv, human labels)
+Workhorse         : claude-sonnet-5
+Answer key        : the FROZEN HUMAN LABELS -- no judge, no model grading
+Candidate arm     : evals/region_clause_gold_rerun.csv
+Baseline arm      : evals/gold_predictions_v3.csv   (published v3.2.0 record,
+                    read-only; this run does not and cannot write it)
+Candidate prompt  : b0202d06a876cc06...   (the clause,
+                    applied at run time and pinned to ADR-023's fingerprint)
+
+Cost of this arm  : 54 workhorse calls. ZERO judge calls.
+ADR-023's gold arm cost 108 because gold_eval re-runs a judge pass. Rule 3
+is a HUMAN-graded non-regression check, so the judge answers no part of it;
+re-running it would have doubled the spend to reproduce an unused column.
+
+-- Rule 3, first half: gold region does not regress ---------
+Pre-registered bar (spec section 6): human-graded region accuracy >= 87.0%.
+
+  region accuracy, baseline (published) : 87.0%   (47/54)
+  region accuracy, candidate (clause)   : 92.6%   (50/54)
+  pre-registered bar                    : 87.0%
+
+  RULE 3 (first half): PASSES   -- 92.6% >= 87.0%
+
+-- Rule 3, second half: no gated floor breached -------------
+That half is about the SHIPPED prompt and this arm CANNOT breach it.
+src/eval_gate.py grades evals/thresholds.toml against
+evals/gold_predictions_v3.csv, the published record produced by
+classify.SYSTEM_PROMPT -- which this measurement leaves byte-identical.
+judge_region_agreement in particular is a judge-vs-human number that no
+call here produces. Both are ADOPTION-time questions: they can only move
+when the clause enters SYSTEM_PROMPT and the full gold re-run happens.
+
+-- Per-claim rows, against the human labels -----------------
+
+Fixed  (baseline wrong -> candidate right): 6
+  g017, g019, g026, g047, g048, g054
+Broken (baseline right -> candidate wrong): 3
+  g024, g030, g037
+
+The named `global` cluster (human-graded): rows the humans labelled
+`global` that the BASELINE pulled to a specific region.
+
+  named pulls in the baseline : 7
+  fixed by the clause         : 6
+    g017, g019, g026, g047, g048, g054
+  still pulled                : 1
+    g013
+  B (correct rows dragged to `global`) : 2
+    g024, g037
+
+-- Secondary context, NOT gates -----------------------------
+The pre-registered guardrail test is rule 2 and it runs on the scale arm
+(n=595, where it has power). These n=54 figures are context only.
+
+  category accuracy : 92.6% -> 94.4%
+  domain accuracy   : 92.6% -> 90.7%
+
+-- How to read this ----------------------------------------
+n=54 is the small, human-graded ruler ADR-022 exists to supplement, not the
+one rule 1 is decided on. Rule 3 is a NON-REGRESSION check by design: it can
+veto the clause, it cannot carry it.
+
+Prior round, same byte-identical clause on these same 54 rows:
+ADR-023's paid gold arm scored 94.4% region (evals/region_clause_gold_candidate.csv),
+and rule 3 passed there too. This arm is an independent confirmatory
+draw, not the only evidence -- read a disagreement between the two as
+n=54 sampling noise before reading it as an effect.
+
+The decision rule is pre-registered in
+docs/specs/global-boundary-clause-rerun.md and is canonical there.
+==============================================================
