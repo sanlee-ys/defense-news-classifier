@@ -145,9 +145,32 @@ node is added; a hop count does.
 |---|---|---|
 | **CRASHED** | the run raised rather than answered | A robustness fact, not a context-loss fact. Counted, reported separately, **excluded from every denominator** — folding it in charges a robustness failure to context loss. |
 | **CAUGHT** | a *valid* challenge named the affected axis **and** the shipped label matches gold | The guard worked. Checked **before** ABSORBED on purpose: a drop the critic caught and repaired back to the control's answer is a working guard, not an inert edge. |
-| **ABSORBED** | the shipped label equals the control's | The payload was not load-bearing. **H2's bucket**, and the design's insurance against §1's tautology critique. |
+| **ABSORBED** | the shipped label equals the control's | The payload was not load-bearing. **H2's bucket, and the headline number** — see §4.2.1. |
 | **CORRECTED** | changed, right, and no guard fired | Not in the original four. It is what makes the partition **exhaustive** — a drop that changes the answer and lands on gold has to go somewhere, and folding it into ABSORBED or CAUGHT would each be a lie of a different kind. |
-| **CONTAMINATED** | wrong, different from the control, shipped | **The headline number.** Wrong, attributable, and out the door. |
+| **CONTAMINATED** | wrong, different from the control, shipped | Wrong, attributable, and out the door. **Secondary**, because it is the bucket whose claim needs the significance test the design is weakest at. |
+
+#### 4.2.1 ABSORBED is the headline, CONTAMINATED is the attribution — amended 2026-08-09
+
+**Amended after §7's power table was read and before any paid call**, which is the only window
+in which this may move. As adopted, this document called CONTAMINATED the headline. That put the
+whole piece behind the design's weakest instrument.
+
+The two claims need different machinery, and only one of them is underpowered:
+
+- **ABSORBED is a proportion**, and a proportion needs no significance test. At `n=44` a Wilson
+  interval is perfectly usable near an extreme — a cell landing at 95% absorbed carries roughly
+  84–99%, which is a reportable finding. There is nothing to correct for and no family to
+  belong to.
+- **CONTAMINATED is a difference**, and a difference against a paired control is what McNemar
+  is for — the test §7 shows needs a 24-point effect uncorrected at `n=44`.
+
+So the headline is *how much of what these edges carry turns out not to matter*, which is H2,
+and which is also the claim that rescues §1's tautology objection. CONTAMINATED remains
+reported in full and remains H1's evidence; it is the attribution number, and it is bounded by
+what §7.1 says the test can see.
+
+This does not soften anything. It stops the piece from depending on the one instrument its own
+power analysis says is weak, and it does so *before* the arms run rather than after a null.
 
 "Valid" is the charter's own definition, read through `l4_pipeline.challenge_violations` rather
 than re-derived — a challenge the pipeline discards must not be credited as the guard firing.
@@ -173,20 +196,45 @@ in the same PR as the harness, and asserted against `l4_inject.CELLS` by a test 
 `SYS-019`'s move applied to this experiment's own contract, and the only thing standing between
 this and post-hoc cell selection.
 
-| # | Cell | Affected axis | Why it is in the matrix |
-|---:|---|---|---|
-| 0 | `triage->critic/payload/null` | — | **The negative control.** A full-cost pass-through arm: same calls, same scoring, no corruption. |
-| 1 | `triage->critic/region_evidence/omit` | region | The `SYS-022` failure verbatim — the edge does not carry it — on the axis the pipeline's own hypothesis lives on. |
-| 2 | `triage->critic/region_evidence/empty` | region | The sharpest pair in the matrix against #1: for a `json.dumps`'d payload, does the field's **presence** matter or its **content**? |
-| 3 | `triage->critic/region_evidence/truncate` | region | The realistic form — a brief that fits, badly. |
-| 4 | `triage->critic/region_evidence/stale` | region | The nastiest and most realistic: another row's value, plausible, well-formed, wrong. This is what a stale hand-carried brief actually is. |
-| 5 | `triage->critic/category_evidence/omit` | category | Is the effect about region, or about evidence in general? Without this cell the result is a single-axis anecdote. |
-| 6 | `triage->critic/ambiguous_axes/omit` | — | **The anti-tuned cell.** A schema-*required* field with **no critic rubric rule**. If dropping it changes nothing, a required field is decorative. If it does, the critic uses state nobody documented it as using. Both are findings. |
-| 7 | `classify->critic/region/omit` | region | Blind the verifier to the thing it is verifying. |
-| 8 | `classify->critic/region/stale` | region | The verifier reviews a different row's region against this row's evidence. |
-| 9 | `critic->classify/payload/omit` | — | The backward edge carries nothing: the bounce happens, the reason does not arrive. |
-| 10 | `critic->classify/payload/truncate` | — | The reason arrives half-stated. |
-| 11 | `critic->classify/payload/stale` | — | The bounce carries another row's complaint. |
+| # | Cell | Affected axis | Tier | Why it is in the matrix |
+|---:|---|---|---|---|
+| 0 | `triage->critic/payload/null` | — | control | **The negative control.** A full-cost pass-through arm: same calls, same scoring, no corruption. |
+| 1 | `triage->critic/region_evidence/omit` | region | **primary** | The `SYS-022` failure verbatim — the edge does not carry it — on the axis the pipeline's own hypothesis lives on. **The one confirmatory test**, per §5.1. |
+| 2 | `triage->critic/region_evidence/empty` | region | secondary | The sharpest pair in the matrix against #1: for a `json.dumps`'d payload, does the field's **presence** matter or its **content**? |
+| 3 | `triage->critic/region_evidence/truncate` | region | secondary | The realistic form — a brief that fits, badly. |
+| 4 | `triage->critic/region_evidence/stale` | region | secondary | The nastiest and most realistic: another row's value, plausible, well-formed, wrong. This is what a stale hand-carried brief actually is. |
+| 5 | `triage->critic/category_evidence/omit` | category | secondary | Is the effect about region, or about evidence in general? Without this cell the result is a single-axis anecdote. |
+| 6 | `triage->critic/ambiguous_axes/omit` | — | secondary | **The anti-tuned cell.** A schema-*required* field with **no critic rubric rule**. If dropping it changes nothing, a required field is decorative. If it does, the critic uses state nobody documented it as using. Both are findings, and both are ABSORBED-rate findings that never needed a test. |
+| 7 | `classify->critic/region/omit` | region | secondary | Blind the verifier to the thing it is verifying. |
+| 8 | `classify->critic/region/stale` | region | secondary | The verifier reviews a different row's region against this row's evidence. |
+| 9 | `critic->classify/payload/omit` | — | descriptive | The backward edge carries nothing: the bounce happens, the reason does not arrive. |
+| 10 | `critic->classify/payload/truncate` | — | descriptive | The reason arrives half-stated. |
+| 11 | `critic->classify/payload/stale` | — | descriptive | The bounce carries another row's complaint. |
+
+### 5.1 Tiers — amended 2026-08-09, after the power table and before any paid call
+
+As adopted, all eleven live cells were co-equal, which forced the choice between an uncorrected
+α that carries a ~43% family-wise error rate and a Bonferroni α needing **33 points at `n=44`
+and 51 on the backward edge**. Neither is a design that can conclude. The fix is to stop
+splitting the confirmatory budget eleven ways.
+
+| Tier | Cells | What it may claim |
+|---|---|---|
+| **control** | #0 | Gates readability of the run (§6's void condition). Makes no claim. |
+| **primary** | #1 | **One** confirmatory test, exact two-sided McNemar at **α = 0.05, uncorrected**. A single pre-registered test is not a family and is owed no correction. MDR at `n=44`: **24 points**. |
+| **secondary** | #2–#8 | Rate, Wilson interval **and** p-value all reported in full. **No secondary p-value is read as a discovery.** H2 lives here and is a rates question, so the tier costs it nothing. |
+| **descriptive** | #9–#11 | Rates and intervals only. `n≈25` puts the *uncorrected* MDR at 36 points, so a comparative claim is unsupportable at any α. Reporting their p-values as tests would be the "not detectable here → no effect" slide §7.1 forbids. |
+
+**#1 is the primary because it is the surgical form of the failure** — one field, not the whole
+payload — **on the axis ADR-020 built the critic to fix.** If the critic does not notice that
+its region evidence is gone, on the cluster it exists for, the guard is decorative and the
+finding needs no help from the other ten cells. The negative control (#0) stays as the check
+that the instrument fires at all.
+
+**This is the last moment this may change.** The tiering was chosen from the power table, which
+is computed from `n` and assumed effect sizes and contains no data. Re-tiering after the first
+paid call is post-hoc selection and voids the pre-registration exactly as re-scoping a cell
+would; `l4_inject.CellTier` carries the same warning and a test pins the assignment.
 
 **Not registered, and why** — recorded so "we did not run that" stays separable from "we ran
 that and buried it":
@@ -221,18 +269,23 @@ cell's number is uninterpretable. The control's rate is reported **beside every 
 as the floor, in every table. No cell result is ever corrected by subtracting it; that would be
 a post-hoc adjustment.
 
-**H1 is supported** when, across the live cells and on the affected axis, CONTAMINATED is
-substantially above the control floor *and* CAUGHT is near zero — i.e. the drops ship wrong
-answers and the three governance primitives do not fire. The attribution test per cell is exact
-two-sided McNemar (injected vs control) at α = 0.05, reported **alongside** the Bonferroni
-threshold α = 0.05/11 = 0.0045, because with eleven live cells the family-wise error rate at the
-uncorrected level is about 43%. **Consequence, pre-registered:** no single cell's p < 0.05 is
-treated as a discovery on its own. The claim is the *pattern across cells*, and the per-cell
-p-values are reported in full, boring ones included.
+**H1 is supported** when, on the **primary cell** (#1) and its affected axis, CONTAMINATED is
+substantially above the control floor *and* CAUGHT is near zero — the drop ships wrong answers
+and the three governance primitives do not fire. **That single test is the confirmatory
+claim**: exact two-sided McNemar, injected vs control, at α = 0.05 **uncorrected**, because one
+pre-registered test is not a family (§5.1).
+
+The seven secondary cells are reported in full — rate, Wilson interval and p-value, boring ones
+included — and **no secondary p-value is read as a discovery**. They place the primary in
+context and answer H2; they do not multiply the confirmatory claim. The three descriptive cells
+report rates only. The Bonferroni threshold α = 0.05/11 = 0.0045 is still printed beside the
+power table as **the cost the tiering avoids**, not as a threshold in force.
 
 **H2 is supported** when ABSORBED is large on cells whose payload the schema requires —
 cell #6 (`ambiguous_axes`) is the sharpest test, and cells #2 vs #1 decide whether presence or
-content is what the edge is really carrying.
+content is what the edge is really carrying. **H2 is the headline** (§4.2.1) and it is a claim
+about proportions, so it is decided by rates and their Wilson intervals with no significance
+test involved, at any tier.
 
 **Publish nothing** when the null control voids the run, or when the result is CONTAMINATED ≈
 100% and ABSORBED ≈ 0 across the board. That outcome has confirmed a tautology at the cost of
@@ -284,16 +337,18 @@ stable rows yield about 25 usable trials.
 
 ### 7.1 The verdict, stated plainly
 
-**This design detects large effects and cannot distinguish a modest one from zero.** At the
-expected `n=44` it needs a 24-point contamination rate to reach 80% power uncorrected, 33 points
-corrected; on the backward edge it needs 36 points. A cell that comes back at 10% contamination
-will be indistinguishable from the null control, and that must be reported as *not detectable
-here*, **never** as "no effect."
+**This design's significance test detects large effects and cannot distinguish a modest one
+from zero.** At the expected `n=44` the primary cell needs a **24-point** contamination rate to
+reach 80% power at its uncorrected α; the backward edge would need 36 even uncorrected, which is
+why §5.1 registers those three as descriptive rather than pretending otherwise. A cell that
+comes back at 10% contamination will be indistinguishable from the null control, and that must
+be reported as *not detectable here*, **never** as "no effect."
 
-The descriptive headline is better off than the significance test, and that is deliberate — the
-partition rate is the primary and McNemar is only for attribution. But a rate at `n=44` still
-carries a Wilson interval about 26 points wide near 30%, so the honest reporting unit is a wide
-interval, not a point estimate.
+**This is precisely why the headline is a rate and not a test** (§4.2.1). The partition rate is
+the primary reporting unit and McNemar is only for attribution on one cell. But a rate at `n=44`
+still carries a Wilson interval about 26 points wide near 30%, so the honest reporting unit is a
+wide interval, not a point estimate — and the intervals are narrowest exactly where H2's
+interesting answers live, near the extremes.
 
 **What follows from this, decided in advance rather than after the numbers arrive.** If the
 observed effects are large, this is a result piece. If they are modest, **this is a methods

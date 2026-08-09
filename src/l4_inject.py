@@ -163,6 +163,42 @@ class InjectionOutcome(StrEnum):
 # ---------------------------------------------------------------------------
 
 
+class CellTier(StrEnum):
+    """What kind of claim a cell is allowed to support.
+
+    Added 2026-08-09, after the pre-run power analysis was read and *before* any
+    paid call -- which is the only window in which this may change (§6's void
+    condition; ``--cells`` says so on every run). The power table showed a
+    Bonferroni correction over eleven live cells pushing the minimum detectable
+    contamination rate to 33 points at ``n=44`` and 51 points on the backward
+    edge, so a matrix of eleven co-equal confirmatory tests could not have
+    concluded anything short of catastrophic. Tiering fixes that by spending the
+    confirmatory budget on one cell instead of splitting it eleven ways.
+
+    ``CONTROL`` is the negative control: it gates readability of everything else
+    and makes no claim of its own.
+
+    ``PRIMARY`` is the single confirmatory test, at :data:`ALPHA_PRIMARY`. One
+    test, no correction, because there is one of it.
+
+    ``SECONDARY`` cells are pre-registered and reported in full -- rate, Wilson
+    interval, and p-value -- but **no secondary p-value is read as a discovery**.
+    They exist to place the primary in context and to answer H2, which is a
+    question about rates and never needed a significance test.
+
+    ``DESCRIPTIVE`` cells additionally cannot support a comparative claim at any
+    alpha: the backward edge only fires on rows that bounce, leaving ``n~=25``,
+    where even the uncorrected minimum detectable rate is 36 points. Reporting
+    their p-values as if they were tests would be the "not detectable here" ->
+    "no effect" slide §7.1 forbids. Their rates are still worth having.
+    """
+
+    CONTROL = "control"
+    PRIMARY = "primary"
+    SECONDARY = "secondary"
+    DESCRIPTIVE = "descriptive"
+
+
 @dataclass(frozen=True)
 class Cell:
     """One pre-registered injection: an edge, a field on it, and a corruption.
@@ -177,12 +213,14 @@ class Cell:
             ``None`` when the cell targets no single axis. It selects the
             headline axis for the partition and decides which challenge counts
             as the guard firing.
+        tier: What kind of claim this cell may support. See :class:`CellTier`.
     """
 
     edge: Edge
     drop: DropType
     field: str | None = None
     affected_axis: str | None = None
+    tier: CellTier = CellTier.SECONDARY
 
     @property
     def name(self) -> str:
@@ -192,7 +230,7 @@ class Cell:
 
 #: The negative control: a full-cost pass-through arm. Registered first because
 #: the run is void if it is not quiet, so nothing else is readable without it.
-NULL_CONTROL = Cell(Edge.TRIAGE_TO_CRITIC, DropType.NULL)
+NULL_CONTROL = Cell(Edge.TRIAGE_TO_CRITIC, DropType.NULL, tier=CellTier.CONTROL)
 
 #: Every live cell, fixed before the first paid call. Post-hoc cell selection is
 #: the failure this tuple exists to prevent, and
@@ -200,25 +238,51 @@ NULL_CONTROL = Cell(Edge.TRIAGE_TO_CRITIC, DropType.NULL)
 #: pins it against the spec so neither can move alone.
 LIVE_CELLS = (
     # -- triage -> critic: the SYS-022 failure verbatim, on the hypothesis axis.
-    Cell(Edge.TRIAGE_TO_CRITIC, DropType.OMIT, "region_evidence", "region"),
+    # The first of these is THE confirmatory test: it is the surgical version of
+    # the failure (one field, not the payload) and it sits on the axis ADR-020
+    # built the critic to fix, so a null here is maximally informative.
+    Cell(
+        Edge.TRIAGE_TO_CRITIC,
+        DropType.OMIT,
+        "region_evidence",
+        "region",
+        CellTier.PRIMARY,
+    ),
     Cell(Edge.TRIAGE_TO_CRITIC, DropType.EMPTY, "region_evidence", "region"),
     Cell(Edge.TRIAGE_TO_CRITIC, DropType.TRUNCATE, "region_evidence", "region"),
     Cell(Edge.TRIAGE_TO_CRITIC, DropType.STALE, "region_evidence", "region"),
     # A second axis: is the effect about region, or about evidence in general?
     Cell(Edge.TRIAGE_TO_CRITIC, DropType.OMIT, "category_evidence", "category"),
     # The anti-tuned cell: a schema-required field with NO critic rubric rule.
+    # H2's sharpest test, and H2 is a question about rates, so SECONDARY costs
+    # it nothing -- the ABSORBED rate and its interval are the whole answer.
     Cell(Edge.TRIAGE_TO_CRITIC, DropType.OMIT, "ambiguous_axes", None),
     # -- classify -> critic: blind the verifier to what it is verifying.
     Cell(Edge.CLASSIFY_TO_CRITIC, DropType.OMIT, "region", "region"),
     Cell(Edge.CLASSIFY_TO_CRITIC, DropType.STALE, "region", "region"),
     # -- critic -> classify: the backward edge, and it only fires on a bounce.
-    Cell(Edge.CRITIC_TO_CLASSIFY, DropType.OMIT, None, None),
-    Cell(Edge.CRITIC_TO_CLASSIFY, DropType.TRUNCATE, None, None),
-    Cell(Edge.CRITIC_TO_CLASSIFY, DropType.STALE, None, None),
+    # n~=25 puts even the uncorrected MDR at 36 points, so these are registered
+    # as DESCRIPTIVE: rates yes, comparative claims no. See CellTier.
+    Cell(Edge.CRITIC_TO_CLASSIFY, DropType.OMIT, None, None, CellTier.DESCRIPTIVE),
+    Cell(
+        Edge.CRITIC_TO_CLASSIFY,
+        DropType.TRUNCATE,
+        None,
+        None,
+        CellTier.DESCRIPTIVE,
+    ),
+    Cell(Edge.CRITIC_TO_CLASSIFY, DropType.STALE, None, None, CellTier.DESCRIPTIVE),
 )
 
 #: The full matrix in run order, control first.
 CELLS = (NULL_CONTROL, *LIVE_CELLS)
+
+#: The single confirmatory cell. Derived rather than restated so it cannot drift
+#: from :data:`LIVE_CELLS`; a test pins that exactly one cell holds this tier.
+PRIMARY_CELL = next(c for c in LIVE_CELLS if c.tier is CellTier.PRIMARY)
+
+#: Cells whose rates are reported but which may not carry a comparative claim.
+DESCRIPTIVE_CELLS = tuple(c for c in LIVE_CELLS if c.tier is CellTier.DESCRIPTIVE)
 
 #: Measured calls per row for L4 on gold (``evals/l4_eval.txt``, ADR-020 run).
 CALLS_PER_ROW = 4.15
@@ -779,12 +843,22 @@ def control_consistency(frames: Sequence[pd.DataFrame]) -> dict:
 # Power: what this n can and cannot detect, computed before anything is spent.
 # ---------------------------------------------------------------------------
 
-#: Two-sided alpha for a single cell's attribution test.
-ALPHA = 0.05
+#: Two-sided alpha for the ONE confirmatory test (:data:`PRIMARY_CELL`). No
+#: correction is applied to it and none is owed: a single pre-registered test is
+#: not a family. This is the operative threshold for the whole design.
+ALPHA_PRIMARY = 0.05
 
-#: Bonferroni alpha across the live cells, reported beside the uncorrected one so
-#: the family-wise cost of an eleven-cell matrix is visible rather than implied.
-ALPHA_FAMILYWISE = ALPHA / len(LIVE_CELLS)
+#: Backwards-compatible alias. Same number, and every remaining use is either the
+#: primary's threshold or the uncorrected column of the power table.
+ALPHA = ALPHA_PRIMARY
+
+#: What a Bonferroni correction would cost if all eleven live cells were treated
+#: as co-equal confirmatory tests. **They are not** -- see :class:`CellTier`.
+#: Retained and still printed because it is the arithmetic that justifies the
+#: tiering: at this threshold the design needs a 33-point effect at ``n=44`` and
+#: 51 on the backward edge, which is why spending the budget on eleven tests was
+#: the wrong design. Reported as a cost avoided, never as a threshold in force.
+ALPHA_FAMILYWISE = ALPHA_PRIMARY / len(LIVE_CELLS)
 
 
 def power_scenarios() -> list[Scenario]:
@@ -848,11 +922,17 @@ def power_table(stable_n: int = 44) -> str:
         "",
         f"Rows: gold {GOLD_ROWS}; stable-set assumption {stable_n}; backward-edge "
         f"cells {backward_n} (only rows that bounce).",
-        f"Cells: {len(LIVE_CELLS)} live + 1 null control. "
-        f"alpha {ALPHA} uncorrected, {ALPHA_FAMILYWISE:.4f} Bonferroni.",
+        f"Cells: {len(LIVE_CELLS)} live + 1 null control, tiered. ONE confirmatory "
+        f"test at alpha {ALPHA_PRIMARY} ({PRIMARY_CELL.name});",
+        f"the other {len(LIVE_CELLS) - 1} are reported, not tested. The "
+        f"{ALPHA_FAMILYWISE:.4f} Bonferroni column below is the cost",
+        "that tiering avoids -- it is NOT a threshold in force.",
         "",
     ]
-    for alpha, tag in ((ALPHA, "uncorrected"), (ALPHA_FAMILYWISE, "Bonferroni")):
+    for alpha, tag in (
+        (ALPHA_PRIMARY, "in force, for the primary cell"),
+        (ALPHA_FAMILYWISE, "Bonferroni over 11 -- avoided, shown for contrast"),
+    ):
         lines.append(f"-- alpha = {alpha:.4f} ({tag}) " + "-" * 30)
         lines.append(
             f"{'contamination rate':<22}"
@@ -873,10 +953,13 @@ def power_table(stable_n: int = 44) -> str:
             lines.append(f"  minimum detectable contamination at n={n:<4}: {shown}")
         lines.append("")
     lines += [
-        "Read this before reading any result: the design detects LARGE effects and",
-        "cannot distinguish a modest contamination rate from zero. A null cell result",
-        "is 'not detectable here', never 'no effect'. Power is a variance instrument;",
-        "it says nothing about the answer key's own disagreements with itself.",
+        "Read this before reading any result. The SIGNIFICANCE test detects LARGE",
+        "effects only and cannot distinguish a modest contamination rate from zero;",
+        "a null is 'not detectable here', never 'no effect'. That is why the headline",
+        "is ABSORBED -- a proportion with a Wilson interval, which needs no test and",
+        f"is usable at n={stable_n} wherever it sits near an extreme. CONTAMINATED is",
+        "the attribution number and is secondary. Power is a variance instrument; it",
+        "says nothing about the answer key's own disagreements with itself.",
         "=" * 78,
     ]
     return "\n".join(lines)
@@ -897,10 +980,24 @@ def cells_table(stable_n: int = 44) -> str:
         "L4 INJECTION -- PRE-REGISTERED CELL MATRIX",
         "=" * 78,
         "",
-        f"{'#':>3}  {'cell':<52}{'axis':>12}",
+        f"{'#':>3}  {'cell':<52}{'axis':>12}{'tier':>13}",
     ]
     for index, cell in enumerate(CELLS):
-        lines.append(f"{index:>3}  {cell.name:<52}{cell.affected_axis or '-':>12}")
+        lines.append(
+            f"{index:>3}  {cell.name:<52}"
+            f"{cell.affected_axis or '-':>12}{cell.tier:>13}"
+        )
+    lines += [
+        "",
+        "Tiers, fixed before the first paid call and after the power table was read:",
+        f"  primary     ONE confirmatory test at alpha {ALPHA_PRIMARY}. No correction "
+        f"is owed a single test.",
+        "  secondary   Rate + Wilson interval + p-value, all reported. No secondary",
+        "              p-value is read as a discovery. H2 lives here and needs no test.",
+        "  descriptive Rates only. The backward edge fires only on rows that bounce,",
+        "              so n~=25 and even the uncorrected MDR is 36 points; a",
+        "              comparative claim there would be unsupportable at any alpha.",
+    ]
     lines += ["", "Not registered, and why:"]
     for key, reason in infeasible_cells().items():
         lines.append(f"  {key}")

@@ -321,6 +321,49 @@ def test_every_live_cell_is_distinct_and_the_control_is_inert():
     assert NULL_CONTROL.drop is DropType.NULL
 
 
+def test_exactly_one_cell_is_confirmatory():
+    # The whole point of the 2026-08-09 tiering: the confirmatory budget is spent
+    # once, not split eleven ways. Two primaries would silently reintroduce the
+    # multiplicity the tiering exists to remove -- and would do it without
+    # anything printing a correction, which is the worst version.
+    primaries = [c for c in LIVE_CELLS if c.tier is l4_inject.CellTier.PRIMARY]
+    assert primaries == [l4_inject.PRIMARY_CELL]
+    assert l4_inject.PRIMARY_CELL.name == "triage->critic/region_evidence/omit"
+
+
+def test_the_backward_edge_cells_are_descriptive_only():
+    # n~=25 there (bounce-limited), where even the uncorrected MDR is 36 points.
+    # If a cell on that edge is ever promoted to secondary or primary, this fails
+    # rather than letting a comparative claim ride on an n that cannot carry it.
+    backward = [c for c in LIVE_CELLS if c.edge is Edge.CRITIC_TO_CLASSIFY]
+    assert backward == list(l4_inject.DESCRIPTIVE_CELLS)
+    assert all(c.tier is l4_inject.CellTier.DESCRIPTIVE for c in backward)
+
+
+def test_the_tier_assignment_matches_the_pre_registration():
+    # Same move as the matrix test above, for the tiers: §5.1's table and the
+    # code cannot drift apart. Re-tiering after the first paid call voids the
+    # pre-registration exactly as re-scoping a cell would.
+    with open(SPEC_PATH, encoding="utf-8") as handle:
+        spec = handle.read()
+    for cell in CELLS:
+        row = next(
+            line
+            for line in spec.splitlines()
+            if f"`{cell.name}`" in line and "|" in line
+        )
+        assert f"| {cell.tier} |" in row or f"| **{cell.tier}** |" in row, cell.name
+
+
+def test_bonferroni_is_documented_as_avoided_not_enforced():
+    # The Bonferroni number is still printed, and a reader must not mistake it
+    # for the threshold in force -- that would undo the tiering by misreading.
+    assert l4_inject.ALPHA_PRIMARY == 0.05
+    rendered = l4_inject.power_table()
+    assert "NOT a threshold in force" in rendered
+    assert "avoided" in rendered
+
+
 # --- the outcome partition -------------------------------------------------
 
 
