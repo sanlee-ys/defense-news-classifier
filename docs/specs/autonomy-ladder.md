@@ -3,7 +3,7 @@
 **Version:** 0.1 (Living roadmap)
 **Status:** Accepted direction
 **Author:** San Lee
-**Last updated:** 2026-07-25
+**Last updated:** 2026-08-09
 **Decision record:** [ADR-006](../../decisions/006-autonomy-ladder-portfolio-spine.md)
 **Related:** [prompt-optimization-loop spec](prompt-optimization-loop.md) (implements Level 3) · [master PRD](../PRD.md)
 
@@ -51,6 +51,33 @@ tool." The distinguishing axis is *who drives and how many autonomous actors*:
 The L4 honesty test: a **critic that can bounce a label backward** for reclassification, not a
 linear pipeline with extra steps. That backward edge is also where the Goodhart story lives —
 the critic is what catches the classifier gaming its own metric.
+
+**L4 is a work graph, and that claim needs its qualifiers.** In the sense the term *graph
+engineering* acquired in 2026 (typed nodes, edges carrying state between them, and a harness that
+routes and observes the whole thing), L4 is one, and per
+[SYS-022](https://github.com/sanlee-ys/architecture/blob/main/decisions/SYS-022-org-graph-and-the-mechanization-split.md)
+Amendment 1 it is the only built-and-measured work graph anywhere in this system. That record's
+discipline is that the unqualified claim is not available, so here is the split for
+`src/l4_pipeline.py`. **Mechanized:** routing, but *statically*, since the node order is fixed in
+`process_row` and never chosen at runtime; observability, genuinely, via an append-only per-run
+audit JSONL recording every triage note, label, challenge, bounce, and verdict; and node policy
+in code rather than in prompt hope, since `challenge_violations` discards any challenge that
+names no axis, cites no rubric rule, or states no evidence gap, failing closed to accept, and the
+bounce cap is structural because there is exactly one re-classify call site. **Never had:**
+dynamic node spawning (the three nodes are fixed in the driver), and cross-process state
+consistency (the whole graph runs in one process, so there is no edge that can silently drop
+state between machines).
+
+**What the measurement exposed is the honest half.** All three of those governance primitives
+guard against a bad *critic*. Nothing validates upstream state: `classify()` takes no evidence
+argument at all, so the classifier is blind to triage by construction. That was a deliberate
+fork, resolved 2026-07-25 ([l4-multi-agent](l4-multi-agent.md) §9.1) so the run would measure the
+critic's marginal value rather than a different classifier, and the consequence is that the
+guards sit at the boundary that was easy to reason about rather than at the one carrying the
+risk. Silent context loss at a handoff is the graph layer's characteristic failure, and L4 has no
+instrument pointed at it. None of that is a fifth level. It describes L4 against a different axis
+(how state moves between actors) than the ladder's own, and a rung cannot be built out of a
+re-description.
 
 ## 5. Design decisions baked into the spine
 
