@@ -97,14 +97,20 @@ the judge's prompt too, and a perfect 100.0% at n=54 was always a wide interval.
 
 Every measurement above prices a spend *on top of* an LLM. This one baselines the LLM itself:
 TF-IDF + logistic regression, the standard zero-dollar stack, trained on the 300 judge-graded
-snippets and scored once against the same human gold set
-([ADR-017](decisions/017-classical-baseline-bakeoff.md), full report in
-[`evals/baseline_eval.txt`](evals/baseline_eval.txt)):
+snippets and scored once against the same human gold set.
 
-| Axis | Classical baseline | LLM (v3 run) | McNemar (paired, exact) |
+**Measured at ADR-017, n=54 human gold — a frozen dated bake-off, not live current gold.**
+The LLM column is the workhorse snapshot *as paired for that run* (92.6% / 92.6%); it does
+**not** track the headline table above (v3.2.1: 94.4% / 98.1%). No `metric:` markers here —
+a marker would force today's artifact into a historical comparison
+([ADR-017](decisions/017-classical-baseline-bakeoff.md), full report in
+[`evals/baseline_eval.txt`](evals/baseline_eval.txt); same freeze rule as
+[ADR-022](decisions/022-scaled-region-eval-verdict.md)):
+
+| Axis | Classical baseline | LLM (bake-off snapshot) | McNemar (paired, exact) |
 |---|---|---|---|
-| Category | 72.2% [59.1, 82.4] | <!-- metric:category_accuracy -->92.6% | p=0.013 |
-| Operational domain | 66.7% [53.4, 77.8] | <!-- metric:domain_accuracy -->92.6% | p=0.0005 |
+| Category | 72.2% [59.1, 82.4] | 92.6% | p=0.013 |
+| Operational domain | 66.7% [53.4, 77.8] | 92.6% | p=0.0005 |
 
 Unlike the grounding and routing deltas, this gap clears significance even at n=54 — the LLM
 spend is justified with a number instead of an assumption, for the first time. The honest

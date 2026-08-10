@@ -16,11 +16,12 @@ job is to "lead with the numbers" — was the last place still holding hand-type
 of them.
 
 WHAT IS GENERATED, AND WHAT IS DELIBERATELY NOT. Only the current three-axis gold table
-between the BEGIN/END markers. The historical tables further down (the v1 synthetic
-baseline, the v2.0 Sonnet-4-6 record, the routing comparison) are **frozen records of
-past runs** and must never track the latest artifact — regenerating them would rewrite
-history to match today, which is the failure `SYS-001`'s retroactivity rule exists to
-prevent.
+between the BEGIN/END markers. The historical tables further down (the classical ML
+bake-off, the v1 synthetic baseline, the v2.0 Sonnet-4-6 record, the routing comparison)
+are **frozen records of past runs** and must never track the latest artifact — regenerating
+them would rewrite history to match today, which is the failure `SYS-001`'s retroactivity
+rule exists to prevent. Bake-off LLM cells deliberately carry no ``metric:`` markers for
+the same reason (ADR-017 / ADR-022).
 
 Run locally:
     uv run python scripts/gen_readme_metrics.py          # rewrite the block
