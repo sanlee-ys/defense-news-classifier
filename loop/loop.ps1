@@ -51,6 +51,11 @@ param(
     # Model tier for the agent. Sonnet is the SYS-002 default.
     [string]$Model = "sonnet",
 
+    # The agent command. Only reason to change it: substituting a
+    # deterministic stub so a rail can be exercised without spending budget.
+    # See loop/fixtures/stuck-agent.ps1.
+    [string]$AgentCommand = "claude",
+
     # Score with the zero-API mock backend. Use this for a smoke test.
     [switch]$DryRunMetrics,
 
@@ -224,7 +229,7 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     $prompt = Get-Content $PromptFile -Raw
     Push-Location $RepoRoot
     try {
-        $raw = $prompt | & claude -p --model $Model --output-format json
+        $raw = $prompt | & $AgentCommand -p --model $Model --output-format json
     }
     finally { Pop-Location }
 
