@@ -19,11 +19,11 @@
     pwsh loop/loop.ps1 -MaxIterations 4 -DryRunMetrics -NoPush `
         -AgentCommand loop/fixtures/stuck-agent.ps1
 #>
-[CmdletBinding()]
 param(
-    [switch]$p,
-    [string]$Model,
-    [string]$OutputFormat
+    # `claude` is called with double-dash flags, which PowerShell does not
+    # bind by name. Swallow them all rather than declaring each one.
+    [Parameter(ValueFromRemainingArguments = $true)]
+    $Rest
 )
 
 $ErrorActionPreference = "Stop"
