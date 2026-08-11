@@ -1,0 +1,206 @@
+name: agent-task
+
+# AGENT TASK LANE: an on-demand job where a coding agent implements a scoped task
+# and proposes it as a DRAFT PR. The "proposing" counterpart to the advisory review
+# lane (claude-review.yml / ADR-016). Full rationale in
+# decisions/025-agent-task-lane.md; the assembly rule it satisfies is agent-ops
+# conventions/agent-in-ci.md (sandboxed scoped credentials; proposal-only output;
+# deterministic verifier after the agent; redline guards travel with the job).
+#
+# THE DETERMINISTIC VERIFIER IS NOT IN THIS WORKFLOW, ON PURPOSE. agent-in-ci.md
+# rule 3 says every agentic job is followed by a deterministic verifier -- here
+# that verifier is tests.yml + evals.yml + CodeQL, which run on the proposal PR
+# exactly as they run on any human PR. Duplicating them as a step in this file
+# would be a second copy that drifts from the first. The consequence to
+# internalize: AGENT GREEN IS NOT BUILD GREEN. This job going green means "a draft
+# PR exists" (or not even that -- an agentic step exits 0 whether the work landed,
+# was denied, or was never attempted). The PR's own checks are the gate; judge the
+# run by the PR it opened and that PR's checks, never by this workflow's tick.
+#
+# Deliberately does NOT use pull_request_target -- that trigger runs untrusted fork
+# code in the base repo's context WITH secrets. Moot for workflow_dispatch (no PR
+# event is involved at all), retained as a standing prohibition, same as
+# claude-review.yml's header, so a future auto-triggered variant of this lane does
+# not reintroduce it.
+on:
+  # The ONLY trigger. No comment phrase, no schedule, no PR event: the owner
+  # launches a task deliberately from the Actions tab / `gh workflow run`, and the
+  # lane costs nothing when idle -- the same economics that ADR-016 Amendment 1
+  # arrived at for the review lane, adopted here from day one.
+  workflow_dispatch:
+    inputs:
+      task:
+        description: >-
+          The scoped task the agent should implement. One concern; the prompt
+          passes it through verbatim.
+        required: true
+        type: string
+      branch_suffix:
+        description: >-
+          Optional suffix for the proposal branch name (defaults to the run id),
+          so a re-dispatch of the same task does not collide with the first
+          attempt's branch.
+        required: false
+        type: string
+
+# contents: write is what lets the agent push the PROPOSAL branch
+# (claude/agent-task-*). It is proposal-only in effect, not just in intent,
+# because branch protection on main is what bounds it: the job token can push a
+# claude/agent-task-* branch, it CANNOT push main -- protected-branch rules apply
+# to the Actions token like any other. That protection rule is the load-bearing
+# half of agent-in-ci.md rule 2; this scope is the other half. If branch
+# protection on main is ever dropped, this scope becomes a push-to-main
+# capability and this lane must be re-decided.
+#
+# pull-requests: write is what lets the agent open the draft PR -- the proposal
+# artifact itself.
+#
+# id-token: write is NOT optional: the action exchanges a GitHub OIDC token for
+# its App token, and without this scope it fails at setupGitHubToken with "Unable
+# to get ACTIONS_ID_TOKEN_REQUEST_URL" before ever reaching the model (same note
+# as claude-review.yml). It grants the ability to mint an OIDC identity token for
+# this repo, not any repo access by itself.
+#
+# Everything else is deliberately absent. In particular: no issues scope (this
+# lane neither reads nor writes issues), no actions/deployments/packages -- the
+# permission envelope is the sandbox line agent-in-ci.md rule 1 asks to be able
+# to point at.
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  propose:
+    # workflow_dispatch on a public repo is already gated by repo permissions --
+    # only users with write access can dispatch. Asserted anyway: a check that
+    # could not run is not a pass (agent-trigger-authorization.md), and this
+    # guard keeps holding if the repo ever gains a collaborator, an integration
+    # that can dispatch workflows, or a caller workflow. Unlike the review
+    # lane's comment event there is no author_association on a dispatch event,
+    # so the actor login is the guard.
+    if: github.actor == 'sanlee-ys'
+    runs-on: ubuntu-latest
+    # Keyed per-run rather than per-branch: two deliberately-dispatched tasks are
+    # independent proposals on independent branches and must not cancel each
+    # other. github.run_id makes every group unique, i.e. no cancellation --
+    # recorded so nobody "fixes" this into a shared group later.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # GUARDS BEFORE AGENT (agent-in-ci.md rule 4). A fresh CI container has
+      # none of the fleet's redline guards; the agent's FIRST tool call must
+      # already be behind them, so this step precedes the action. The three
+      # fetched here are the canonical copies in agent-ops (credential-guard.py
+      # lives under security/, the other two under hooks/ -- verified against
+      # the repo layout 2026-08-11):
+      #   credential-guard.py       -- refuses tool calls that would read/leak
+      #                                credentials; matcher "*" (every tool).
+      #   git-staging-guard.py      -- guards what reaches the git index;
+      #                                matcher "Bash".
+      #   published-history-guard.py -- refuses rewrites of published history;
+      #                                matcher "Bash".
+      #
+      # A FETCH FAILURE FAILS THE JOB (set -euo pipefail + curl --fail). Running
+      # the agent unguarded is a security-posture change relative to every
+      # provisioned machine in the fleet, made implicitly and approved by nobody
+      # (agent-in-ci.md rule 4) -- so the fallback to "just run anyway" does not
+      # exist here. Pinned to main rather than a SHA: the guards are maintained
+      # canon and a stale pin is the drift class security/posture.md limit 6
+      # records; main is what provisioned machines deploy from.
+      - name: Install redline guards (fail closed)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.claude/hooks"
+          base="https://raw.githubusercontent.com/sanlee-ys/agent-ops/main"
+          curl --fail --silent --show-error --location \
+            "$base/security/credential-guard.py" \
+            -o "$HOME/.claude/hooks/credential-guard.py"
+          curl --fail --silent --show-error --location \
+            "$base/hooks/git-staging-guard.py" \
+            -o "$HOME/.claude/hooks/git-staging-guard.py"
+          curl --fail --silent --show-error --location \
+            "$base/hooks/published-history-guard.py" \
+            -o "$HOME/.claude/hooks/published-history-guard.py"
+          chmod +x "$HOME"/.claude/hooks/*.py
+          # Minimal settings wiring the three as PreToolUse hooks -- the same
+          # shape a provisioned machine carries. Written fresh each run; there
+          # is no pre-existing settings.json on a hosted runner to merge with.
+          cat > "$HOME/.claude/settings.json" <<'EOF'
+          {
+            "hooks": {
+              "PreToolUse": [
+                {
+                  "matcher": "*",
+                  "hooks": [
+                    { "type": "command", "command": "python3 \"$HOME/.claude/hooks/credential-guard.py\"" }
+                  ]
+                },
+                {
+                  "matcher": "Bash",
+                  "hooks": [
+                    { "type": "command", "command": "python3 \"$HOME/.claude/hooks/git-staging-guard.py\"" },
+                    { "type": "command", "command": "python3 \"$HOME/.claude/hooks/published-history-guard.py\"" }
+                  ]
+                }
+              ]
+            }
+          }
+          EOF
+
+      # Same authentication as claude-review.yml: the repo's ANTHROPIC_API_KEY
+      # secret (set 2026-07-11 for evals.yml, reused by ADR-016's lane, reused
+      # again here -- one key, one revocation point).
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are implementing ONE scoped task in this repository and proposing
+            it as a draft pull request. You never merge; a human reviews the PR
+            and the PR's own CI checks are the gate on it.
+
+            THE TASK (verbatim from the dispatch input):
+            ${{ inputs.task }}
+
+            Rules:
+            - One concern, smallest diff that honestly completes the task. If the
+              task as stated is too large or ambiguous to do as one concern, do
+              the smallest defensible core and say plainly in the PR body what
+              you did not do and why.
+            - Follow CLAUDE.md. Do not touch published eval numbers, the gold
+              set, or CHANGELOG.md unless the task explicitly says to.
+            - Run the repo gates locally before pushing and record their output:
+                uv sync --group dev
+                uv run pytest
+                uv run ruff check src/ tests/
+                uv run black --check src/ tests/
+                uv run mypy src/
+            - Create and push a branch named exactly:
+                claude/agent-task-${{ inputs.branch_suffix || github.run_id }}
+              Never commit to main and never push any other branch.
+            - Open a DRAFT pull request from that branch into main. The PR body
+              must carry: (1) the task text verbatim, (2) the output of the gate
+              commands above (pass/fail per gate, with the failing output if
+              any), (3) an explicit "Not done" section listing anything the task
+              asked for that this PR does not deliver. An empty "Not done"
+              section is a claim -- only write it if it is true.
+            - The draft PR IS the deliverable. Implementing without pushing and
+              opening the PR is a no-op.
+          # --model pinned per SYS-002 (exact ID, no date suffix); implementation
+          # is not a task an eval has shown needs the escalation tier. --max-turns
+          # bounds the agentic loop so a runaway task cannot run an unbounded
+          # bill -- higher than the review lane's 20 because implementing + running
+          # four gates + pushing + opening a PR is more turns than commenting.
+          #
+          # --allowedTools is NOT optional and its absence fails SILENTLY (the
+          # review lane measured this: green run, $0.14, nothing posted). Named
+          # here: file tools to implement, Bash(uv run:*) and Bash(uv sync:*)
+          # for the gates, git for branch/commit/push, gh pr create for the
+          # proposal. Deliberately NOT granted: gh pr merge, gh api, or any
+          # push outside git's own porcelain.
+          claude_args: |
+            --model claude-sonnet-5
+            --max-turns 50
+            --allowedTools "Read,Write,Edit,Grep,Glob,Bash(uv sync:*),Bash(uv run:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit:*),Bash(git checkout:*),Bash(git switch:*),Bash(git push:*),Bash(gh pr create:*),Bash(gh pr view:*)"
