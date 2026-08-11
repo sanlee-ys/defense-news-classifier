@@ -293,8 +293,10 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
         # --- Rail 4: stuck detection --------------------------------------
         $signatures += "${gate}:${diffHash}"
         if ($signatures.Count -ge 3) {
-            $last3 = $signatures[-3..-1]
-            if (($last3 | Select-Object -Unique).Count -eq 1) {
+            $last3 = @($signatures[-3..-1])
+            # @() around the pipeline: three identical strings collapse to one
+            # scalar, which has no .Count under Set-StrictMode.
+            if (@($last3 | Select-Object -Unique).Count -eq 1) {
                 $state = [ordered]@{
                     halted_at = (Get-Date).ToUniversalTime().ToString("o")
                     reason    = "three consecutive identical failures"
