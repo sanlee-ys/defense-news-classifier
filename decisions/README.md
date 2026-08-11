@@ -28,6 +28,7 @@ Decisions are recorded here as they are made. Each ADR captures the context, the
 | [022](022-scaled-region-eval-verdict.md) | Scaled region eval measured (n=300): region 88.3% [84.2, 91.5], the CI narrows 18pts → 7pts, and the named `global` cluster is confirmed systematic (49% of region disagreements) — figures published as frozen dated prose, no CI floor | Accepted |
 | [023](023-global-boundary-clause-verdict.md) | The `global`-boundary prompt clause, measured against ADR-022's ruler and **reverted**: region 88.5% → 92.2% (12/17 named pulls fixed, 7 correct rows broken) at **McNemar p=0.0522** against a pre-registered p<0.05 — marginal reverts, because a pre-registration that binds only when convenient is not one. *Amended 2026-08-03 with a pointer to ADR-024; body unchanged* | Accepted |
 | [024](024-global-boundary-clause-adopted.md) | The same clause re-registered at adequate power and **adopted** (`v3.2.1`): effective n=595 at 0.837 power, region 89.9% → 94.1% at **McNemar p=0.0002**, guardrails clean, gold 87.0% → 94.4% — the first measure-first *adoption* after six declines, and the honest lesson is that ADR-023 was underpowered (~49%), not wrong | Accepted |
+| [026](026-ralph-loop-honest-ruler.md) | Ralph outer loop with an honest ruler — the agent reads split A, the acceptance gate is the hidden split B, split C decides nothing; all seven agent-ops ADR-016 rails live in the outer script, and the loop merges nothing | Accepted |
 
 ## Format
 
