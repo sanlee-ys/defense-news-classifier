@@ -65,10 +65,22 @@ uv run python scripts/loop_metrics.py --mode check --dry-run
 Exit codes: `0` accepted, `3` the hidden validation split regressed, `4` the
 frozen region rubric changed, `1` an error.
 
+## Verify the rails without spending budget
+
+A stub agent stands in for `claude` so the two halting rails can be exercised
+deterministically. Both runs cost nothing.
+
+```powershell
+# Rail 4: the stub damages the region rubric the same way every iteration,
+# so the loop halts on the third identical failure, short of the cap.
+pwsh loop/loop.ps1 -MaxIterations 5 -DryRunMetrics -NoPush `
+    -AgentCommand loop/fixtures/stuck-agent.ps1
+```
+
 ## What is in `loop/state/`
 
 Everything here is agent-visible on purpose. Nothing here carries a B or C
-score.
+score. The directory is untracked scratch for one run, like the run logs.
 
 | File | Written by | Purpose |
 |---|---|---|
@@ -77,6 +89,10 @@ score.
 | `log.md` | the agent | One entry per iteration. The loop's only memory across restarts. |
 | `status.md` | the agent | Carries `LOOP-COMPLETE:` when the agent decides it is done. |
 | `stuck.json` | the outer script | Written when three consecutive iterations fail identically. The run halts. |
+| `ledger_at_halt.jsonl` | the outer script | The hidden-score ledger, copied out when a run halts before its last iteration. |
+
+An accepted iteration is committed. A rejected one is not: its edit is
+reverted and its record stays in the ledger.
 
 ## `loop.sh`
 

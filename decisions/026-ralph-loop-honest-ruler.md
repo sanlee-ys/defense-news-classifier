@@ -143,13 +143,17 @@ of "a little" across a run is exactly the regression the gate exists to catch.
 
 ## Consequences
 
-- The loop's default output is a branch of commits, some marked accepted and
-  some marked rejected-and-reverted, plus a run log. Review cost moves to a
-  human. Under ADR-016 that is the intended trade.
-- A rejected iteration is still committed, with the edit reverted and the
-  record kept. The next iteration therefore reads why the last one failed
-  without inheriting the edit that failed — the "no ratchet" limitation the
-  rung-1 spec records in §10 does not repeat here.
+- The loop's default output is a branch carrying one commit per **accepted**
+  iteration, plus a run log. Review cost moves to a human. Under ADR-016 that
+  is the intended trade.
+- A rejected iteration leaves no commit. Its edit is reverted and its full
+  record — scores, gate, timestamp — is in the ledger. `loop/state/verdict.md`
+  survives the revert, so the next iteration reads why the last one failed
+  without inheriting the edit that failed. The "no ratchet" limitation the
+  rung-1 spec records in §10 therefore does not repeat here.
+- `loop/state/` is untracked scratch, matching this repository's existing
+  policy for run logs. It is also what lets a second run start: a tracked
+  state directory left the tree dirty and the next run refused to start.
 - The loop cannot improve `region`, by construction. That is a real capability
   cost, accepted so an adopted, measured clause cannot be silently rewritten by
   an optimizer aimed at a different axis.
@@ -172,6 +176,10 @@ of "a little" across a run is exactly the regression the gate exists to catch.
   be re-declared if the loop is ever pointed at a different file.
 - `tests/test_loop_metrics.py` — pins the exit-code contract, the ratchet, the
   zero tolerance, and that the agent-visible report carries no hidden score.
+- `loop/fixtures/stuck-agent.ps1` — the deterministic stub that makes the
+  stuck-detection rail reproducible without spending budget. It is substituted
+  through `-AgentCommand`, which exists for that purpose and no other.
+- `.gitignore` — `loop/state/` and `evals/loop/run_*.jsonl`.
 - `evals/loop/` — new run-log directory, sibling to `evals/optimize/`.
 - `docs/specs/prompt-optimization-loop.md` — unchanged. This is an outer loop
   around that work, not a revision of it; the A/B/C contract is shared, so a
