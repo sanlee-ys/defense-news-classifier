@@ -98,10 +98,14 @@ function Stop-Loop {
 # worst place to remove a guard: it repeats the blocked action instead of
 # reconsidering it. The check is here so the refusal is mechanical.
 $forbidden = @("dangerously-skip-permissions", "bypassPermissions")
+$invocation = @([Environment]::GetCommandLineArgs()) + @($MyInvocation.Line) -join " "
 foreach ($flag in $forbidden) {
-    if ($MyInvocation.Line -match [regex]::Escape($flag)) {
+    if ($invocation -match [regex]::Escape($flag)) {
         Stop-Loop "refusing to run: '$flag' is a permission-bypass flag (ADR-016 rail 7)."
     }
+}
+if ($env:CLAUDE_CODE_PERMISSION_MODE -eq "bypassPermissions") {
+    Stop-Loop "refusing to run: the environment sets bypassPermissions (ADR-016 rail 7)."
 }
 
 # --- Rail 5: worktree isolation -------------------------------------------
