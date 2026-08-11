@@ -256,10 +256,15 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     else { "empty" }
 
     if ($code -eq 0) {
-        git -C $RepoRoot add -- src/classify.py loop/state
-        git -C $RepoRoot commit -m "loop(iter $i): accepted -- hidden validation gate passed" | Out-Null
-        Write-Step "iteration ${i}: ACCEPTED, committed"
-        $accepted++
+        if ($changed) {
+            git -C $RepoRoot add -- src/classify.py
+            git -C $RepoRoot commit -m "loop(iter ${i}): accepted -- hidden validation gate passed" | Out-Null
+            Write-Step "iteration ${i}: ACCEPTED, committed"
+            $accepted++
+        }
+        else {
+            Write-Step "iteration ${i}: nothing to accept, no edit was made"
+        }
         $signatures = @()
     }
     else {
@@ -269,12 +274,11 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
             default { "metrics_error_$code" }
         }
         Write-Step "iteration ${i}: REJECTED ($gate), reverting the edit"
-        # Keep the state files (report, verdict, log) and revert the prompt,
-        # so the next iteration reads why it was rejected without inheriting
-        # the rejected edit.
+        # Revert the prompt but keep loop/state/, so the next iteration reads
+        # why this one was rejected without inheriting the edit that failed.
+        # Nothing is committed: a rejected iteration leaves no commit, and its
+        # full record is in the ledger.
         git -C $RepoRoot checkout -- src/classify.py 2>$null
-        git -C $RepoRoot add -- loop/state
-        git -C $RepoRoot commit -m "loop(iter ${i}): rejected ($gate) -- edit reverted, record kept" | Out-Null
 
         # --- Rail 4: stuck detection --------------------------------------
         $signatures += "${gate}:${diffHash}"
@@ -292,8 +296,7 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
                     ledger    = $Ledger
                 }
                 $state | ConvertTo-Json | Set-Content -Path $StuckFile -Encoding utf8
-                git -C $RepoRoot add -- loop/state
-                git -C $RepoRoot commit -m "loop: halted -- stuck on $gate for 3 iterations" | Out-Null
+                Copy-Item $Ledger (Join-Path $RepoRoot "loop/state/ledger_at_halt.jsonl")
                 Stop-Loop "stuck: the same failure three times. See loop/state/stuck.json (ADR-016 rail 4)."
             }
         }
@@ -310,8 +313,6 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
 $evalDir = Join-Path $RepoRoot "evals/loop"
 New-Item -ItemType Directory -Force -Path $evalDir | Out-Null
 Copy-Item $Ledger (Join-Path $evalDir "run_$stamp.jsonl")
-git -C $RepoRoot add -- evals/loop
-git -C $RepoRoot commit -m "loop: run log for $stamp" | Out-Null
 
 Write-Step "stopped: $stopReason"
 Write-Step "$accepted of $MaxIterations iterations accepted"
