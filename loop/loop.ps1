@@ -184,9 +184,16 @@ function Invoke-Metrics {
     $metricsArgs = @("run", "python", "scripts/loop_metrics.py", "--mode", $Mode,
         "--ledger", $Ledger)
     if ($DryRunMetrics) { $metricsArgs += "--dry-run" }
+    # A worktree usually has no .env, and dry-run scoring needs no key. A
+    # global UV_ENV_FILE would otherwise fail the call on a missing file.
+    $savedEnvFile = $env:UV_ENV_FILE
+    if ($DryRunMetrics) { $env:UV_ENV_FILE = "" }
     Push-Location $RepoRoot
     try { & uv @metricsArgs; return $LASTEXITCODE }
-    finally { Pop-Location }
+    finally {
+        Pop-Location
+        $env:UV_ENV_FILE = $savedEnvFile
+    }
 }
 
 # --- baseline -------------------------------------------------------------
