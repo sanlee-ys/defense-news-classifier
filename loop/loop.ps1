@@ -191,7 +191,10 @@ function Invoke-Metrics {
     # an empty value makes uv look for a file named "" and fail.
     if ($DryRunMetrics -and (Test-Path Env:UV_ENV_FILE)) { Remove-Item Env:UV_ENV_FILE }
     Push-Location $RepoRoot
-    try { & uv @metricsArgs; return $LASTEXITCODE }
+    # Out-Host, not a bare call: a bare `& uv` writes its stdout to the
+    # function's output stream, so the caller receives the console text AND
+    # the exit code as one array, and every comparison against 0 is wrong.
+    try { & uv @metricsArgs | Out-Host; return $LASTEXITCODE }
     finally {
         Pop-Location
         if ($null -ne $savedEnvFile) { $env:UV_ENV_FILE = $savedEnvFile }
