@@ -19,12 +19,10 @@
     pwsh loop/loop.ps1 -MaxIterations 4 -DryRunMetrics -NoPush `
         -AgentCommand loop/fixtures/stuck-agent.ps1
 #>
-param(
-    # `claude` is called with double-dash flags, which PowerShell does not
-    # bind by name. Swallow them all rather than declaring each one.
-    [Parameter(ValueFromRemainingArguments = $true)]
-    $Rest
-)
+# No param block on purpose. `claude` is called with double-dash flags and a
+# bare `-p`; any param block makes this an advanced function, and `-p` then
+# collides with the common `-ProgressAction`. With no param block every
+# argument lands in $args and is ignored, which is what a stub wants.
 
 $ErrorActionPreference = "Stop"
 
