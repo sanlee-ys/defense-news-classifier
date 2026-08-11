@@ -33,6 +33,14 @@ evals/baseline_model.joblib
 # as the rung-1 optimize logs above.
 evals/ml_loop/run_*.jsonl
 
+# Ralph outer-loop run logs (loop/loop.ps1 copies one out per run, decisions/026),
+# same policy as the loop run logs above. `loop/state/` is that loop's working
+# state: the agent-visible set-A report, its verdict, its own iteration log, and
+# the stuck file. It is scratch for one run, not a deliverable, and leaving it
+# untracked is also what keeps a second run from halting on a dirty tree.
+evals/loop/run_*.jsonl
+loop/state/
+
 # L4 pipeline audit trails (src/l4_pipeline.py, one per run), same policy
 # as the loop run logs above.
 evals/l4/audit_*.jsonl

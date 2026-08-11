@@ -1,0 +1,12 @@
+# Blast radius for the Ralph outer loop (agent-ops ADR-016, rail 8).
+#
+# Declared BEFORE the first iteration. The loop compares this list against
+# `git status --porcelain` after every iteration and halts on any path that
+# is not listed, even when every other check is green. A set derived from
+# the diff afterwards describes what happened; it does not bound it.
+#
+# One path per line. A blank line or a line starting with `#` is ignored.
+# A trailing `/` matches every file under that directory.
+
+src/classify.py
+loop/state/
