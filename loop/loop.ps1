@@ -187,12 +187,14 @@ function Invoke-Metrics {
     # A worktree usually has no .env, and dry-run scoring needs no key. A
     # global UV_ENV_FILE would otherwise fail the call on a missing file.
     $savedEnvFile = $env:UV_ENV_FILE
-    if ($DryRunMetrics) { $env:UV_ENV_FILE = "" }
+    # Removing the variable is not the same as setting it to the empty string:
+    # an empty value makes uv look for a file named "" and fail.
+    if ($DryRunMetrics -and (Test-Path Env:UV_ENV_FILE)) { Remove-Item Env:UV_ENV_FILE }
     Push-Location $RepoRoot
     try { & uv @metricsArgs; return $LASTEXITCODE }
     finally {
         Pop-Location
-        $env:UV_ENV_FILE = $savedEnvFile
+        if ($null -ne $savedEnvFile) { $env:UV_ENV_FILE = $savedEnvFile }
     }
 }
 
