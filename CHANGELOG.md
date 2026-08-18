@@ -9,6 +9,98 @@ Versions are tagged by milestone; individual commits are noted where relevant.
 
 ## [Unreleased]
 
+Work that landed after the `v3.2.1` tag. No version number is claimed yet. The shipped
+classifier is unchanged: `src/classify.py` carries the same `SYSTEM_PROMPT`, and
+`evals/metrics.json` carries the same published numbers.
+
+### Added
+- **A Ralph-style outer loop around the classifier prompt, graded on a split the agent
+  never sees** ([ADR-026](decisions/026-ralph-loop-honest-ruler.md), `loop/loop.ps1`,
+  `loop/PROMPT_optimize.md`, `scripts/loop_metrics.py`, `loop/README.md`). The agent reads
+  split A only. Split B is the acceptance gate, and an iteration commits only if B does not
+  regress against the best accepted B. Split C decides nothing and is recorded as the honest
+  final number. The splits come from the same `src/optimize.py` code, so both loops measure
+  the same rows. The ledger that carries B and C is written outside the git worktree during a
+  run, then copied into `evals/loop/` after the last iteration. The verdict the agent reads
+  names the gate that fired and never quotes a number.
+
+  **This is unmeasured, and deliberately so.** ADR-026 ships the harness and a smoke test,
+  and it makes no claim that the loop improves the classifier prompt. The smoke test
+  exercised the mechanics against the zero-API mock backend. **No live optimization run has
+  been made**, and the prompt in `src/classify.py` is unchanged. What the hidden split buys
+  is stated as a bound, not as a result: the metric is not *convenient* to the agent. ADR-026
+  cites this repo's own measured Goodhart catch (ADR-018, B up 6.0 points while held-out C
+  fell 8.6) as the reason the ruler is hidden at all.
+
+  All seven agent-ops ADR-016 rails live at the call site in `loop/loop.ps1`, not in the
+  prompt: an iteration cap, a budget cap, a time cap, stuck detection that halts on three
+  identical failures and writes `loop/state/stuck.json`, worktree isolation, pushes to the
+  loop branch only, and a refusal on any permission-bypass flag. The blast radius is declared
+  before the first iteration in `loop/blast-radius.txt`. **The loop merges nothing.** A second
+  gate rejects any change to the frozen region rubric, compared byte for byte before scoring:
+  ADR-024 adopted that clause on measured evidence, so a loop that optimizes `category` may
+  not rewrite it. The loop therefore cannot improve `region` by construction, which ADR-026
+  records as an accepted capability cost.
+- **An agent task lane: dispatch a scoped task, get back a draft PR**
+  ([ADR-025](decisions/025-agent-task-lane.md), `.github/workflows/agent-task.yml`). This is
+  the proposing counterpart to ADR-016's advisory review lane, assembled per agent-ops
+  `conventions/agent-in-ci.md`. The lane is `workflow_dispatch` only and owner-gated. Its
+  `contents:write` permission is bounded to proposal branches by the protection rules on
+  `main`. The redline guards are fetched and wired before the agent's first tool call, and a
+  failed fetch fails the job. The deterministic verifier is deliberately absent from the
+  workflow: `tests.yml`, `evals.yml` and CodeQL gate the proposal PR the same way they gate
+  any other PR. Rejected alternatives are recorded in ADR-025.
+- **An injection harness for the L4 work graph, plus its pre-registration and power
+  analysis** ([spec](docs/specs/l4-context-loss-injection.md), `src/l4_inject.py`,
+  `tests/test_l4_inject.py`). SYS-022 Amendment 1 and the ladder spec both name the same
+  asymmetry: ADR-020 built three governance primitives for the L4 work graph, all three guard
+  against a bad critic, and nothing validates upstream state. This instrument measures that
+  bill and nothing more. `InjectingBackend` satisfies the `L4Backend` Protocol structurally
+  and corrupts the *consumer's argument*, never a producer's return value, so on
+  `classify->critic` the critic reviews a corrupted label while the label that ships is
+  untouched. There are zero edits to `src/l4_pipeline.py`.
+
+  **No arm has been run and no API budget was spent.** Scoring is a rate over a five-way
+  partition (CAUGHT, CONTAMINATED, ABSORBED, CORRECTED, CRASHED). Propagation distance is
+  retired as the headline, because hop count is bounded by graph depth and depth is a free
+  parameter. Ground truth is two references: the 54-row human gold answers "is it wrong", and
+  the paired control plus McNemar answers "did the drop cause it". The spec states plainly
+  that there is no gold for intermediate node output. The cell matrix is asserted against the
+  spec file by a test, so post-hoc cell selection cannot happen quietly.
+
+### Changed
+- **The L4 injection pre-registration is tiered, amended after its own power table and
+  before the first paid call** (`docs/specs/l4-context-loss-injection.md`,
+  `src/l4_inject.py`). Eleven co-equal live cells forced a choice between an uncorrected
+  alpha carrying a family-wise error rate near 43% and a Bonferroni alpha needing 33 points
+  at n=44. Three changes replace that: one confirmatory test rather than eleven
+  (`triage->critic` on `critic`, `region_evidence`, `omit`, at an uncorrected alpha of 0.05),
+  which drops the minimum detectable rate from 33 points to 24; the three backward-edge cells
+  become **descriptive** because they fire only on rows that bounce (n is about 25, where
+  even the uncorrected minimum is 36 points), so they report rates and no comparative claims;
+  and ABSORBED becomes the headline with CONTAMINATED as the attribution number, because a
+  proportion needs no significance test and its Wilson interval is usable at n=44 near the
+  extremes. The Bonferroni figure is still printed, relabelled as the cost the tiering
+  avoids rather than a threshold in force, and a test pins that wording.
+- **The ladder spec applies SYS-022 claim discipline to L4** (`docs/specs/autonomy-ladder.md`).
+  L4 is this system's one built-and-measured work graph, and SYS-022 Amendment 1 says the
+  unqualified "does graph engineering" claim is not available. Section 4 now names the split
+  in place. Mechanized: static routing, real observability through an append-only per-run
+  audit JSONL, and code-enforced node policy. Never had: dynamic node spawning and
+  cross-process state. The honest half is the gap the measurement exposed, and the section
+  closes with why this is a re-description of L4 rather than a fifth level.
+- **The README is cut to an operator front door** (`README.md`, 806 lines removed). It keeps
+  the badges, the generated gold-metrics block, the run commands, and the measured tables.
+  The v1-to-v3 narrative moves to the ADRs and the case study that already carry it.
+- **The classical bake-off LLM figures are frozen as a dated comparison, not live gold**
+  (`README.md`, `scripts/gen_readme_metrics.py`). The classical baseline table carried
+  `metric:category_accuracy` and `metric:domain_accuracy` markers at 92.6%, while current
+  gold reads 94.4% and 98.1%. A live marker harness would overwrite a historical paired
+  comparison, and a reader could confuse bake-off-era LLM figures with the v3.2.1 headline
+  table. The markers are removed, the column is labelled as the bake-off snapshot, and the
+  freeze rule is stated on the ADR-022 precedent. The generated gold-metrics block is
+  untouched.
+
 ---
 
 ## [3.2.1] — 2026-08-03
