@@ -9,9 +9,10 @@ entire point of the project.**
 
 ## The one-sentence version
 
-Given a short defense-news snippet, the system assigns two labels: a **category**
-(what the article is about) and an **operational domain** (the warfighting domain it
-relates to). It does this with a single LLM call, then *measures how often it gets
+Given a short defense-news snippet, the system assigns three labels: a **category**
+(what the article is about), an **operational domain** (the warfighting domain it
+relates to), and a **region** (the geographic theater of the story's subject
+activity). It does this with a single LLM call, then *measures how often it gets
 those labels right* against a known answer key.
 
 ---
@@ -163,10 +164,10 @@ named fix, not a surprise lurking in the results.
    experiment that regressed category accuracy 79.0% → 76.7% was one run of each config,
    and the calls are non-deterministic, so a single 2.3-point move could in principle sit
    inside run-to-run noise. *Addressed in v1.1:* `src/stability.py` runs the full eval N
-   times and reports mean / std / min / max per metric. The first 5-run pass put category
-   accuracy's run-to-run std at 0.24 points, so the 2.3-point regression clears the noise
-   floor by roughly 10x. It was a real regression, not sampling noise. (`uv run python
-   src/stability.py --runs 5`)
+   times and reports mean / std / min / max per metric. The current 3-run pass puts category
+   accuracy's run-to-run std at 0.19 points, so the 2.3-point regression clears the noise
+   floor by roughly 12x. It was a real regression, not sampling noise. (`uv run python
+   src/stability.py --runs 3`)
 
 2. **Circular eval can flatter or deflate.** Because the same model generates and grades
    the data, the score measures self-consistency, not generalization. That cuts both ways:
