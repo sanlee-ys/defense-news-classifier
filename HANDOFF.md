@@ -281,6 +281,42 @@ file is a point-in-time snapshot and goes stale the moment work lands._
    experiment needing its own spec and ADR**, not a patch to ADR-020. Do not
    start it as cleanup.
 
+5. **The first LIVE outer-loop run (added 2026-08-19; owner-driven by the
+   standing caution below).** The Ralph outer loop shipped 2026-08-11
+   ([ADR-026](decisions/026-ralph-loop-honest-ruler.md)) with a smoke test only —
+   no live optimization run exists and `src/classify.py` is unchanged. The
+   research input for reviewing its output is
+   `desk/research/2026-08-19-prompt-optimizer-landscape.md` (private desk repo):
+   its verdict validates this harness's design and names the live run as the top
+   spend. Owner commands, on the Windows PC:
+
+   ```powershell
+   git -C C:\Users\sanle\code\defense-news-classifier pull
+   git -C C:\Users\sanle\code\defense-news-classifier worktree add ..\dnc-loop -b loop/prompt-optimize
+   cd C:\Users\sanle\code\dnc-loop
+   ```
+
+   Set the key in THIS shell only — `loop.ps1` runs the ruler as bare `uv run`
+   with no `--env-file`, so the key must be in the process environment:
+
+   ```powershell
+   $env:ANTHROPIC_API_KEY = (Get-Content ..\defense-news-classifier\.env | Select-String '^ANTHROPIC_API_KEY=').ToString().Split('=',2)[1]
+   ```
+
+   Smoke first (zero API spend), then the real run (~354 classify calls per
+   iteration against `-BudgetUsd`):
+
+   ```powershell
+   pwsh loop/loop.ps1 -MaxIterations 2 -DryRunMetrics
+   pwsh loop/loop.ps1 -MaxIterations 5 -BudgetUsd 5.00 -MaxMinutes 90
+   ```
+
+   Afterward: the loop merges nothing (agent-ops ADR-016) — review the accepted
+   iterations on `loop/prompt-optimize` and the run log in
+   `evals/loop/run_<UTC>.jsonl`, and remember the A-vs-C gap is the number worth
+   writing down. A prompt adoption from this loop follows the ADR-024 shape:
+   pre-registered rule, paid gold re-run, PATCH version.
+
 ## Escalate if
 
 - Anything wants a threshold that isn't derived from a measured run.
