@@ -86,11 +86,15 @@ choose the one that is most prominent.
 Extended rubric -- apply these conventions when labels overlap:
 
 Category boundaries:
-- procurement vs industry: a purchase, contract award, or program decision is the BUYER'S \
-story -- label it procurement, even when the winning company is named in the headline. Label \
-industry only when the story is the company's own business (earnings, mergers and \
-acquisitions, stock moves, workforce or corporate strategy) with no government purchase at \
-its center.
+- procurement vs industry: label procurement when the buying government, service, or agency \
+is the story's actor -- it awards, orders, selects, or approves a purchase or program \
+decision -- or when a generic role stands in for that decision (\"a prime contractor was \
+selected\"), even when the winning company is named. Label industry when a SPECIFIC NAMED \
+company is the lead sentence's grammatical subject, reporting that it has secured, signed, \
+received, delivered, or been selected for a contract or agreement -- the company's own \
+contract win is business news even before any revenue, merger, or stock detail appears. Also \
+label industry for the company's own business (earnings, mergers and acquisitions, stock \
+moves, workforce or corporate strategy) with no government purchase at its center.
 - procurement vs technology: a contract to buy or field an existing system is procurement. \
 A contract to develop a new system is technology when the snippet goes on to describe that \
 system's capabilities -- what it does, how it works, what it replaces -- rather than staying \
