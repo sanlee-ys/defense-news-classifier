@@ -17,7 +17,7 @@ them apart. **Nothing was deleted**: every superseded ADR keeps its full origina
 
 | # | Title | Status |
 |---|-------|--------|
-| [001](001-llm-provider.md) | Use Anthropic API with claude-sonnet-4-6 | Accepted. **Title is stale**: the workhorse is `claude-sonnet-5` (see [ADR-010](archive/010-rag-path-model-pin.md) for the migration) |
+| [001](001-llm-provider.md) | Use the Anthropic API as the LLM provider | Accepted; amended 2026-06-29 and 2026-08-20 (the model and the enum guard, both corrected) |
 | [002](002-structured-output-via-tool-use.md) | Enforce structured output via tool use, not prompt engineering | Accepted |
 | [003](003-synthetic-data-only.md) | Use synthetic data only — no real news articles | Accepted; amended 2026-07-19 (scope narrowed) and 2026-08-20 (the balance claim corrected) |
 | [004](004-no-ml-framework-for-eval.md) | Implement eval metrics in plain Python — no ML framework | Accepted; amended 2026-07-19 |

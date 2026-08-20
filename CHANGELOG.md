@@ -70,6 +70,36 @@ classifier is unchanged: `src/classify.py` carries the same `SYSTEM_PROMPT`, and
   that there is no gold for intermediate node output. The cell matrix is asserted against the
   spec file by a test, so post-hoc cell selection cannot happen quietly.
 
+### Fixed
+- **Two stale claims that had outlived the code they described, in seven documents**
+  (`decisions/001-llm-provider.md`, `decisions/002-structured-output-via-tool-use.md`,
+  `decisions/009-message-batches-for-bulk-runs.md`, `decisions/README.md`,
+  `docs/CASE_STUDY.md`, `docs/how-it-works.md`,
+  `docs/specs/prompt-optimization-loop.md`).
+
+  **The model.** ADR-001's title and body named `claude-sonnet-4-6` as the model in use.
+  `src/classify.py` has run `claude-sonnet-5` since the 2026-07-19 workhorse migration. The
+  title now names the provider, which is the durable decision, so the next migration does not
+  re-stale it; the model is described as a knob pinned in `MODEL` under SYS-002.
+  `src/classify_rag.py` still pins `claude-sonnet-4-6` on the dormant grounding path, which is
+  a live pin and was left alone.
+
+  **The enum guard.** ADR-001's own 2026-06-29 amendment described a client-side re-sample on
+  an out-of-enum label. [ADR-008](decisions/008-strict-structured-outputs.md) retired that
+  mechanism when Structured Outputs reached GA: `strict: true` moved enum enforcement
+  server-side and `classify()` now makes exactly one call, with `_validate` /
+  `InvalidLabelError` kept as a defensive backstop. ADR-002 carried a matching amendment at
+  the time and ADR-001 did not, so the two disagreed for roughly seven weeks, and
+  `docs/CASE_STUDY.md` and `docs/how-it-works.md` both still described the retired guard as
+  current. ADR-002's superseded sentence is now struck through where it is read rather than
+  only corrected twenty lines below it.
+
+  Recorded in ADR-001 because it is the second time it has bitten: **an ADR that describes how
+  the code currently works goes stale silently, because nothing tests prose. An ADR that
+  records what was decided and why does not.** Historical mentions of `claude-sonnet-4-6` that
+  are correct as history (ADR-003's generator, ADR-008's GA note, run-log excerpts) were left
+  unchanged.
+
 ### Changed
 - **The decision log is split by genre: 26 ADRs become 11 live ADRs, a verdict log and one
   current agent-practice document** (`decisions/README.md`, `decisions/verdicts.md`,

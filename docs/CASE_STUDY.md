@@ -32,9 +32,9 @@ Given a plain-text defense-news snippet, the system assigns two labels:
 - **category**: `procurement` · `operations` · `policy` · `technology` · `industry`
 - **operational_domain**: `air` · `land` · `sea` · `cyber` · `space` · `multi`
 
-It does this with a single LLM call per article (Anthropic `claude-sonnet-4-6`), using
-tool-use to force structured JSON output, with the labels validated against the allowed set
-in code.
+It does this with a single LLM call per article (Anthropic `claude-sonnet-5`), using
+tool-use to force structured JSON output, with enum validity guaranteed server-side by
+`strict: true`.
 
 ## The key decisions (and why)
 
@@ -47,10 +47,16 @@ significant ones as ADRs (`decisions/`). The ones that mattered most:
 - **Force structured output with tool-use, not free-text JSON.** Tool-use guarantees the
   response *shape*: always two structured fields, never free text to parse. The enum schema
   strongly biases the model toward valid labels but doesn't hard-enforce them (a tool schema
-  is a guided prior, not constrained decoding), so I validate the labels in code and re-sample
-  once on the rare out-of-enum case. My own eval caught this: 1 of 300 predictions came back
-  with an invalid category, which is exactly why the guard exists. Reliability of *form* is
-  enforced where it actually can be: in our code, not assumed from the API.
+  was a guided prior, not constrained decoding), so I validated the labels in code and
+  re-sampled once on the rare out-of-enum case. My own eval caught this: 1 of 300 predictions
+  came back with an invalid category, which is exactly why the guard existed.
+
+  **That guard is now the API's job.** Structured Outputs reached GA and
+  [ADR-008](../decisions/008-strict-structured-outputs.md) turned on `strict: true`, which
+  is real constrained decoding: enum validity is enforced server-side, `classify()` makes
+  exactly one call, and the client-side re-sample was deleted. `_validate` survives as a
+  defensive backstop. The point I was making holds and got stronger: reliability of *form*
+  is enforced where it can be, and I moved it the moment the API could carry it.
 - **Hand-compute the metrics (no scikit-learn).** Precision/recall from TP/FP/FN is short
   and standard; doing it by hand kept the dependency list tiny and meant I understood every
   number, rather than borrowing them from a black box. The metric code is unit-tested.

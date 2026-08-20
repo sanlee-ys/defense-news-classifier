@@ -51,9 +51,12 @@ the "AI" job of deciding.
 
 *Why one call with forced tool-use?* It guarantees the response *shape*: you always get
 the three fields back as structured data, never free text to parse. The enum in the schema
-strongly biases the model toward valid labels, but it does not hard-enforce them (a tool
-schema is a guided prior, not constrained decoding), so `classify.py` validates the
-labels in code and re-samples once on the rare out-of-enum case.
+also hard-enforces them: `CLASSIFY_TOOL` carries `strict: true`, so the API applies
+constrained decoding and an out-of-enum label cannot come back
+([ADR-008](../decisions/008-strict-structured-outputs.md)). `classify.py` makes exactly one
+call. `_validate` / `InvalidLabelError` are kept as a defensive backstop, not the primary
+guard. Before `strict: true` was available they *were* the guard, and the client re-sampled
+once on the rare out-of-enum case.
 
 ### 3. `eval.py`: grade the classifier (the measurement)
 Runs the classifier across all 300 articles, lines each prediction up against the
