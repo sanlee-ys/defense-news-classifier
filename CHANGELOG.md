@@ -26,8 +26,10 @@ classifier is unchanged: `src/classify.py` carries the same `SYSTEM_PROMPT`, and
 
   **This is unmeasured, and deliberately so.** ADR-026 ships the harness and a smoke test,
   and it makes no claim that the loop improves the classifier prompt. The smoke test
-  exercised the mechanics against the zero-API mock backend. **No live optimization run has
-  been made**, and the prompt in `src/classify.py` is unchanged. What the hidden split buys
+  exercised the mechanics against the zero-API mock backend. ~~**No live optimization run has
+  been made**~~ — **superseded 2026-08-20: the first live run has now been made, and its
+  result was rejected.** See the Fixed entry below and the ADR-026 amendment. The prompt in
+  `src/classify.py` is still unchanged. What the hidden split buys
   is stated as a bound, not as a result: the metric is not *convenient* to the agent. ADR-026
   cites this repo's own measured Goodhart catch (ADR-018, B up 6.0 points while held-out C
   fell 8.6) as the reason the ruler is hidden at all.
@@ -67,6 +69,35 @@ classifier is unchanged: `src/classify.py` carries the same `SYSTEM_PROMPT`, and
   the paired control plus McNemar answers "did the drop cause it". The spec states plainly
   that there is no gold for intermediate node output. The cell matrix is asserted against the
   spec file by a test, so post-hoc cell selection cannot happen quietly.
+
+### Fixed
+- **42 of the 300 synthetic labels contradicted the classifier's own convention, and the
+  first live outer-loop run learned the defect** (`data/synthetic_articles.csv`,
+  [ADR-026](decisions/026-ralph-loop-honest-ruler.md) amendment,
+  [ADR-003](decisions/003-synthetic-data-only.md), `docs/notes/project-notes.md`). A full
+  read of all 300 rows found three defect classes, every one of them the documented
+  convention applied backwards: 25 `industry` rows and 8 `technology` rows are government
+  contract awards, which the prompt calls the buyer's story and labels `procurement`; 9
+  `industry` rows are product unveilings or test milestones, which the prompt sends to
+  `technology`. `procurement`, `operations` and `policy` were clean across all 180 rows.
+  Counts move from a uniform 60 per class to procurement 93, technology 61, operations 60,
+  policy 60, industry 26. Macro-F1 already averages per class, so the imbalance is carried
+  rather than papered over, and ADR-003's "perfectly balanced dataset" claim is corrected
+  in place.
+
+  Two duplicate stories carrying opposite labels are the proof: rows 2 and 290 are both
+  "Lockheed Martin has been awarded a $N contract by the U.S. [Air Force / Department of
+  Defense]", and rows 41 and 221 are both the DGA awarding Thales Alenia Space the Syracuse
+  5 contract. No surface rule separates either pair.
+
+  **The defect is why `loop/prompt-optimize` is not merged.** The first live run gained
+  +0.132 macro-F1 on split A and +0.131 on the hidden gate B while the real gold set C did
+  not move at all (0.936 to 0.936). A and B are a 70/30 shuffle of the same synthetic pool,
+  so they share the defect; C carries the correct convention and holds none of the affected
+  rows. The loop's new rubric labeled `industry` whenever a named company led the sentence,
+  which reverses the convention in `src/classify.py`. **Every A/B figure computed before
+  2026-08-20 rests on the uncorrected labels.** Gold-set and scale-eval figures use
+  different data and are unaffected.
 
 ### Changed
 - **The L4 injection pre-registration is tiered, amended after its own power table and

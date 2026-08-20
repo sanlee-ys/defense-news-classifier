@@ -87,6 +87,37 @@ defense-news snippets.
 
 **Key function:** `classify(client, text) -> dict`
 
+**Label audit, 2026-08-20 — the synthetic set disagreed with this convention 42 times.**
+A full read of all 300 rows in `data/synthetic_articles.csv` found three defect classes,
+all of them the convention above applied backwards:
+
+| Move | Rows | Shape |
+|---|---|---|
+| `industry` → `procurement` | 25 | A government buyer awards a valued contract and the award is the story. |
+| `technology` → `procurement` | 8 | The same shape, found in `technology`. |
+| `industry` → `technology` | 9 | A company unveils a system or reports a test milestone. |
+
+`procurement`, `operations` and `policy` were clean; those 180 rows needed no change.
+
+The clearest evidence is two duplicate stories that carried opposite labels. Rows 2 and
+290 were both "Lockheed Martin has been awarded a $N contract by the U.S. [Air Force /
+Department of Defense] to [produce / develop]", labeled `procurement` and `industry`. Rows
+41 and 221 are both the DGA awarding Thales Alenia Space the Syracuse 5 satellite
+contract, labeled `procurement` and `technology`. No surface rule separates either pair,
+because there is no difference to separate.
+
+**Why this matters beyond the data.** The first live run of the ADR-026 outer loop learned
+the defect and wrote it into the prompt as a rule: label `industry` when a named company
+is the lead sentence's grammatical subject. That reverses the convention above. The run
+gained +0.132 macro-F1 on split A and +0.131 on B while the real gold set C did not move
+at all (0.936 both ends), because gold carries the correct convention and has none of
+these rows. Branch `loop/prompt-optimize` was not merged. See
+[ADR-026](../../decisions/026-ralph-loop-honest-ruler.md) and
+[ADR-003](../../decisions/003-synthetic-data-only.md).
+
+**Every A/B figure computed before 2026-08-20 rests on the uncorrected labels.** Gold-set
+and scale-eval figures use different data and are unaffected.
+
 ---
 
 ### 3. `src/eval.py` — evaluation harness
