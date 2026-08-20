@@ -65,8 +65,9 @@ half-filled record with one side missing), for the same reason.
   use case; use the synchronous path when resume-per-request granularity matters more than the
   discount.
 - **Prompt caching carries over automatically.** `build_batch_request()` reuses `classify()`'s exact
-  system-block construction, so if/when the system prompt grows past `claude-sonnet-4-6`'s
-  ~2048-token minimum cacheable prefix (e.g. via the `optimize.py` loop lengthening it — see
+  system-block construction, so if/when the system prompt grows past the workhorse model's
+  minimum cacheable prefix (~2048 tokens on `claude-sonnet-4-6`, the workhorse when this ADR
+  was written; `claude-sonnet-5` since 2026-07-19) (e.g. via the `optimize.py` loop lengthening it — see
   `classify.py`'s existing caching comment), batch requests over that prompt benefit the same way
   synchronous ones do. No separate caching logic needed for the batch path.
 - **New shared test fixtures.** `tests/conftest.py` gained `FakeBatch` / `FakeBatches` /

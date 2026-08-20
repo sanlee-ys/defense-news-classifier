@@ -23,7 +23,7 @@ tool_choice={"type": "tool", "name": "classify_article"}
 
 ## Consequences
 
-- **Tool use guarantees the response *shape*.** The model returns a structured `tool_use` block with the schema's fields, so there is no free-text JSON to parse. The enums bias it strongly toward valid labels, but enum membership is *not* enforced server-side — an invalid label (e.g., `"aerial"` instead of `"air"`) is caught in client code by `classify.py`'s `_validate`, which re-samples once before raising `InvalidLabelError`.
+- **Tool use guarantees the response *shape*.** The model returns a structured `tool_use` block with the schema's fields, so there is no free-text JSON to parse. ~~The enums bias it strongly toward valid labels, but enum membership is *not* enforced server-side — an invalid label (e.g., `"aerial"` instead of `"air"`) is caught in client code by `classify.py`'s `_validate`, which re-samples once before raising `InvalidLabelError`.~~ **Superseded 2026-07-11 by [ADR-008](008-strict-structured-outputs.md); see the note at the foot of this ADR.** Enum membership *is* enforced server-side now, via `strict: true`.
 - **Application code stays small.** `classify()` makes the call, pulls the `tool_use` block, and validates the labels against the enums — no brittle parsing of free-form JSON, just a thin guard over a structurally-guaranteed response.
 - **The schema is the contract.** Adding or renaming a label requires updating both the enum and the system prompt — one place, not scattered across prompt text and validation code.
 - **Minor tradeoff:** tool-use responses are slightly more expensive (extra tokens for the schema) and the API call signature is more verbose than a plain chat call.

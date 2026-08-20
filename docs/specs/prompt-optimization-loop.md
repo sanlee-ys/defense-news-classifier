@@ -184,7 +184,7 @@ fired — it is a hardening measure for a live-observed failure mode (`src/optim
 | ID | Requirement |
 |----|-------------|
 | N1 | Reuse `src/eval.py` metric functions (`compute_metrics`, `macro_average`, `confusion_matrix`) — no metric reimplementation, no sklearn. |
-| N2 | Optimizer model: **claude-sonnet-4-6** (the SYS-002 / repo default). The loop doubles as an A/B harness to later test whether Opus pays. |
+| N2 | Optimizer model: **the repo default**, pinned in `src/classify.py` as `MODEL` per SYS-002. That was `claude-sonnet-4-6` when this spec was written and is `claude-sonnet-5` since the 2026-07-19 migration. The loop doubles as an A/B harness to later test whether Opus pays. |
 | N3 | API key from environment; never hardcoded. |
 | N4 | Run is resume-safe (the existing eval pattern: append per-step, crash costs ≤1 step). |
 | N5 | Output contract `{category, operational_domain}` unchanged. |
