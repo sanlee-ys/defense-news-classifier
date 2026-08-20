@@ -12,7 +12,7 @@ The classifier prompt is tuned by hand: a human reads the misclassifications, ed
 
 Two motivations:
 
-1. **Demonstrate "loop engineering"** — design an environment where an agent iterates to a goal autonomously, with a real feedback signal and an explicit stop condition. This is a portfolio aim in its own right (see [docs/specs/prompt-optimization-loop.md](../docs/specs/prompt-optimization-loop.md)).
+1. **Demonstrate "loop engineering"** — design an environment where an agent iterates to a goal autonomously, with a real feedback signal and an explicit stop condition. This is a portfolio aim in its own right (see [docs/specs/prompt-optimization-loop.md](../../docs/specs/prompt-optimization-loop.md)).
 2. **Possibly improve the prompt** — a secondary, reported result, not a goal we can guarantee.
 
 The central risk is **Goodhart's law**: any optimizer pointed at a metric will learn to game it. An agent that edits the prompt to fix the exact examples it is scored on will overfit, and a naive setup would hide that by reporting only the score it optimized. The decision has to make overfitting *measurable*, not invisible.
@@ -52,12 +52,12 @@ Primary metric: `category` macro-F1 (`macro_average` from `src/eval.py`). Optimi
 | Mechanical sweep / `GridSearchCV`-style search | A prompt has no hyperparameter grid; no qualitative judgment, so it is not loop engineering — it would be a worse version of a sweep |
 | Single 2-way train/test split | Optimizing and detecting plateau on the same set biases stop-detection; the A-vs-B memorization signal disappears |
 | Optimize directly on the real gold set (C) | Overfits n≈54 and destroys the one honest held-out number we have |
-| A prompt-optimization framework (DSPy, etc.) | A hand-built loop is more legible as the artifact — the loop *is* the deliverable, and a framework hides the mechanism this ADR exists to demonstrate. (Re-grounded 2026-07-19: this entry also cited ADR-004's minimal-deps rule, which [ADR-004's amendment](004-no-ml-framework-for-eval.md#amendment-2026-07-19) scoped to metric computation. The legibility argument was always the stronger half and now carries the rejection alone.) |
+| A prompt-optimization framework (DSPy, etc.) | A hand-built loop is more legible as the artifact — the loop *is* the deliverable, and a framework hides the mechanism this ADR exists to demonstrate. (Re-grounded 2026-07-19: this entry also cited ADR-004's minimal-deps rule, which [ADR-004's amendment](../004-no-ml-framework-for-eval.md#amendment-2026-07-19) scoped to metric computation. The legibility argument was always the stronger half and now carries the rejection alone.) |
 | Gate "done" on measurable improvement | Couples release to an outcome we cannot control (label-ambiguity ceiling) and pressures gaming the eval — the exact failure this design exists to expose |
 
 ## Resolved during implementation
 
-The spec's [open questions](../docs/specs/prompt-optimization-loop.md#13-open-questions)
+The spec's [open questions](../../docs/specs/prompt-optimization-loop.md#13-open-questions)
 (section 13) are resolved here, conservatively, rather than by editing the spec itself — the
 spec stays the historical contract; this ADR is where implementation-time decisions get recorded.
 
@@ -66,7 +66,7 @@ spec stays the historical contract; this ADR is where implementation-time decisi
   iteration, a trailing `run_summary` line. Append-only (not one rewritten JSON object) is what
   gives N4 its crash-safety: a crash costs at most the one in-progress iteration's *record*,
   never the whole log. Schema documented in
-  [`evals/optimize/README.md`](../evals/optimize/README.md). A single pretty-printed JSON object
+  [`evals/optimize/README.md`](../../evals/optimize/README.md). A single pretty-printed JSON object
   would read nicer but loses that property — rejected for the same reason a single 2-way split
   was rejected above: the safety property matters more than the convenience for an unattended,
   real-money loop. To be precise about what N4 does *not* buy here: the data survives, but the

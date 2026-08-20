@@ -2,7 +2,7 @@ name: evals
 
 # Two gates for the v2 capability eval (src/gold_eval.py), split by API cost. Full
 # rationale in decisions/007-evals-as-ci-gate.md. BM25 retrieval grounding was retired in
-# decisions/012-retire-bm25-grounding.md, so neither gate scores the grounded path any more.
+# decisions/archive/012-retire-bm25-grounding.md, so neither gate scores the grounded path any more.
 #
 #   offline-gate          -- push + pull_request, no key, free. Grades the prediction CSV
 #                             already committed in evals/ against evals/thresholds.toml via

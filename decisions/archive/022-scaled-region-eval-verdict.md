@@ -4,12 +4,12 @@
 **Date:** 2026-08-02
 **Deciders:** San Lee
 
-**Related:** [ADR-014](014-region-field-design.md) (the region field, and the judge gate this
-eval stands on) · [ADR-007](007-evals-as-ci-gate.md) (floors come from measured runs) ·
+**Related:** [ADR-014](../014-region-field-design.md) (the region field, and the judge gate this
+eval stands on) · [ADR-007](../007-evals-as-ci-gate.md) (floors come from measured runs) ·
 [ADR-020](020-l4-multi-agent-pipeline.md) (the L4 critic fixed 6 of the 7 `global` misses at
 ~4× cost — the alternative this eval prices) · [ADR-017](017-classical-baseline-bakeoff.md)
 (the disclosed two-axis limit this partly lifts) ·
-[spec](../docs/specs/scaled-region-eval.md) · [release runbook](../docs/v3.2.0-release-runbook.md)
+[spec](../../docs/specs/scaled-region-eval.md) · [release runbook](../../docs/v3.2.0-release-runbook.md)
 
 ---
 
@@ -35,7 +35,7 @@ and the paid pass was owner-run on 2026-08-02.
 ## Decision
 
 **Record the measurement, and read it as a ruler rather than a headline.** Full report:
-[`evals/scale_eval_v3.txt`](../evals/scale_eval_v3.txt); per-row predictions in
+[`evals/scale_eval_v3.txt`](../../evals/scale_eval_v3.txt); per-row predictions in
 `evals/scale_predictions_v3.csv` with its provenance sidecar; region confusion matrix in
 `evals/scale_confusion_v3_region.csv`. This ADR is the durable verdict; the release it rides
 is `v3.2.0` (MINOR — additive measurement, `SYSTEM_PROMPT` / `src/api.py` / the

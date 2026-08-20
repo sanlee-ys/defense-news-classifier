@@ -3,7 +3,7 @@
 **Version:** 2.0 — **revised after adversarial review** (see §11 for what changed and why)
 **Status:** **CLOSED — run 2026-08-02, verdict MARGINAL (p=0.0522), clause REVERTED.**
 Results in **§12**; the durable record is
-[ADR-023](../../decisions/023-global-boundary-clause-verdict.md).
+[ADR-023](../../decisions/archive/023-global-boundary-clause-verdict.md).
 **§1–§11 are the pre-registration and are left exactly as written before any call was made** —
 including the estimates the run went on to contradict. That is what makes them a
 pre-registration rather than a summary.
@@ -14,8 +14,8 @@ pre-registration rather than a summary.
 contract untouched. A negative result ships an ADR and no version at all.
 **Related:** [ADR-014](../../decisions/014-region-field-design.md) (the ratified region
 conventions this clause is grounded in) ·
-[ADR-022](../../decisions/022-scaled-region-eval-verdict.md) (the n=300 ruler and the
-cluster counts) · [ADR-020](../../decisions/020-l4-multi-agent-pipeline.md) (the declined
+[ADR-022](../../decisions/archive/022-scaled-region-eval-verdict.md) (the n=300 ruler and the
+cluster counts) · [ADR-020](../../decisions/archive/020-l4-multi-agent-pipeline.md) (the declined
 critic — and the overcorrection cautionary tale this clause is written against) ·
 [ADR-007](../../decisions/007-evals-as-ci-gate.md) (floors come from measured runs) ·
 [`data/gold/README.md`](../../data/gold/README.md) (the conventions as ratified on review)
@@ -512,7 +512,7 @@ re-derived by the reviewer and confirmed clean. What changed:
 
 **Verdict: MARGINAL → REVERT.** The full decision record, with the rationale and the
 alternatives weighed, is
-[ADR-023](../../decisions/023-global-boundary-clause-verdict.md). This section is the
+[ADR-023](../../decisions/archive/023-global-boundary-clause-verdict.md). This section is the
 numbers, so the pre-registration and the outcome sit in one file.
 
 San ran both arms on 2026-08-02 — 408 calls, exactly as §7 budgeted. Sources of truth:

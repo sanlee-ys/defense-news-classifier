@@ -112,7 +112,7 @@ is the lead sentence's grammatical subject. That reverses the convention above. 
 gained +0.132 macro-F1 on split A and +0.131 on B while the real gold set C did not move
 at all (0.936 both ends), because gold carries the correct convention and has none of
 these rows. Branch `loop/prompt-optimize` was not merged. See
-[ADR-026](../../decisions/026-ralph-loop-honest-ruler.md) and
+[ADR-026](../../decisions/archive/026-ralph-loop-honest-ruler.md) and
 [ADR-003](../../decisions/003-synthetic-data-only.md).
 
 **Every A/B figure computed before 2026-08-20 rests on the uncorrected labels.** Gold-set

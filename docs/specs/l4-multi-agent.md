@@ -5,7 +5,7 @@
 **Author:** San Lee
 **Last updated:** 2026-07-25
 **Roadmap fit:** new **MINOR** when built (additive pipeline + measurement; the shipped single-call classifier and its `{category, operational_domain, region}` contract are untouched — L4 *wraps* the classifier, it never modifies it).
-**Related:** [autonomy-ladder](autonomy-ladder.md) §4 (the honesty test), §7 (build-vs-adopt: **hand-roll, decided** — not re-litigated here) · [ADR-006 amendment](../../decisions/006-autonomy-ladder-portfolio-spine.md) (governance primitives, adopted as design inputs) · [ADR-013](../../decisions/013-decline-tiered-routing.md) (the 2-actor escalation that measured +0 — the trap this design must not rebuild) · [ADR-014](../../decisions/014-region-field-design.md) (the named region error cluster this pipeline targets)
+**Related:** [autonomy-ladder](autonomy-ladder.md) §4 (the honesty test), §7 (build-vs-adopt: **hand-roll, decided** — not re-litigated here) · [ADR-006 amendment](../../decisions/006-autonomy-ladder-portfolio-spine.md) (governance primitives, adopted as design inputs) · [ADR-013](../../decisions/archive/013-decline-tiered-routing.md) (the 2-actor escalation that measured +0 — the trap this design must not rebuild) · [ADR-014](../../decisions/014-region-field-design.md) (the named region error cluster this pipeline targets)
 
 ---
 
@@ -108,7 +108,7 @@ separates it from re-running the classifier twice and keeping the disagreement.
 Bake-off spec §8 applies verbatim: every figure carries its n; a delta is not a finding
 without the paired test; report the direction that hurts; name what is uncovered (at the time
 this ran, region had no scale-set answer key and the named cluster was 7 rows — v3.2.0's
-scaled region eval has since sized it at 17 pulled rows out of 70, [ADR-022](../../decisions/022-scaled-region-eval-verdict.md)).
+scaled region eval has since sized it at 17 pulled rows out of 70, [ADR-022](../../decisions/archive/022-scaled-region-eval-verdict.md)).
 
 ## 8. Cost estimate (up front, per house rules)
 

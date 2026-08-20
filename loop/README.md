@@ -3,7 +3,7 @@
 A Ralph-style loop around the classifier prompt: a fresh agent runs the frozen
 `PROMPT_optimize.md` every iteration, and an outer script grades the edit on a
 metric the agent cannot see. The design and its limits are in
-[`decisions/026-ralph-loop-honest-ruler.md`](../decisions/026-ralph-loop-honest-ruler.md).
+[`decisions/archive/026-ralph-loop-honest-ruler.md`](../decisions/archive/026-ralph-loop-honest-ruler.md).
 
 **The loop merges nothing.** Under agent-ops ADR-016 a loop does not inherit
 the standing merge authorization. It commits to its own branch and stops.

@@ -6,14 +6,14 @@
 
 **Related:** [ADR-023](023-global-boundary-clause-verdict.md) (the same clause, measured at
 n=295 and **reverted** at p=0.0522 — amended with a pointer to this record, its body left
-verbatim) · [spec](../docs/specs/global-boundary-clause-rerun.md) (canonical pre-registration,
+verbatim) · [spec](../../docs/specs/global-boundary-clause-rerun.md) (canonical pre-registration,
 §6 decision rule, §7 run protocol, §9 the adoption path this ADR executes) ·
 [ADR-022](022-scaled-region-eval-verdict.md) (the n=300 ruler this extends to n=595) ·
-[ADR-014](014-region-field-design.md) (the ratified region conventions the clause restates) ·
+[ADR-014](../014-region-field-design.md) (the ratified region conventions the clause restates) ·
 [ADR-020](020-l4-multi-agent-pipeline.md) (the declined critic — the alternative fix at ~4×
 cost, and the overcorrection precedent sentence 2 of the clause exists to prevent) ·
-[ADR-007](007-evals-as-ci-gate.md) (floors come from measured runs) ·
-[ADR-015](015-public-domain-data-sourcing.md) (why the extension snippets could be collected
+[ADR-007](../007-evals-as-ci-gate.md) (floors come from measured runs) ·
+[ADR-015](../015-public-domain-data-sourcing.md) (why the extension snippets could be collected
 at all)
 
 ---
@@ -79,8 +79,8 @@ asserted here, so what ships is the arm the 595-row report describes and not a r
 
 ### The four rules, with their measured values
 
-Full report: [`evals/region_clause_rerun.txt`](../evals/region_clause_rerun.txt) (scale arm) and
-[`evals/region_clause_gold_rerun.txt`](../evals/region_clause_gold_rerun.txt) (gold arm).
+Full report: [`evals/region_clause_rerun.txt`](../../evals/region_clause_rerun.txt) (scale arm) and
+[`evals/region_clause_gold_rerun.txt`](../../evals/region_clause_gold_rerun.txt) (gold arm).
 
 | Rule (spec §6) | Bar | Measured | Verdict |
 |---|---|---|---|

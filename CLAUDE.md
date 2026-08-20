@@ -13,7 +13,7 @@ article text → `{category, operational_domain, region}`, and a rigorous eval h
 (overall accuracy, per-label precision/recall, confusion matrices, a
 misclassification log) fronted by a README that **leads with the numbers**.
 `v2.0.0` added BM25 RAG grounding over real public text, which was later **measured and
-retired** ([ADR-012](decisions/012-retire-bm25-grounding.md)) once it stopped beating the
+retired** ([ADR-012](decisions/archive/012-retire-bm25-grounding.md)) once it stopped beating the
 ungrounded classifier — the shipped classifier is ungrounded. The `region` field
 **shipped as `v3.0.0`** ([ADR-014](decisions/014-region-field-design.md)). What shipped in
 which version lives in [`CHANGELOG.md`](CHANGELOG.md); how to pick the next number is in
@@ -92,6 +92,27 @@ Branch names here should say what the work is (`fix-industry-labels`) so duplica
 obvious in `gh pr list` — except in hosted sessions, which are assigned a branch name and
 can't rename it. That's the environment, not a violation.
 
+## Where decisions are recorded (restructured 2026-08-20)
+
+`decisions/` holds three kinds of record, and they are kept apart on purpose. The full
+index is [`decisions/README.md`](decisions/README.md).
+
+- **ADR** — a decision that governs how the code is built from now on. Eleven live, numbered.
+- **[`decisions/verdicts.md`](decisions/verdicts.md)** — the experiment log. One dated row per
+  experiment: what was measured, the number, the call. **A new experiment adds a row here and
+  does not take an ADR number.**
+- **[`decisions/agent-practice.md`](decisions/agent-practice.md)** — the current rule for what
+  an agent may do in this repo, synthesized from five ADRs written across months at different
+  levels of maturity.
+- **[`decisions/archive/`](decisions/archive/)** — the fifteen superseded ADRs, full text
+  unchanged. Nothing was deleted and every number is mapped in the index.
+
+**Write an ADR only when the result changes how the code is built from now on.** If you
+cannot name what a future contributor would do differently, it is a verdict row. Prefer a
+dated amendment inside the record that already owns a topic over a new number: the set
+reached 26 entries, of which 11 decided anything still in force, and that is what this split
+fixed.
+
 ## Definition of done (v1)
 - Run the generator and produce a labeled synthetic dataset of defense-news snippets.
 - Run the classifier on any article and get a structured `{category, operational_domain}` back.
@@ -123,16 +144,16 @@ a tally of releases.
 
 **Not yet shipped:** nothing on the roadmap. Open work now lives in HANDOFF's job list, not
 here. The scaled region eval shipped as `v3.2.0` (2026-08-02,
-[ADR-022](decisions/022-scaled-region-eval-verdict.md)), and the `global`-boundary prompt
+[ADR-022](decisions/archive/022-scaled-region-eval-verdict.md)), and the `global`-boundary prompt
 clause shipped as `v3.2.1` (2026-08-03,
-[ADR-024](decisions/024-global-boundary-clause-adopted.md)) — a **PATCH**, and the textbook
+[ADR-024](decisions/archive/024-global-boundary-clause-adopted.md)) — a **PATCH**, and the textbook
 case for why that digit exists: the classifier got more correct, the `{category,
 operational_domain, region}` contract did not move at all.
 
 That clause is worth knowing as a two-round story, because the versioning is the visible half
 of it. It was measured against the n=300 ruler on 2026-08-02 and **reverted** as marginal
 (p=0.0522 against a pre-registered p<0.05), claiming no version
-([ADR-023](decisions/023-global-boundary-clause-verdict.md)). The re-run at n=595 cleared all
+([ADR-023](decisions/archive/023-global-boundary-clause-verdict.md)). The re-run at n=595 cleared all
 four rules (p=0.0002) and it was adopted unchanged. **A version number is a promise about what
 changed** — and across those two rounds what changed was the ruler, never the bar.
 
@@ -147,7 +168,7 @@ escalation twice with data — BM25 grounding (ADR-012) and tiered routing (ADR-
 - A thin **Streamlit demo UI** — turns the eval harness into a usable product; arguably its own
   major surface (changes what the project *is*), so it'd likely force a major bump if added.
 - **Semantic / embedding retrieval** — v2's "BM25 grounding doesn't justify embeddings"
-  verdict has only hardened: [ADR-012](decisions/012-retire-bm25-grounding.md) retired
+  verdict has only hardened: [ADR-012](decisions/archive/012-retire-bm25-grounding.md) retired
   grounding entirely after it stopped paying under the improved prompt. This stays parked
   unless a future eval shows semantic retrieval beating the 94%+ ungrounded baseline — a high
   bar. Borderline minor-vs-major if ever picked up.

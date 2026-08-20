@@ -4,10 +4,10 @@
 **Date:** 2026-07-25
 **Deciders:** San Lee
 
-**Related:** [spec](../docs/specs/l4-multi-agent.md) (Accepted, all forks resolved — this ADR
-records the build against it) · [ADR-006](006-autonomy-ladder-portfolio-spine.md) (governance
+**Related:** [spec](../../docs/specs/l4-multi-agent.md) (Accepted, all forks resolved — this ADR
+records the build against it) · [ADR-006](../006-autonomy-ladder-portfolio-spine.md) (governance
 primitives, here made concrete) · [ADR-013](013-decline-tiered-routing.md) (the constraint:
-no premium-tier escalation anywhere) · [ADR-014](014-region-field-design.md) (the named error
+no premium-tier escalation anywhere) · [ADR-014](../014-region-field-design.md) (the named error
 cluster the critic targets)
 
 ---

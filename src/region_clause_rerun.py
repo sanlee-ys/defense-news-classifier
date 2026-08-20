@@ -252,7 +252,7 @@ def assert_the_clause_has_not_shipped_yet() -> None:
         "The results are frozen records and are read, not regenerated:\n"
         f"  {REPORT_PATH}      (the scale arm, effective n=595)\n"
         f"  {GOLD_REPORT_PATH} (the gold arm, human-graded n=54)\n"
-        "See decisions/024-global-boundary-clause-adopted.md."
+        "See decisions/archive/024-global-boundary-clause-adopted.md."
     )
 
 

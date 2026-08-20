@@ -40,7 +40,7 @@ This loop optimizes `category` only.
 
 The `Region rules:` block must survive **byte for byte**, and no region label
 may appear fewer times than it does now. That rubric was adopted on measured
-evidence (`decisions/024-global-boundary-clause-adopted.md`). A mechanical
+evidence (`decisions/archive/024-global-boundary-clause-adopted.md`). A mechanical
 check compares your prompt against the starting prompt and rejects the
 iteration if the block moved at all.
 

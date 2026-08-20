@@ -15,7 +15,7 @@ This shipped as an EXPERIMENT with a stated hypothesis: the PR #79 prompt fix al
 cleared the tech->ops cluster on the human-graded gold set, so routing likely no longer
 pays. ``src/route_eval.py`` measured that verdict, and it held -- routing moved +0 rows
 on both gold axes at ~1.97x the cost (evals/route_eval.txt). Tiered routing is DECLINED
-(decisions/013-decline-tiered-routing.md): nothing in the shipped path imports this
+(decisions/archive/013-decline-tiered-routing.md): nothing in the shipped path imports this
 module; it stays dormant, with its tests, as the reproducible record.
 """
 

@@ -45,11 +45,11 @@ Written in the repo's third week, when there was no model in the project to fit.
 
 The Decision above is now scoped to what its rationale actually supports. Of the two load-bearing reasons, one expires and one does not:
 
-- **"Minimal dependency surface — runtime deps are `anthropic` and `pandas`, nothing else" is superseded.** That census is dead: runtime deps are now `anthropic`, `pandas`, `rank-bm25`, `httpx`, `opentelemetry-api`, `opentelemetry-sdk`. The lean-deps instinct survives as *avoid heavy frameworks*, not as a two-dep line that no longer exists. (`rank-bm25` is a deliberate cost, not drift — the grounding path is kept dormant as the record of [ADR-012](012-retire-bm25-grounding.md)'s negative result.)
+- **"Minimal dependency surface — runtime deps are `anthropic` and `pandas`, nothing else" is superseded.** That census is dead: runtime deps are now `anthropic`, `pandas`, `rank-bm25`, `httpx`, `opentelemetry-api`, `opentelemetry-sdk`. The lean-deps instinct survives as *avoid heavy frameworks*, not as a two-dep line that no longer exists. (`rank-bm25` is a deliberate cost, not drift — the grounding path is kept dormant as the record of [ADR-012](archive/012-retire-bm25-grounding.md)'s negative result.)
 - **"The metrics logic is readable and directly testable" stands on its own, and is why this ADR survives.** This repo is a relearning vehicle; hand-rolled TP/FP/FN counting and confusion matrices are portfolio signal, not overhead, and `test_eval.py` tests the formulas directly. The "~40 lines, no sprawl" prediction held — `src/eval.py` became a small internal metrics API rather than duplicated arithmetic, and eight modules import it.
 
 **So: a model may use a framework; metrics stay plain Python.**
 
 Explicitly, so a future session does not read the amendment as a general relaxation: **do not replace the hand-written metrics with `sklearn.metrics.classification_report` or `confusion_matrix`.** Trading them for a ~40-line saving deletes the thing this ADR was protecting.
 
-**Downstream surfaces.** [ADR-005](005-agentic-prompt-optimization-loop.md)'s Alternatives table rejected DSPy partly on "the repo's minimal-deps rule (ADR-004)". That ground is narrowed by this amendment, so ADR-005's entry is re-grounded on its own stronger argument in the same change. `CLAUDE.md`'s "avoid heavy frameworks" line is unchanged and still governs.
+**Downstream surfaces.** [ADR-005](archive/005-agentic-prompt-optimization-loop.md)'s Alternatives table rejected DSPy partly on "the repo's minimal-deps rule (ADR-004)". That ground is narrowed by this amendment, so ADR-005's entry is re-grounded on its own stronger argument in the same change. `CLAUDE.md`'s "avoid heavy frameworks" line is unchanged and still governs.

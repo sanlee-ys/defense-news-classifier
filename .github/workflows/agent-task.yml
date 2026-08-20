@@ -3,7 +3,7 @@ name: agent-task
 # AGENT TASK LANE: an on-demand job where a coding agent implements a scoped task
 # and proposes it as a DRAFT PR. The "proposing" counterpart to the advisory review
 # lane (claude-review.yml / ADR-016). Full rationale in
-# decisions/025-agent-task-lane.md; the assembly rule it satisfies is agent-ops
+# decisions/archive/025-agent-task-lane.md; the assembly rule it satisfies is agent-ops
 # conventions/agent-in-ci.md (sandboxed scoped credentials; proposal-only output;
 # deterministic verifier after the agent; redline guards travel with the job).
 #

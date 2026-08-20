@@ -23,9 +23,9 @@ This roadmap is the map. The per-level specs and ADRs are the territory.
 | Level | What the classifier gains | Who drives | State |
 |-------|---------------------------|-----------|-------|
 | **L1 — Single call** | Prompt + structured `{category, operational_domain}` + eval | Human runs each item | **Shipped** (v1) |
-| **L2 — Augmented** | BM25 retrieval grounds the label in a corpus | Human runs it; the model reaches for a tool | **Shipped** (v2.0.0), then **retired** ([ADR-012](../../decisions/012-retire-bm25-grounding.md)) |
-| **L3 — Autonomous loop** | Wrapped in a loop that iterates to an explicit done-signal | The system decides when it is done | **Built** — rung 1 ([ADR-005](../../decisions/005-agentic-prompt-optimization-loop.md)) rode the `v2.1.0` tag; rung 2 ([ADR-018](../../decisions/018-agent-driven-ml-loop.md), `src/ml_loop.py`) built 2026-07-25 on the [ML bake-off](ml-baseline-bakeoff.md) substrate, and its first live run **measured negative transfer**: the best-by-B iteration scored B 0.699 (+6.0) while held-out C fell to 0.545 (−8.6), caught by the split design rather than by luck |
-| **L4 — Multi-agent** | Decomposed: triage → classify → critic that can hand work *backward* | Multiple agents coordinate | **Built + measured** ([ADR-020](../../decisions/020-l4-multi-agent-pipeline.md), 2026-07-25): the backward edge works — 6/7 of the named region cluster fixed — but the all-axes critic over-challenged (57% rate) and did net harm at 4× cost, so the pipeline is **declined as configured**; the shipped single call stays production. Both halves are the L4 story. |
+| **L2 — Augmented** | BM25 retrieval grounds the label in a corpus | Human runs it; the model reaches for a tool | **Shipped** (v2.0.0), then **retired** ([ADR-012](../../decisions/archive/012-retire-bm25-grounding.md)) |
+| **L3 — Autonomous loop** | Wrapped in a loop that iterates to an explicit done-signal | The system decides when it is done | **Built** — rung 1 ([ADR-005](../../decisions/archive/005-agentic-prompt-optimization-loop.md)) rode the `v2.1.0` tag; rung 2 ([ADR-018](../../decisions/archive/018-agent-driven-ml-loop.md), `src/ml_loop.py`) built 2026-07-25 on the [ML bake-off](ml-baseline-bakeoff.md) substrate, and its first live run **measured negative transfer**: the best-by-B iteration scored B 0.699 (+6.0) while held-out C fell to 0.545 (−8.6), caught by the split design rather than by luck |
+| **L4 — Multi-agent** | Decomposed: triage → classify → critic that can hand work *backward* | Multiple agents coordinate | **Built + measured** ([ADR-020](../../decisions/archive/020-l4-multi-agent-pipeline.md), 2026-07-25): the backward edge works — 6/7 of the named region cluster fixed — but the all-axes critic over-challenged (57% rate) and did net harm at 4× cost, so the pipeline is **declined as configured**; the shipped single call stays production. Both halves are the L4 story. |
 
 ## 3. Vocabulary (avoid the collision)
 
@@ -109,29 +109,29 @@ re-description.
 ## 6. Sequencing & scope guard
 
 - L1 and L2 are shipped. No further work owed on the spine there beyond the L2 writeup framing.
-  L2's grounding was subsequently **retired** ([ADR-012](../../decisions/012-retire-bm25-grounding.md))
+  L2's grounding was subsequently **retired** ([ADR-012](../../decisions/archive/012-retire-bm25-grounding.md))
   after a fair same-prompt re-measure — 0 domain calls fixed, 4 broken across 162 grounded
   classifications. The rung stands: the axis is *who drives*, and L2's question (can the model
   reach for a tool?) was answered yes. The tool just did not earn its place. The climbed-then-
   retired arc is the honest L2 story and the writeup should tell it that way. **Addendum
   (2026-07-25):** the L2 question is now fully closed as a three-shape measured series —
-  neighbor docs harmful ([ADR-012](../../decisions/012-retire-bm25-grounding.md)), mined
-  keyword features harmful off-distribution ([ADR-018](../../decisions/018-agent-driven-ml-loop.md)
-  amendment), labeled few-shot exemplars inert ([ADR-019](../../decisions/019-knn-exemplar-fewshot.md),
+  neighbor docs harmful ([ADR-012](../../decisions/archive/012-retire-bm25-grounding.md)), mined
+  keyword features harmful off-distribution ([ADR-018](../../decisions/archive/018-agent-driven-ml-loop.md)
+  amendment), labeled few-shot exemplars inert ([ADR-019](../../decisions/archive/019-knn-exemplar-fewshot.md),
   null at n=300 paired). The writeup gets to say "every retrieval shape was tried and
   measured," which is a stronger L2 close than one retirement.
 - **L3 is complete**, delivered as the loop spec's rung 1 then rung 2. Rung 1 was sequenced
   after v2.1.0 for the reason in the loop spec (v2.1.0 shrinks the held-out noise floor the
   loop's honest number depends on) and **shipped on the `v2.1.0` tag**. **Rung 2 is built and
-  run** (2026-07-25, [ADR-018](../../decisions/018-agent-driven-ml-loop.md)) — the agent-driven
+  run** (2026-07-25, [ADR-018](../../decisions/archive/018-agent-driven-ml-loop.md)) — the agent-driven
   ML loop in `src/ml_loop.py`, wrapping the executed
-  [ML baseline bake-off](ml-baseline-bakeoff.md) ([ADR-017](../../decisions/017-classical-baseline-bakeoff.md))
+  [ML baseline bake-off](ml-baseline-bakeoff.md) ([ADR-017](../../decisions/archive/017-classical-baseline-bakeoff.md))
   with the same A/B/C + done-signal honesty architecture as rung 1. Its first live run is the
   rung's real deliverable: the agent improved the split it could see and degraded the held-out
   one (B 0.699, +6.0; C 0.545, −8.6), and the split design caught it. The Goodhart story is now
   demonstrated end-to-end rather than merely designed for.
 - **L4 is built and measured** ([l4-multi-agent](l4-multi-agent.md), Accepted;
-  [ADR-020](../../decisions/020-l4-multi-agent-pipeline.md), 2026-07-25): triage →
+  [ADR-020](../../decisions/archive/020-l4-multi-agent-pipeline.md), 2026-07-25): triage →
   classify → critic with the backward edge as a rubric-checkable evidence review, aimed at
   the one named error cluster (the 7× `global`-pulled-to-a-region rows) — the honest
   hypothesis that gave the critic a measurable target instead of vibes. Inherits §7's
@@ -150,7 +150,7 @@ came back negative, which is the honest shape of the story rather than a gap in 
 ## 7. L4 build-vs-adopt decision (2026-07-11)
 
 > **Status note (2026-07-25):** L4 has since been spec'd, built, and measured
-> ([ADR-020](../../decisions/020-l4-multi-agent-pipeline.md)). The hand-roll decision below
+> ([ADR-020](../../decisions/archive/020-l4-multi-agent-pipeline.md)). The hand-roll decision below
 > stands and was honored — `src/l4_pipeline.py` is a plain Python driver against the Messages
 > API. The section is preserved as written on 2026-07-11, including its "still to spec"
 > framing, because it is a dated decision record and its reasoning is what a future
@@ -216,7 +216,7 @@ The ladder is the organizing story for the outward surfaces. Each level, as it l
   ladder visual and the closing narrative carry L1 through L4, and the L3 paragraph links the
   run replay at `/projects/loop-replay.html`, which now steps through both recorded runs. The
   outstanding gap on that page is not a level: it is the classical-baseline bake-off
-  ([ADR-017](../../decisions/017-classical-baseline-bakeoff.md)), which answers "why an LLM at
+  ([ADR-017](../../decisions/archive/017-classical-baseline-bakeoff.md)), which answers "why an LLM at
   all" and is still unpublished there.
 - ~~**portfolio `/lab`** — front-end craft only, not the demo's home.~~ **Superseded
   2026-07-23.** The portfolio retired `/lab` as a section and stopped confining interactive

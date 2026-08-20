@@ -1,11 +1,11 @@
 # Feature Spec — v3.2.0: Scaled Region Eval (n=300, judge-graded)
 
 **Version:** 1.0
-**Status:** Accepted — **run 2026-08-02, shipped as `v3.2.0`**. The verdict and the numbers live in [ADR-022](../../decisions/022-scaled-region-eval-verdict.md); the report is `evals/scale_eval_v3.txt`. This document remains the design record.
+**Status:** Accepted — **run 2026-08-02, shipped as `v3.2.0`**. The verdict and the numbers live in [ADR-022](../../decisions/archive/022-scaled-region-eval-verdict.md); the report is `evals/scale_eval_v3.txt`. This document remains the design record.
 **Author:** San Lee
 **Last updated:** 2026-08-02
 **Roadmap fit:** **MINOR** (`v3.2.0`). Additive measurement only — `src/api.py`, `src/classify.py` and `SYSTEM_PROMPT` are untouched, so the `{category, operational_domain, region}` contract holds.
-**Related:** [ADR-014](../../decisions/014-region-field-design.md) (the region field, and the judge gate this eval stands on) · [ADR-007](../../decisions/007-evals-as-ci-gate.md) (thresholds come from measured runs) · [ADR-020](../../decisions/020-l4-multi-agent-pipeline.md) (the L4 critic fixed 6 of the 7 `global` misses at ~4× cost — the alternative this eval prices) · `src/scale_eval.py` (the v2.1.0 scale pass this mirrors)
+**Related:** [ADR-014](../../decisions/014-region-field-design.md) (the region field, and the judge gate this eval stands on) · [ADR-007](../../decisions/007-evals-as-ci-gate.md) (thresholds come from measured runs) · [ADR-020](../../decisions/archive/020-l4-multi-agent-pipeline.md) (the L4 critic fixed 6 of the 7 `global` misses at ~4× cost — the alternative this eval prices) · `src/scale_eval.py` (the v2.1.0 scale pass this mirrors)
 
 ---
 
