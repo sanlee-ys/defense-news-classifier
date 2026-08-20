@@ -23,6 +23,13 @@ Generate all data synthetically using the same model (`claude-sonnet-4-6`). One 
 **Practical advantages:**
 - No scraping pipeline, no licensing issues, no annotation cost.
 - Perfectly balanced dataset — 10 articles per label pair, no class imbalance to manage.
+  **No longer true as of 2026-08-20.** The generator produced one API call per
+  `category × domain` pair, so the *counts* were balanced, but 42 of the 300 rows
+  carried a category that contradicts the convention in `src/classify.py`. Correcting
+  them moved the set to procurement 93, technology 61, operations 60, policy 60,
+  industry 26. The uniform-generation method is what hid the defect: a call told to
+  write ten `industry` snippets wrote ten contract awards and labeled them all
+  `industry`. See the audit note in `docs/notes/project-notes.md`.
 - Label distribution is controlled and reproducible.
 
 **Known limitation — circular eval:**  

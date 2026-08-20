@@ -109,8 +109,10 @@ is not in the tree, not in the report, not in the verdict, and not in any file
 the prompt names. That is a real reduction in the failure mode and it is not
 the same as a proof. The honest description is a **deterrent plus an audit
 trail**, and the audit trail is the part that holds: every rejected iteration
-is committed with its gate recorded, so an agent that gamed the gate leaves the
-evidence in the run log.
+is recorded in the ledger with its gate, so an agent that gamed the gate leaves the
+evidence in the run log. (Corrected 2026-08-20: this sentence read "is committed",
+which contradicts Consequences below and the live run. A rejected iteration leaves
+no commit. The ledger is the audit trail, not the branch.)
 
 The mechanical guarantees that *do* hold are the ones the outer script enforces
 without asking the agent: the caps, the stuck halt, the blast radius, and the
@@ -160,10 +162,9 @@ of "a little" across a run is exactly the regression the gate exists to catch.
 - `evals/loop/run_<UTC>.jsonl` is a new published artifact. It carries the full
   A/B/C history, so the A-versus-C gap is measurable per run — the same
   overfitting measurement rung 1 publishes.
-- **Unmeasured, deliberately.** This ADR ships the harness and a smoke test. It
-  makes no claim that the loop improves the classifier prompt. The smoke test
-  exercised the mechanics with the zero-API mock backend; no live optimization
-  run has been made, and the prompt in `src/classify.py` is unchanged.
+- ~~**Unmeasured, deliberately.**~~ **Measured 2026-08-20 — see the amendment
+  below.** The first live run has been made. The harness worked. The result was
+  rejected, and the prompt in `src/classify.py` is still unchanged.
 
 ## Downstream surfaces
 
@@ -189,3 +190,66 @@ of "a little" across a run is exactly the regression the gate exists to catch.
 - agent-ops `conventions/loop-safety.md` — the seven rails. This is the first
   harness in the fleet that implements them, which is the gap ADR-016's
   "Unmeasured, deliberately" note names.
+
+## Amendment — 2026-08-20: the first live run, and what it caught
+
+The first live run (5 iterations, 3 accepted, log `evals/loop/run_20260820T011747Z.jsonl`)
+produced this:
+
+| Split | Baseline | Iteration 5 | Change |
+|---|---|---|---|
+| A — optimize, agent-visible | 0.741 | 0.873 | +0.132 |
+| B — hidden validation gate | 0.748 | 0.879 | +0.131 |
+| C — real gold set, decides nothing | 0.936 | 0.936 | **+0.000** |
+| region guardrail | 0.984 | 0.992 | +0.008 |
+
+**Every rail held.** Iterations 3 and 4 were rejected on `b_regression`. The frozen
+`Region rules:` block was not edited. The agent ran no git command. The loop merged
+nothing. The blast radius held: the only file the loop touched was `src/classify.py`.
+
+**And the result was still wrong.** The gain was almost entirely two classes: on A,
+`industry` +0.422 and `procurement` +0.193 against +0.034, +0.013 and 0.000 for the rest.
+The loop had found a real pattern in `data/synthetic_articles.csv` and written it into the
+prompt as a rubric: label `industry` when a named company is the lead sentence's
+grammatical subject of a contract win. That reverses this repository's documented
+convention, under which a contract award is the buyer's story.
+
+The pattern was an annotation defect. 42 of the 300 synthetic rows carried a category that
+contradicts `src/classify.py`; the audit and the row lists are in
+`docs/notes/project-notes.md`. The loop optimized honestly against labels that were wrong.
+
+### What this adds to the design
+
+**A hidden gate cannot catch an error that both splits share.** This is the limitation the
+"What this does not guarantee" section above did not name. `make_split` builds A and B as a
+70/30 shuffle of the *same* synthetic pool, so they carry identical annotation defects. Of
+the 34 defective rows in the two classes that moved, 7 were in A, 3 were in B, and **0 were
+in C**. B was hidden, honest and useless here, because it was drawn from the contaminated
+population it was meant to check.
+
+The hiding guard defends against an agent reading its own scoreboard. It does not defend
+against the scoreboard being wrong. Those are different failures and only the first one had
+a mechanism.
+
+**A large A/B gain with a flat C is a defect signature, not a success.** C is the only split
+carrying the correct convention, and the honest reading of "A and B moved 0.13 while C moved
+0.000" is not "the gain did not generalize". It is "the gain came from rows C does not
+contain". Read the A-versus-C gap that way from now on: HANDOFF job 5 already says the gap
+is the number worth writing down, and this run shows the gap can indict the ruler rather
+than the prompt.
+
+**C should get an alarm, not a vote.** Gating on C is still rejected for the reason in
+Alternatives considered: the moment C decides anything it stops being held out, and the
+project loses the honest generalization figure every outward claim rests on. But a
+*non-blocking* alarm costs nothing and would have flagged this run at iteration 2. Proposed
+rule, for a future harness change rather than this ADR: when accepted-iteration B improves
+by more than a threshold while C moves by less than a small epsilon, print a warning in the
+run summary and set a flag in the ledger. It changes no gate and no commit; it only refuses
+to let the run look like a clean win.
+
+### Status of the run
+
+`loop/prompt-optimize` is **not merged and will not be**. Its rubric encodes the defect. The
+labels were corrected instead, on the branch that carries this amendment. A future live run
+against the corrected set is a fresh measurement and inherits none of these numbers.
+
