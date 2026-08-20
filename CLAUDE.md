@@ -63,6 +63,29 @@ These labels are a starting point. If a cleaner set emerges once you see the dat
 - Eval is plain Python; a Jupyter notebook for the analysis is fine.
 - Code style: **Black** (`uv run black src/ tests/`), **Ruff** for linting (`uv run ruff check src/ tests/`), **mypy** for type checking (`uv run mypy src/`). All at line length 88, targeting Python 3.11. **pre-commit** runs these automatically before each commit.
 
+  **The full CI gate list is longer than those three, and running only those three will
+  let you push a red build.** `tests.yml` runs nine steps. Run all of them before you
+  push:
+
+  ```bash
+  uv run ruff check .                                    # repo-wide, not just src/ tests/
+  uv run black --check .                                 # repo-wide
+  uv run mypy src
+  uv run python scripts/gen_contract_schema.py --check   # contract artifact is current
+  uv run python scripts/gen_metrics_artifact.py --check  # metrics artifact is current
+  uv run python scripts/gen_readme_metrics.py --check    # README table matches the artifact
+  uv run python scripts/lint_decisions.py                # every ADR lists downstream surfaces
+  node scripts/parity_check.mjs                          # browser baseline matches sklearn
+  uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=66
+  ```
+
+  Note that `ruff` and `black` run over the **whole repo** in CI and over `src/ tests/`
+  in the line above. The narrower form passes on files CI would fail.
+
+  On a worktree with no `.env`, prefix a command with `env -u UV_ENV_FILE` so `uv` does
+  not fail on the missing file. That includes `git commit`, because the pre-commit hooks
+  shell out to `uv`.
+
 ## Project structure
 ```
 /data        synthetic articles + labels
