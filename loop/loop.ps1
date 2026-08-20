@@ -189,12 +189,15 @@ function Invoke-Metrics {
     $metricsArgs = @("run", "python", "scripts/loop_metrics.py", "--mode", $Mode,
         "--ledger", $Ledger)
     if ($DryRunMetrics) { $metricsArgs += "--dry-run" }
-    # A worktree usually has no .env, and dry-run scoring needs no key. A
-    # global UV_ENV_FILE would otherwise fail the call on a missing file.
+    # A worktree has no .env, so a global UV_ENV_FILE fails every uv call on
+    # the missing file. The ruler never needs the file: dry-run scoring needs
+    # no key, and a real run reads ANTHROPIC_API_KEY from the process
+    # environment (HANDOFF job 5). Caught live 2026-08-19: this removal was
+    # dry-run-only, and the first real run halted at baseline scoring.
     $savedEnvFile = $env:UV_ENV_FILE
     # Removing the variable is not the same as setting it to the empty string:
     # an empty value makes uv look for a file named "" and fail.
-    if ($DryRunMetrics -and (Test-Path Env:UV_ENV_FILE)) { Remove-Item Env:UV_ENV_FILE }
+    if (Test-Path Env:UV_ENV_FILE) { Remove-Item Env:UV_ENV_FILE }
     Push-Location $RepoRoot
     # Out-Host, not a bare call: a bare `& uv` writes its stdout to the
     # function's output stream, so the caller receives the console text AND
