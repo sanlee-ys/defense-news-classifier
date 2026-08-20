@@ -19,14 +19,14 @@
 > body below stays verbatim, deliberately.
 
 **Related:** [ADR-022](022-scaled-region-eval-verdict.md) (the n=300 ruler this was measured
-against, and the cluster counts) · [ADR-014](014-region-field-design.md) (the ratified region
+against, and the cluster counts) · [ADR-014](../014-region-field-design.md) (the ratified region
 conventions the clause restated) · [ADR-020](020-l4-multi-agent-pipeline.md) (the declined
 critic — the alternative fix, and the restraint-in-a-prompt cautionary tale) ·
 [ADR-019](019-knn-exemplar-fewshot.md) / [ADR-013](013-decline-tiered-routing.md) /
 [ADR-012](012-retire-bm25-grounding.md) (the measured-and-declined precedents this joins) ·
 [ADR-018](018-agent-driven-ml-loop.md) (rung 2's C-veto — the same discipline, one rung down) ·
-[ADR-007](007-evals-as-ci-gate.md) (floors come from measured runs) ·
-[spec](../docs/specs/global-boundary-clause.md) (canonical pre-registration, §6 decision rule)
+[ADR-007](../007-evals-as-ci-gate.md) (floors come from measured runs) ·
+[spec](../../docs/specs/global-boundary-clause.md) (canonical pre-registration, §6 decision rule)
 
 ---
 
@@ -133,7 +133,7 @@ and this record ship; the behavior change does not.
 
 ### Arm 1 — scale (the primary ruler, effective n=295)
 
-Full report: [`evals/region_clause_ab.txt`](../evals/region_clause_ab.txt). Per-row candidate
+Full report: [`evals/region_clause_ab.txt`](../../evals/region_clause_ab.txt). Per-row candidate
 predictions in `evals/region_clause_candidate.csv` with its provenance sidecar. Answer key: the
 frozen `claude-opus-4-8` judge column from `evals/scale_predictions_v3.csv`, **not re-run**
 (digest `346b905682342ed8`) — `classify()` defaults *both* models to `SYSTEM_PROMPT`, so a

@@ -30,12 +30,12 @@ protagonist** climbing all four levels. Each level is the same system handed mor
 | Level | Rung | State |
 |-------|------|-------|
 | **L1** Single call | prompt + structured label + eval | shipped (v1) |
-| **L2** Augmented | BM25 retrieval grounding | shipped (v2.0.0), then **retired** ([ADR-012](012-retire-bm25-grounding.md)) |
+| **L2** Augmented | BM25 retrieval grounding | shipped (v2.0.0), then **retired** ([ADR-012](archive/012-retire-bm25-grounding.md)) |
 | **L3** Autonomous loop | prompt-opt loop → agent-driven ML loop (ADR-005) | rung 1 **shipped**; rung 2 (agent-driven ML loop) not started |
 | **L4** Multi-agent | triage → classify → critic with backward handoff | to spec |
 
 > **Status correction, 2026-07-19.** The L3 row read "spec'd" until this amendment, eight
-> days after the prompt-optimization loop ([ADR-005](005-agentic-prompt-optimization-loop.md))
+> days after the prompt-optimization loop ([ADR-005](archive/005-agentic-prompt-optimization-loop.md))
 > actually shipped on 2026-07-11. It now reads **rung 1 shipped, rung 2 not started** rather
 > than a bare "shipped," because L3 was always defined as two rungs and only one is built.
 >
@@ -47,7 +47,7 @@ protagonist** climbing all four levels. Each level is the same system handed mor
 > (`region_rubric_violations()` in `src/optimize.py`, plus the `region_guardrail` score on C).
 
 > **Status correction, 2026-07-18.** The L2 row read "shipped (v2.0.0)" until this
-> amendment, months after [ADR-012](012-retire-bm25-grounding.md) retired BM25 grounding
+> amendment, months after [ADR-012](archive/012-retire-bm25-grounding.md) retired BM25 grounding
 > on 2026-07-17 — a fair same-prompt re-measure found it fixed a domain call zero times
 > and broke four across 162 grounded classifications. The rung was climbed and then
 > climbed back down.

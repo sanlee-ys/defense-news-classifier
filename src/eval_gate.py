@@ -28,7 +28,7 @@ would be reported as met by predictions the current prompt never made. src/prove
 records that pairing at run time and main() refuses to grade when it no longer holds
 (the same guard scripts/gen_metrics_artifact.py applies before publishing).
 
-BM25 retrieval grounding was retired in decisions/012-retire-bm25-grounding.md (it
+BM25 retrieval grounding was retired in decisions/archive/012-retire-bm25-grounding.md (it
 stopped paying under the improved prompt), so the gate grades only the ungrounded
 baseline -- the classifier that actually ships.
 

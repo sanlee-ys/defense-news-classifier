@@ -11,10 +11,10 @@ That is what makes this a pre-registration rather than a summary.
 `{category, operational_domain, region}` contract, the shipped prompt, or any published
 number. A result ships an ADR, and possibly a writeup, and no version at all.
 **Related:**
-[ADR-020](../../decisions/020-l4-multi-agent-pipeline.md) (the pipeline, built and declined) ·
+[ADR-020](../../decisions/archive/020-l4-multi-agent-pipeline.md) (the pipeline, built and declined) ·
 [autonomy-ladder §4](autonomy-ladder.md) (the asymmetry this measures) ·
 [l4-multi-agent](l4-multi-agent.md) §9.1 (design fork 1 — why `classify` is blind to triage) ·
-[ADR-023](../../decisions/023-global-boundary-clause-verdict.md) /
+[ADR-023](../../decisions/archive/023-global-boundary-clause-verdict.md) /
 [`src/mcnemar_power.py`](../../src/mcnemar_power.py) (the power instrument) ·
 [SYS-022](https://github.com/sanlee-ys/architecture/blob/main/decisions/SYS-022-org-graph-and-the-mechanization-split.md)
 (the parent finding, and its Amendment 1) ·

@@ -61,7 +61,7 @@ and conclude the synthetic corpus is retired.
 
 **It is not retired, and marking it so would be a live hazard.**
 `data/synthetic_articles.csv` is the **A/B split of the prompt-optimization loop**
-([ADR-005](005-agentic-prompt-optimization-loop.md) names it as the source for both A and B),
+([ADR-005](archive/005-agentic-prompt-optimization-loop.md) names it as the source for both A and B),
 and it is read by `src/optimize.py`, `src/eval.py`, `src/generate.py`, and fixtured in
 `tests/test_eval.py`, `tests/test_optimize.py`, and `tests/test_stability.py`. Deleting it in
 a cleanup sweep would take the Level-3 autonomy-ladder rung

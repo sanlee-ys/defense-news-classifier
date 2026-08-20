@@ -4,7 +4,7 @@ This directory holds the JSONL run logs written by `src/optimize.py` (the
 rung-1 prompt-optimization loop -- Level 3 of the [autonomy
 ladder](../../docs/specs/autonomy-ladder.md), spec'd in
 [docs/specs/prompt-optimization-loop.md](../../docs/specs/prompt-optimization-loop.md),
-decision recorded in [ADR-005](../../decisions/005-agentic-prompt-optimization-loop.md)).
+decision recorded in [ADR-005](../../decisions/archive/005-agentic-prompt-optimization-loop.md)).
 
 ## Real runs have landed -- and they all overfit
 

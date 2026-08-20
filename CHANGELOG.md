@@ -15,7 +15,7 @@ classifier is unchanged: `src/classify.py` carries the same `SYSTEM_PROMPT`, and
 
 ### Added
 - **A Ralph-style outer loop around the classifier prompt, graded on a split the agent
-  never sees** ([ADR-026](decisions/026-ralph-loop-honest-ruler.md), `loop/loop.ps1`,
+  never sees** ([ADR-026](decisions/archive/026-ralph-loop-honest-ruler.md), `loop/loop.ps1`,
   `loop/PROMPT_optimize.md`, `scripts/loop_metrics.py`, `loop/README.md`). The agent reads
   split A only. Split B is the acceptance gate, and an iteration commits only if B does not
   regress against the best accepted B. Split C decides nothing and is recorded as the honest
@@ -44,7 +44,7 @@ classifier is unchanged: `src/classify.py` carries the same `SYSTEM_PROMPT`, and
   not rewrite it. The loop therefore cannot improve `region` by construction, which ADR-026
   records as an accepted capability cost.
 - **An agent task lane: dispatch a scoped task, get back a draft PR**
-  ([ADR-025](decisions/025-agent-task-lane.md), `.github/workflows/agent-task.yml`). This is
+  ([ADR-025](decisions/archive/025-agent-task-lane.md), `.github/workflows/agent-task.yml`). This is
   the proposing counterpart to ADR-016's advisory review lane, assembled per agent-ops
   `conventions/agent-in-ci.md`. The lane is `workflow_dispatch` only and owner-gated. Its
   `contents:write` permission is bounded to proposal branches by the protection rules on
@@ -70,10 +70,35 @@ classifier is unchanged: `src/classify.py` carries the same `SYSTEM_PROMPT`, and
   that there is no gold for intermediate node output. The cell matrix is asserted against the
   spec file by a test, so post-hoc cell selection cannot happen quietly.
 
+### Changed
+- **The decision log is split by genre: 26 ADRs become 11 live ADRs, a verdict log and one
+  current agent-practice document** (`decisions/README.md`, `decisions/verdicts.md`,
+  `decisions/agent-practice.md`, `decisions/archive/`, `CLAUDE.md`). The set had reached 26
+  numbered ADRs of which only 11 decided anything still in force. Ten were experiment
+  verdicts, which accumulate and decide nothing by themselves. Five were overlapping
+  statements of agent authority written between 2026-06-27 and 2026-08-11 at different levels
+  of maturity, two of which stated the same rule in different words.
+
+  **Nothing was deleted.** All fifteen superseded ADRs keep their full original text under
+  `decisions/archive/`, every number ever issued is mapped in the index, and all 311 relative
+  links in the repository resolve.
+
+  `decisions/verdicts.md` is now the log for measured results: one dated row per experiment,
+  with the number and the call. A new experiment adds a row and does not take an ADR number.
+  `decisions/agent-practice.md` states the current rule for agent authority in six numbered
+  points, plus what a hidden metric does not buy, plus a table of how the rule got there. The
+  progression is the argument for keeping it current rather than immutable: what changed each
+  time was the capability of the proposer, and the guard had to change with it.
+
+  Also fixed in passing, because the restructure surfaced them: ADR-025 was absent from the
+  index between 2026-08-11 and 2026-08-20, and ADR-001's title still names
+  `claude-sonnet-4-6` while the workhorse is `claude-sonnet-5`. The stale title is now
+  flagged in the index rather than silently wrong.
+
 ### Fixed
 - **42 of the 300 synthetic labels contradicted the classifier's own convention, and the
   first live outer-loop run learned the defect** (`data/synthetic_articles.csv`,
-  [ADR-026](decisions/026-ralph-loop-honest-ruler.md) amendment,
+  [ADR-026](decisions/archive/026-ralph-loop-honest-ruler.md) amendment,
   [ADR-003](decisions/003-synthetic-data-only.md), `docs/notes/project-notes.md`). A full
   read of all 300 rows found three defect classes, every one of them the documented
   convention applied backwards: 25 `industry` rows and 8 `technology` rows are government
@@ -138,7 +163,7 @@ classifier is unchanged: `src/classify.py` carries the same `SYSTEM_PROMPT`, and
 
 ### Fixed
 - **The `global`-boundary prompt clause — re-run at adequate power, and adopted**
-  ([ADR-024](decisions/024-global-boundary-clause-adopted.md),
+  ([ADR-024](decisions/archive/024-global-boundary-clause-adopted.md),
   [spec](docs/specs/global-boundary-clause-rerun.md), `src/region_clause_rerun.py`).
   ADR-023 measured this clause and reverted it at **p=0.0522** against a
   pre-registered p<0.05. It then named the one thing that would change the answer —
@@ -221,7 +246,7 @@ classifier is unchanged: `src/classify.py` carries the same `SYSTEM_PROMPT`, and
   that is the ADR-023 lesson: **exact-duplicate snippet text is dropped before anything
   is graded**, not after. Offline tests throughout; no live call was made building it.
 - **The `global`-boundary prompt clause experiment — measured and reverted**
-  ([ADR-023](decisions/023-global-boundary-clause-verdict.md),
+  ([ADR-023](decisions/archive/023-global-boundary-clause-verdict.md),
   [spec](docs/specs/global-boundary-clause.md), `src/region_clause_ab.py`). The region axis
   had one named, systematic error: answer-key `global` rows pulled to a specific region by
   inferring a theater from the US *actor* — 17 of 70 at n=300, **49% of every region
@@ -350,7 +375,7 @@ Milestone: **the ruler shrinks.** The region axis had shipped with a single numb
 n=54, a 95% Wilson interval **18 points wide** — inside which no future region change could be
 told apart from noise. The scaled region eval grades 300 DVIDS snippets with the Opus judge
 that validated at 100.0% region agreement against the human labels, and brings that interval
-down to **7 points** ([ADR-022](decisions/022-scaled-region-eval-verdict.md)).
+down to **7 points** ([ADR-022](decisions/archive/022-scaled-region-eval-verdict.md)).
 
 This tag also releases everything accumulated since `v3.1.0`: the API error taxonomy and the
 truncation assertion (ADR-021), the paired-comparison layer, the browser-portable ADR-017
@@ -363,7 +388,7 @@ gold numbers published in `evals/metrics.json` are still `v3.0.0`'s measurements
 thing they measure did not change; the only byte that moved in the artifact is `version`.
 
 ### Added
-- **The scaled region eval, measured** ([ADR-022](decisions/022-scaled-region-eval-verdict.md),
+- **The scaled region eval, measured** ([ADR-022](decisions/archive/022-scaled-region-eval-verdict.md),
   [spec](docs/specs/scaled-region-eval.md), `src/scale_region_eval.py`) — 300 DVIDS snippets
   (`data/scale/scale_set.csv`, the same ids v2.1.0 used: reused rather than resampled, so every
   row lines up with the frozen v2 snapshot and the judge never grades its own validation data),
@@ -425,7 +450,7 @@ thing they measure did not change; the only byte that moved in the artifact is `
   merge (`.github/workflows/docker.yml`, path-filtered to `Dockerfile`,
   `requirements-api.txt`, `src/api.py`, `src/classify.py`) — before it, a base-image bump could
   go fully green without the shipped artifact ever being built. And the advisory review lane
-  walked back to **on-demand only** ([ADR-016](decisions/016-claude-code-action-pr-review.md)
+  walked back to **on-demand only** ([ADR-016](decisions/archive/016-claude-code-action-pr-review.md)
   Amendment 1): the automatic `pull_request: [opened]` pass is gone, and the remaining gate was
   a fiction until it was fixed — supplying a `prompt:` puts the action in **agent mode**, which
   bypasses `@claude` mention checking entirely, so the effective trigger was *any* OWNER comment
@@ -528,8 +553,8 @@ thing they measure did not change; the only byte that moved in the artifact is `
 
 Milestone: **the autonomy ladder, built to the top.** L3's second rung and all of L4 land
 here, together with the classical-ML bake-off that finally measured whether the LLM was
-worth paying for at all ([ADR-017](decisions/017-classical-baseline-bakeoff.md) through
-[ADR-020](decisions/020-l4-multi-agent-pipeline.md)). Four verdicts, three of them negative:
+worth paying for at all ([ADR-017](decisions/archive/017-classical-baseline-bakeoff.md) through
+[ADR-020](decisions/archive/020-l4-multi-agent-pipeline.md)). Four verdicts, three of them negative:
 the agent-driven ML loop improved the split it could see and degraded the held-out one,
 retrieved exemplars did nothing, and the multi-agent pipeline did measurable harm at roughly
 four times the calls. Each was kept as a record rather than deleted.
@@ -541,7 +566,7 @@ because the thing they measure did not change. The roadmap's scaled region eval,
 pencilled in at this number, moves to `v3.2.0`.
 
 ### Added
-- **L4: the multi-agent pipeline** ([ADR-020](decisions/020-l4-multi-agent-pipeline.md),
+- **L4: the multi-agent pipeline** ([ADR-020](decisions/archive/020-l4-multi-agent-pipeline.md),
   [spec](docs/specs/l4-multi-agent.md), `src/l4_pipeline.py`) — triage (verbatim evidence
   spans) → the untouched shipped `classify()` (blind to triage) → a critic whose narrow
   charter allows challenges only on rubric-checkable evidence claims, with the ladder's
@@ -558,7 +583,7 @@ pencilled in at this number, moves to `v3.2.0`.
   every other measure (scale domain 91.3→86.7, McNemar p=0.016 — the repo's first
   statistically significant harm) at ~4× calls per row. The shipped single call stays
   production. Record: `evals/l4_eval.txt` + both prediction CSVs.**
-- **kNN-exemplar few-shot experiment harness** ([ADR-019](decisions/019-knn-exemplar-fewshot.md),
+- **kNN-exemplar few-shot experiment harness** ([ADR-019](decisions/archive/019-knn-exemplar-fewshot.md),
   `src/exemplar_eval.py`) — the third and last untried retrieval-augmentation shape: k=3
   BM25-retrieved **labeled** exemplars appended to the system prompt (boundary placement,
   not topical context). Paired exact McNemar on the scale set vs judge labels with a
@@ -571,7 +596,7 @@ pencilled in at this number, moves to `v3.2.0`.
   single-call classifier stays the measured optimum. Record: `evals/exemplar_eval.txt`
   + the three arm CSVs.**
 - **Rung 2 of the autonomy ladder: the agent-driven ML loop**
-  ([ADR-018](decisions/018-agent-driven-ml-loop.md), `src/ml_loop.py`) — an agentic outer
+  ([ADR-018](decisions/archive/018-agent-driven-ml-loop.md), `src/ml_loop.py`) — an agentic outer
   loop (read out-of-fold errors on split A → propose the next experiment: vectorizer
   changes, regularization, error-driven keyword features) wrapping the mechanical sklearn
   inner loop of the ADR-017 bake-off baseline. Reuses rung 1's honesty architecture as
@@ -591,7 +616,7 @@ pencilled in at this number, moves to `v3.2.0`.
   alone, and C exposed the trade precisely because nothing was allowed to optimize it. This
   is the Goodhart centerpiece demonstrated end-to-end rather than merely designed for.
   Record: the ADR-018 amendment.**
-- **Classical ML baseline bake-off** ([ADR-017](decisions/017-classical-baseline-bakeoff.md),
+- **Classical ML baseline bake-off** ([ADR-017](decisions/archive/017-classical-baseline-bakeoff.md),
   [spec](docs/specs/ml-baseline-bakeoff.md)): `src/baseline_ml.py` trains TF-IDF + logistic
   regression on the 300 judge-graded snippets (`judge_*` labels only) and scores it once
   against the human gold set through the existing hand-rolled metrics. Verdict: the LLM wins
@@ -721,14 +746,14 @@ single catch-all for no-anchor and multi-region stories, mirroring `multi` on th
 ## [2.2.0] - 2026-07-18
 
 Milestone: **tiered model routing — measured and declined.** The roadmap's v2.2.0 ships as a
-measured negative result ([ADR-013](decisions/013-decline-tiered-routing.md)), the project's
+measured negative result ([ADR-013](decisions/archive/013-decline-tiered-routing.md)), the project's
 second after the BM25 grounding retirement: the routing harness was built, the cost/quality
 trade was measured, and the verdict is that routing buys nothing at ~2x the cost. The shipped
 classifier stays single-model, single-call.
 
 ### Added
-- **Tiered-routing experiment: runner-up trigger + offline-replayable measurement harness** (`src/route.py`, `src/route_eval.py`) — the build for the roadmap's **v2.2.0 "tiered model routing"**, aimed at the `technology`-vs-`operations` boundary per [ADR-011](decisions/011-reaim-tiered-routing-technology-operations.md). The shipped classifier forces tool use and so emits no confidence signal; `route.py` manufactures one — a routing-only variant of the classify tool adds a required `runner_up_category` field, and `route()` escalates to the Opus tier exactly when the workhorse reports {technology, operations} as its top-two. `classify_routed()` keeps the `{category, operational_domain}` contract byte-for-byte. `route_eval.py` measures the cost/quality trade with three honesty guards baked in: quality is graded **only on the n=54 human gold set** (the scale set's answer key is the Opus judge — the escalation target itself — so it reports rate/cost, never "accuracy"); escalations are **replayed from the stored judge predictions** (same model, same call shape), so the live spend is one workhorse pass and zero new Opus calls; and the runner-up schema's perturbation of the workhorse's own labels is measured, not assumed away. Shipped with the stated hypothesis that the #79 prompt fix already cleared the target cluster (technology recall 1.000 vs human) and routing likely no longer pays.
-- **The measured verdict** (`evals/route_eval.txt`, [ADR-013](decisions/013-decline-tiered-routing.md)) — the hypothesis held, decisively. On the human-graded gold set, routing moved **+0 rows on both axes** (94.4% / 92.6%, identical to the workhorse); the escalated rows read **fixed 0, broke 1, unchanged 8**, where the one change was Opus overriding a correct workhorse answer with the judge's own known tech→ops error (g007). Even all-Opus scores the same 94.4% category as the workhorse — no category router has headroom to capture on this set. On 299 real DVIDS snippets the trigger fires on **19.4%** of articles (changing only 2 labels), pricing the routed pipeline at **~1.97x** the workhorse per article at the 5:1 list-price ratio. Routing is therefore **declined**: the harness, artifacts, and tests stay dormant as the reproducible record, and the shipped path is unchanged. The schema perturbation was small (2/54 category, 0/54 domain) but included one finding worth the record: the runner-up field flipped s151 — a chem-bio *defense* program story the baseline had classified cleanly — into a safety-layer refusal.
+- **Tiered-routing experiment: runner-up trigger + offline-replayable measurement harness** (`src/route.py`, `src/route_eval.py`) — the build for the roadmap's **v2.2.0 "tiered model routing"**, aimed at the `technology`-vs-`operations` boundary per [ADR-011](decisions/archive/011-reaim-tiered-routing-technology-operations.md). The shipped classifier forces tool use and so emits no confidence signal; `route.py` manufactures one — a routing-only variant of the classify tool adds a required `runner_up_category` field, and `route()` escalates to the Opus tier exactly when the workhorse reports {technology, operations} as its top-two. `classify_routed()` keeps the `{category, operational_domain}` contract byte-for-byte. `route_eval.py` measures the cost/quality trade with three honesty guards baked in: quality is graded **only on the n=54 human gold set** (the scale set's answer key is the Opus judge — the escalation target itself — so it reports rate/cost, never "accuracy"); escalations are **replayed from the stored judge predictions** (same model, same call shape), so the live spend is one workhorse pass and zero new Opus calls; and the runner-up schema's perturbation of the workhorse's own labels is measured, not assumed away. Shipped with the stated hypothesis that the #79 prompt fix already cleared the target cluster (technology recall 1.000 vs human) and routing likely no longer pays.
+- **The measured verdict** (`evals/route_eval.txt`, [ADR-013](decisions/archive/013-decline-tiered-routing.md)) — the hypothesis held, decisively. On the human-graded gold set, routing moved **+0 rows on both axes** (94.4% / 92.6%, identical to the workhorse); the escalated rows read **fixed 0, broke 1, unchanged 8**, where the one change was Opus overriding a correct workhorse answer with the judge's own known tech→ops error (g007). Even all-Opus scores the same 94.4% category as the workhorse — no category router has headroom to capture on this set. On 299 real DVIDS snippets the trigger fires on **19.4%** of articles (changing only 2 labels), pricing the routed pipeline at **~1.97x** the workhorse per article at the 5:1 list-price ratio. Routing is therefore **declined**: the harness, artifacts, and tests stay dormant as the reproducible record, and the shipped path is unchanged. The schema perturbation was small (2/54 category, 0/54 domain) but included one finding worth the record: the runner-up field flipped s151 — a chem-bio *defense* program story the baseline had classified cleanly — into a safety-layer refusal.
 
 ### Fixed
 - **Runner-up passes survive safety-layer refusals** (`src/route_eval.py`) — the first live scale batch crashed retrieving results when s151 came back `stop_reason='refusal'` (the loop caught transport errors and invalid labels, but a refusal escaped and aborted the retrieval). Both passes now record a `refused` sentinel row and continue: the id counts as done on resume (no re-buying a permanently-refused row every rerun), `_load_runner` excludes sentinel rows from every metric, and the report names the excluded ids so the shrunken n is stated, not silent. The conftest batch fake learned to simulate a refusal (a *succeeded* item with `stop_reason='refusal'` and no tool_use block) so the guard is under test.
@@ -744,14 +769,14 @@ loop, OTel tracing), plus the tech-vs-ops prompt improvement and the BM25 ground
 - **OpenTelemetry tracing over the `classify()` LLM call** (`src/telemetry.py`) — the classifier's single LLM call is instrumented against the OTel API always; the recording SDK is configured only when `CLASSIFIER_TRACING` is set, so the eval hot path (hundreds of `classify()` calls per optimize iteration) and the offline suite stay a zero-overhead no-op. When on, each call emits a `chat <model>` span with GenAI-semconv attributes (`gen_ai.usage.*` tokens, `gen_ai.response.finish_reasons`) plus the resulting `classifier.category` / `classifier.operational_domain`. Console exporter to stderr by default; OTLP is the optional `otlp` extra. Mirrors the `kb-agent` tracing so the two services share one observability language, and closes the classifier half of the SYS-007 "OTel across notes-api + `/classify`" item. Output contract (`{category, operational_domain}`) is untouched, so this rides `[Unreleased]` without earning a bump.
 - **`Jenkinsfile`** — the CI pipeline expressed as a declarative Jenkins pipeline (checkout → `uv sync` → parallel ruff/black/mypy → unit tests with the coverage gate), mirroring `.github/workflows/tests.yml`. GitHub Actions stays the live gate; this is pipeline-as-code for a Jenkins controller (none runs it here, so it has no status check).
 - **Evals-as-CI capability gate** (`.github/workflows/evals.yml`, `src/eval_gate.py`, `evals/thresholds.toml`) — wires the v2 gold-set evals (`gold_eval.py`, `gold_eval_rag.py`) into CI as two gates split by API cost: a free offline gate on every push/PR that grades the prediction CSVs already committed against threshold floors, and a paid live gate on `workflow_dispatch` + a weekly schedule only (never `pull_request`, and never `pull_request_target`) that re-runs the real models first and never commits the refreshed numbers back. `build_report()` in both eval scripts now reads from an extracted `metrics()` function — same printed output, now also machine-readable. `Jenkinsfile` gets a matching parity-only offline stage. See [ADR-007](decisions/007-evals-as-ci-gate.md).
-- **Rung-1 prompt-optimization loop** (`src/optimize.py`, autonomy ladder L3) — an agent-driven loop that reads the classifier's eval failures on a held-out A split, proposes a revised system prompt, re-scores A/B/C, and repeats until an explicit done-signal fires (threshold, then plateau, then budget). The orchestrator (`run_optimization`) talks to an injected `OptimizerBackend` (`score`, `propose`) rather than the Anthropic client directly, which makes the Goodhart guard structural — B/C never reach the code path that builds the proposer's feedback — and gives a zero-API `--dry-run` mode for free via `DryRunBackend`. Run log is append-only JSONL for resume-safety. See [ADR-005](decisions/005-agentic-prompt-optimization-loop.md) and [the loop spec](docs/specs/prompt-optimization-loop.md). **Per the spec's §11 sequencing, this was held for `v2.1.0`** — which shrinks the n≈54 noise floor its honest held-out number depends on — and, that milestone having shipped in this release, it is released here.
+- **Rung-1 prompt-optimization loop** (`src/optimize.py`, autonomy ladder L3) — an agent-driven loop that reads the classifier's eval failures on a held-out A split, proposes a revised system prompt, re-scores A/B/C, and repeats until an explicit done-signal fires (threshold, then plateau, then budget). The orchestrator (`run_optimization`) talks to an injected `OptimizerBackend` (`score`, `propose`) rather than the Anthropic client directly, which makes the Goodhart guard structural — B/C never reach the code path that builds the proposer's feedback — and gives a zero-API `--dry-run` mode for free via `DryRunBackend`. Run log is append-only JSONL for resume-safety. See [ADR-005](decisions/archive/005-agentic-prompt-optimization-loop.md) and [the loop spec](docs/specs/prompt-optimization-loop.md). **Per the spec's §11 sequencing, this was held for `v2.1.0`** — which shrinks the n≈54 noise floor its honest held-out number depends on — and, that milestone having shipped in this release, it is released here.
 - **Backfilled the v2 eval modules' orchestration tests** — offline tests for the API-driving run-loops and `main()` entrypoints in `src/stability.py`, `src/gold_eval_rag.py`, `src/gold_eval_haiku.py`, and `src/retrieval_error_analysis.py` that the existing pure-function tests deliberately skipped (the run loops, the transient-error retry/backoff, batch polling, and the CLI dispatch/resume-skip branches). They reuse the conftest fake-client / fake-batch stand-ins plus `monkeypatch`ed path constants, so they stay offline — no API key, no network. Lifts those four modules from 58–86% to 99% line coverage — only the `if __name__` guard lines remain, matching `gold_eval.py` — and overall `src/` coverage from 90% to 97% (+18 tests); the `{category, operational_domain}` output contract and all runtime behavior are unchanged. This is the "v2.0.2" hardening from the CLAUDE.md versioning roadmap — recorded here rather than tagged, so it rides the next release like the evals-CI gate above.
 
 ### Changed
 - **Prompt refinement: technology-vs-operations + the `land` domain default** (`SYSTEM_PROMPT`) — the per-cell gold confusion breakdown showed the clustered misses were `technology`→`operations` (a new system tested/demoed in an operational setting, read as `operations`) and over-assignment to `land`. Two targeted rubric clauses fixed both, **measured on the gold set**: category **90.7% → 94.4%**, domain **90.7% → 92.6%** (`technology` recall to 1.000), nothing regressed. The #78 confusion tool (`src/eval_confusion.py`) is what surfaced the clusters; ADR-011 re-aimed the v2.2.0 tiered-routing target at this pair as a result. Output contract untouched.
 
 ### Removed
-- **BM25 retrieval grounding, retired** ([ADR-012](decisions/012-retire-bm25-grounding.md)) — once the prompt improved, a **fair same-prompt re-measure** (the earlier grounding "lift" had been scored against a stale, pre-prompt baseline) showed BM25 grounding no longer pays: neutral on category, a domain regression — **0 domain calls fixed and 4 broken across a 3-pass confirm**. It was removed from the shipped path and the CI gate (which now scores only the ungrounded classifier), and `[rag]` was dropped from `thresholds.toml`. The grounding code, corpus, and measurement scripts stay in the repo dormant and reproducible. Supersedes [ADR-010](decisions/010-rag-path-model-pin.md)'s 4.6 pin. `src/api.py` never grounded, so the live service and kb-agent are unaffected.
+- **BM25 retrieval grounding, retired** ([ADR-012](decisions/archive/012-retire-bm25-grounding.md)) — once the prompt improved, a **fair same-prompt re-measure** (the earlier grounding "lift" had been scored against a stale, pre-prompt baseline) showed BM25 grounding no longer pays: neutral on category, a domain regression — **0 domain calls fixed and 4 broken across a 3-pass confirm**. It was removed from the shipped path and the CI gate (which now scores only the ungrounded classifier), and `[rag]` was dropped from `thresholds.toml`. The grounding code, corpus, and measurement scripts stay in the repo dormant and reproducible. Supersedes [ADR-010](decisions/archive/010-rag-path-model-pin.md)'s 4.6 pin. `src/api.py` never grounded, so the live service and kb-agent are unaffected.
 
 ### Changed (earlier in this release, since superseded)
 - **Eval snapshot refreshed post-rubric** — `evals/gold_predictions.csv`, `gold_rag_predictions.csv`,

@@ -1,17 +1,17 @@
 # Feature Spec — Classical ML Baseline Bake-Off
 
 **Version:** 1.0
-**Status:** Executed 2026-07-25 — verdict in [ADR-017](../../decisions/017-classical-baseline-bakeoff.md) (the "next free ADR is 016" note in §6 was stale; 016 went to the PR-review lane)
+**Status:** Executed 2026-07-25 — verdict in [ADR-017](../../decisions/archive/017-classical-baseline-bakeoff.md) (the "next free ADR is 016" note in §6 was stale; 016 went to the PR-review lane)
 **Author:** San Lee
 **Last updated:** 2026-07-19
 **Roadmap fit:** new **MINOR** (additive measurement harness; the `{category, operational_domain, region}` output contract is untouched, and nothing is swapped into the shipped classifier).
-**Related:** [ADR-004](../../decisions/004-no-ml-framework-for-eval.md) (no ML framework — this spec proposes a bounded exception) · [ADR-012](../../decisions/012-retire-bm25-grounding.md) and [ADR-013](../../decisions/013-decline-tiered-routing.md) (the two prior measure-before-escalate verdicts) · [autonomy-ladder](autonomy-ladder.md) (this is the substrate for rung 2)
+**Related:** [ADR-004](../../decisions/004-no-ml-framework-for-eval.md) (no ML framework — this spec proposes a bounded exception) · [ADR-012](../../decisions/archive/012-retire-bm25-grounding.md) and [ADR-013](../../decisions/archive/013-decline-tiered-routing.md) (the two prior measure-before-escalate verdicts) · [autonomy-ladder](autonomy-ladder.md) (this is the substrate for rung 2)
 
 ---
 
 ## 1. Problem Statement
 
-This repo's thesis is **measure before you spend**. It has earned that three times: BM25 grounding measured and retired ([ADR-012](../../decisions/012-retire-bm25-grounding.md)), tiered routing measured and declined ([ADR-013](../../decisions/013-decline-tiered-routing.md)), and judge-tier escalation measured and declined in the sibling faithfulness-judge repo.
+This repo's thesis is **measure before you spend**. It has earned that three times: BM25 grounding measured and retired ([ADR-012](../../decisions/archive/012-retire-bm25-grounding.md)), tiered routing measured and declined ([ADR-013](../../decisions/archive/013-decline-tiered-routing.md)), and judge-tier escalation measured and declined in the sibling faithfulness-judge repo.
 
 Every one of those measures a spend *layered on top of* an LLM. **The LLM itself has never been baselined.** Nobody has asked what TF-IDF plus logistic regression scores on this task for zero dollars and single-digit milliseconds.
 
@@ -62,7 +62,7 @@ Three things that will bite whoever builds this:
 
 1. **`scale_set.csv` has no labels in it.** Columns are `id,dvids_id,source_url,text`. The labels live in `evals/scale_predictions.csv` (`id,pred_category,pred_operational_domain,judge_category,judge_operational_domain`). **Train against `judge_*`, never `pred_*`** — `pred_*` is the workhorse LLM's own output, and training on it would make the baseline a distillation of the model it is supposed to be an alternative to. That is the single most likely way to silently invalidate this experiment.
 
-2. **There is no region label in the training data.** The v2.1.0 scaled eval covered category and domain only, so the baseline covers **two axes, not three**, and the writeup must say so rather than quietly omitting region. (v3.2.0's scaled region eval — [ADR-022](../../decisions/022-scaled-region-eval-verdict.md) — has since produced judge region labels, but in its own `evals/scale_predictions_v3.csv`. This bake-off is a frozen record and stays pinned to the v2 snapshot it was measured on; extending it to three axes would be a new run, not an edit.)
+2. **There is no region label in the training data.** The v2.1.0 scaled eval covered category and domain only, so the baseline covers **two axes, not three**, and the writeup must say so rather than quietly omitting region. (v3.2.0's scaled region eval — [ADR-022](../../decisions/archive/022-scaled-region-eval-verdict.md) — has since produced judge region labels, but in its own `evals/scale_predictions_v3.csv`. This bake-off is a frozen record and stays pinned to the v2 snapshot it was measured on; extending it to three axes would be a new run, not an edit.)
 
 3. **The train labels are judge-generated, not human.** This is the disclosed cost of the data decision (the alternative was training on synthetic text, which introduces a synthetic-to-real transfer confound instead). Consequence to state plainly in the ADR and README: **the baseline is learning to imitate the Opus judge**, so it inherits that judge's ~5–6% disagreement-with-human ceiling. It is then tested against *human* labels, which is the honest direction for that asymmetry to run — the baseline is handicapped relative to the LLM, not flattered.
 

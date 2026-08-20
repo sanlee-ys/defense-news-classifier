@@ -40,7 +40,7 @@ The response fields are:
 Current gold is **v3.2.1**, n=54, human answer key
 ([`evals/gold_eval_v3.txt`](evals/gold_eval_v3.txt)).
 v3.2.1 adopted a one-bullet `global`-boundary clause
-([ADR-024](decisions/024-global-boundary-clause-adopted.md)).
+([ADR-024](decisions/archive/024-global-boundary-clause-adopted.md)).
 
 <!-- BEGIN GENERATED: gold-metrics (scripts/gen_readme_metrics.py) -->
 
@@ -74,7 +74,7 @@ v2 used real public-domain text.
 |---|---|---|
 | **Data** | 300 synthetic snippets the model wrote | 54 real public-domain snippets (DoD news wire + SEC filings) |
 | **Answer key** | the same model that classifies (circular) | hand-labeled by a human, cross-checked by an Opus judge |
-| **Retrieval** | none | BM25 over a 62-doc corpus, tried and cited — then measured and **retired** ([ADR-012](decisions/012-retire-bm25-grounding.md)) |
+| **Retrieval** | none | BM25 over a 62-doc corpus, tried and cited — then measured and **retired** ([ADR-012](decisions/archive/012-retire-bm25-grounding.md)) |
 | **Honest read** | in-distribution *consistency* | real-world *accuracy* |
 
 ### Classical baseline
@@ -85,7 +85,7 @@ The LLM column is the bake-off snapshot (92.6% / 92.6%).
 It does not track the headline table (v3.2.1: 94.4% / 98.1%).
 This table has no `metric:` markers.
 A marker would pull today's artifact into a historical comparison
-([ADR-017](decisions/017-classical-baseline-bakeoff.md),
+([ADR-017](decisions/archive/017-classical-baseline-bakeoff.md),
 [`evals/baseline_eval.txt`](evals/baseline_eval.txt)).
 
 | Axis | Classical baseline | LLM (bake-off snapshot) | McNemar (paired, exact) |
@@ -95,11 +95,11 @@ A marker would pull today's artifact into a historical comparison
 
 ### Measured work
 
-- **BM25 grounding** stopped beating the ungrounded classifier. It was retired ([ADR-012](decisions/012-retire-bm25-grounding.md), [`evals/gold_rag_eval.txt`](evals/gold_rag_eval.txt)).
-- **Tiered routing** moved +0 rows on both axes at ~1.97x cost. It was declined ([ADR-013](decisions/013-decline-tiered-routing.md), [`evals/route_eval.txt`](evals/route_eval.txt)).
-- **kNN exemplars** scored category 91.0% vs 90.0% on the n=300 scale eval (McNemar p=0.70). They were declined ([ADR-019](decisions/019-knn-exemplar-fewshot.md), [`evals/exemplar_eval.txt`](evals/exemplar_eval.txt)).
-- **L4 multi-agent review** fixed 6 of 7 region misses. It then harmed domain (91.3% → 86.7%, n=300, McNemar p=0.016) at ~4× calls. It was declined ([ADR-020](decisions/020-l4-multi-agent-pipeline.md), [`evals/l4_eval.txt`](evals/l4_eval.txt)).
-- **The `global`-boundary clause** shipped in v3.2.1 after a pre-registered re-run at n=595 (McNemar p=0.0002) ([ADR-024](decisions/024-global-boundary-clause-adopted.md), [`evals/region_clause_rerun.txt`](evals/region_clause_rerun.txt)).
+- **BM25 grounding** stopped beating the ungrounded classifier. It was retired ([ADR-012](decisions/archive/012-retire-bm25-grounding.md), [`evals/gold_rag_eval.txt`](evals/gold_rag_eval.txt)).
+- **Tiered routing** moved +0 rows on both axes at ~1.97x cost. It was declined ([ADR-013](decisions/archive/013-decline-tiered-routing.md), [`evals/route_eval.txt`](evals/route_eval.txt)).
+- **kNN exemplars** scored category 91.0% vs 90.0% on the n=300 scale eval (McNemar p=0.70). They were declined ([ADR-019](decisions/archive/019-knn-exemplar-fewshot.md), [`evals/exemplar_eval.txt`](evals/exemplar_eval.txt)).
+- **L4 multi-agent review** fixed 6 of 7 region misses. It then harmed domain (91.3% → 86.7%, n=300, McNemar p=0.016) at ~4× calls. It was declined ([ADR-020](decisions/archive/020-l4-multi-agent-pipeline.md), [`evals/l4_eval.txt`](evals/l4_eval.txt)).
+- **The `global`-boundary clause** shipped in v3.2.1 after a pre-registered re-run at n=595 (McNemar p=0.0002) ([ADR-024](decisions/archive/024-global-boundary-clause-adopted.md), [`evals/region_clause_rerun.txt`](evals/region_clause_rerun.txt)).
 
 ## Gold set
 
@@ -111,7 +111,7 @@ It also validates an Opus judge against the same labels.
 Confusion matrices live in [`evals/gold_confusion_v3.md`](evals/gold_confusion_v3.md).
 
 A scaled judge-graded region eval at n=300 is a frozen dated figure
-([ADR-022](decisions/022-scaled-region-eval-verdict.md),
+([ADR-022](decisions/archive/022-scaled-region-eval-verdict.md),
 [`evals/scale_eval_v3.txt`](evals/scale_eval_v3.txt)).
 
 ## Run

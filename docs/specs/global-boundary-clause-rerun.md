@@ -2,7 +2,7 @@
 
 **Version:** 1.2
 **Status:** **COMPLETE — all steps run, all four rules PASSED, clause ADOPTED as
-`v3.2.1` on 2026-08-03 ([ADR-024](../../decisions/024-global-boundary-clause-adopted.md)).**
+`v3.2.1` on 2026-08-03 ([ADR-024](../../decisions/archive/024-global-boundary-clause-adopted.md)).**
 §6 was written before any number existed and is **unchanged since** — including through
 the verdict; that is what makes it a pre-registration rather than a summary. See
 *Run status* below.
@@ -12,13 +12,13 @@ the verdict; that is what makes it a pre-registration rather than a summary. See
 (`v3.2.1`) — a fix, no new capability, the `{category, operational_domain, region}`
 contract untouched. A negative result ships an ADR and no version at all. Identical to
 the ADR-023 round, deliberately.
-**Related:** [ADR-023](../../decisions/023-global-boundary-clause-verdict.md) (the
+**Related:** [ADR-023](../../decisions/archive/023-global-boundary-clause-verdict.md) (the
 verdict this follows from, and the condition it named) ·
 [the first pre-registration](global-boundary-clause.md) (§1–§11 of which are the
 evidence base this reuses; §12 is the result being re-tested) ·
-[ADR-022](../../decisions/022-scaled-region-eval-verdict.md) (the n=300 ruler) ·
+[ADR-022](../../decisions/archive/022-scaled-region-eval-verdict.md) (the n=300 ruler) ·
 [ADR-014](../../decisions/014-region-field-design.md) (the ratified region conventions
-the clause restates) · [ADR-020](../../decisions/020-l4-multi-agent-pipeline.md) (the
+the clause restates) · [ADR-020](../../decisions/archive/020-l4-multi-agent-pipeline.md) (the
 declined critic — the overcorrection cautionary tale) ·
 [ADR-015](../../decisions/015-public-domain-data-sourcing.md) (why the extension may be
 collected from DVIDS at all) · [ADR-007](../../decisions/007-evals-as-ci-gate.md)
@@ -336,7 +336,7 @@ budget of 3. That is the number that would have stopped the release.
 **VERDICT: all four rules pass → SHIP.** The clause is adopted, `SYSTEM_PROMPT` moves
 `a59689e8…` → `b0202d06…`, and the version is `v3.2.1` (PATCH) exactly as §9 planned. The
 adoption record, including the §9 marker cascade, is
-[ADR-024](../../decisions/024-global-boundary-clause-adopted.md).
+[ADR-024](../../decisions/archive/024-global-boundary-clause-adopted.md).
 
 **The domain improvement is recorded, not banked** — §6.1's registration rule is
 unchanged and an unregistered gain still cannot contribute to shipping.

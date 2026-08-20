@@ -1,7 +1,7 @@
 name: claude-review
 
 # Agentic PR review via anthropics/claude-code-action. Full rationale in
-# decisions/016-claude-code-action-pr-review.md.
+# decisions/archive/016-claude-code-action-pr-review.md.
 #
 # This is an ADVISORY lane, not a gate: it posts review comments and never fails the
 # build. tests.yml and evals.yml are the gates; a model's opinion is not one, and a

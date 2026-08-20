@@ -28,7 +28,7 @@ from classify import classify
 from retrieve import Hit, Retriever
 
 # RAG-path model pin -- deliberately decoupled from classify.MODEL (the workhorse,
-# now claude-sonnet-5). See decisions/010-rag-path-model-pin.md.
+# now claude-sonnet-5). See decisions/archive/010-rag-path-model-pin.md.
 #
 # The workhorse migration to Sonnet 5 surfaced a real, reproduced regression on the
 # GROUNDED path only: ungrounded Sonnet-5 domain accuracy is already 94.4%, so BM25

@@ -1,34 +1,61 @@
-# Architecture Decision Log
+# Decision log
 
-Decisions are recorded here as they are made. Each ADR captures the context, the decision, and the consequences — including trade-offs accepted.
+This directory holds three kinds of record, and keeping them apart is the point.
+
+| Record | What it is | Where |
+|---|---|---|
+| **ADR** | A decision that governs how the code is built from now on. Few, stable, numbered. | This directory |
+| **Verdict** | An experiment result. Accumulates. Decides nothing by itself. | [`verdicts.md`](verdicts.md) |
+| **Current practice** | The rule as it stands today, synthesized from several superseded ADRs. | [`agent-practice.md`](agent-practice.md) |
+
+Between 2026-06-25 and 2026-08-11 all three went into the numbered ADR set, which reached 26
+entries of which only 11 decided anything still in force. The restructure on 2026-08-20 split
+them apart. **Nothing was deleted**: every superseded ADR keeps its full original text under
+[`archive/`](archive/), and the number map below says where each one went.
+
+## Live decisions
 
 | # | Title | Status |
 |---|-------|--------|
-| [001](001-llm-provider.md) | Use Anthropic API with claude-sonnet-4-6 | Accepted |
+| [001](001-llm-provider.md) | Use Anthropic API with claude-sonnet-4-6 | Accepted. **Title is stale**: the workhorse is `claude-sonnet-5` (see [ADR-010](archive/010-rag-path-model-pin.md) for the migration) |
 | [002](002-structured-output-via-tool-use.md) | Enforce structured output via tool use, not prompt engineering | Accepted |
-| [003](003-synthetic-data-only.md) | Use synthetic data only — no real news articles | Accepted |
-| [004](004-no-ml-framework-for-eval.md) | Implement eval metrics in plain Python — no ML framework | Accepted |
-| [005](005-agentic-prompt-optimization-loop.md) | Optimize the classifier prompt with an autonomous, error-driven agent, guarded by a 3-way split | Accepted |
+| [003](003-synthetic-data-only.md) | Use synthetic data only — no real news articles | Accepted; amended 2026-07-19 (scope narrowed) and 2026-08-20 (the balance claim corrected) |
+| [004](004-no-ml-framework-for-eval.md) | Implement eval metrics in plain Python — no ML framework | Accepted; amended 2026-07-19 |
 | [006](006-autonomy-ladder-portfolio-spine.md) | Make an autonomy ladder the portfolio spine, with the classifier as the single protagonist | Accepted |
 | [007](007-evals-as-ci-gate.md) | Wire the v2 gold-set evals into CI as a two-gate quality gate, split by API cost and fork-PR secret safety | Accepted |
 | [008](008-strict-structured-outputs.md) | Enforce enum validity server-side with `strict: true`, retire the client-side re-sample | Accepted |
 | [009](009-message-batches-for-bulk-runs.md) | Add a Message Batches API path for non-latency-sensitive bulk classification | Accepted |
-| [010](010-rag-path-model-pin.md) | Pin the RAG-grounded path to claude-sonnet-4-6 after the Sonnet-5 workhorse migration | Superseded by [012](012-retire-bm25-grounding.md) |
-| [011](011-reaim-tiered-routing-technology-operations.md) | Re-aim v2.2.0 tiered routing at technology-vs-operations, not industry-vs-procurement | Closed by [013](013-decline-tiered-routing.md) |
-| [012](012-retire-bm25-grounding.md) | Retire BM25 retrieval grounding — it no longer pays under the improved prompt | Accepted |
-| [013](013-decline-tiered-routing.md) | Decline tiered model routing — measured, it buys nothing at ~2x the cost | Accepted |
 | [014](014-region-field-design.md) | Region field design — six labels with a `global` catch-all, gold-first scope | Accepted |
 | [015](015-public-domain-data-sourcing.md) | All text is public-domain or synthetic — DVIDS + SEC + generated, never scraped or licensed | Accepted |
-| [016](016-claude-code-action-pr-review.md) | Agentic PR review as an advisory lane, not a gate — comments only, never fails the build; **on-demand via `@claude` only** since 2026-07-26 (Amendment 1) | Accepted |
-| [017](017-classical-baseline-bakeoff.md) | Classical ML baseline bake-off — TF-IDF+logreg measured; the LLM wins by 20+ points, the spend is justified with a number | Accepted |
-| [018](018-agent-driven-ml-loop.md) | Rung 2: agent-driven ML loop on the bake-off substrate — rung 1's A/B/C + done-signal architecture reused as shared code | Accepted |
-| [019](019-knn-exemplar-fewshot.md) | kNN-exemplar few-shot — measured and declined as a clean null (n=300 paired, p=0.70); completes the three-shape retrieval series | Accepted |
-| [020](020-l4-multi-agent-pipeline.md) | L4 built + measured: the backward edge fixed 6/7 of the named cluster, but the over-challenging critic did net harm (scale domain p=0.016) at 4× cost — declined as configured | Accepted |
-| [021](021-api-error-taxonomy-and-incomplete-responses.md) | One API error taxonomy (retry 429/5xx/**529**/timeouts, fail fast on auth/quota/billing) replacing five hand-rolled loops, plus a stop-reason assertion so a truncated response is never scored | Accepted |
-| [022](022-scaled-region-eval-verdict.md) | Scaled region eval measured (n=300): region 88.3% [84.2, 91.5], the CI narrows 18pts → 7pts, and the named `global` cluster is confirmed systematic (49% of region disagreements) — figures published as frozen dated prose, no CI floor | Accepted |
-| [023](023-global-boundary-clause-verdict.md) | The `global`-boundary prompt clause, measured against ADR-022's ruler and **reverted**: region 88.5% → 92.2% (12/17 named pulls fixed, 7 correct rows broken) at **McNemar p=0.0522** against a pre-registered p<0.05 — marginal reverts, because a pre-registration that binds only when convenient is not one. *Amended 2026-08-03 with a pointer to ADR-024; body unchanged* | Accepted |
-| [024](024-global-boundary-clause-adopted.md) | The same clause re-registered at adequate power and **adopted** (`v3.2.1`): effective n=595 at 0.837 power, region 89.9% → 94.1% at **McNemar p=0.0002**, guardrails clean, gold 87.0% → 94.4% — the first measure-first *adoption* after six declines, and the honest lesson is that ADR-023 was underpowered (~49%), not wrong | Accepted |
-| [026](026-ralph-loop-honest-ruler.md) | Ralph outer loop with an honest ruler — the agent reads split A, the acceptance gate is the hidden split B, split C decides nothing; all seven agent-ops ADR-016 rails live in the outer script, and the loop merges nothing | Accepted |
+| [021](021-api-error-taxonomy-and-incomplete-responses.md) | One API error taxonomy, plus a stop-reason assertion so a truncated response is never scored | Accepted |
+
+## Number map
+
+Every number ever issued, and where its record lives now.
+
+| # | Now |
+|---|---|
+| 001–004, 006–009, 014, 015, 021 | Live, above |
+| 005, 016, 018, 025, 026 | Superseded as the statement of the rule by [`agent-practice.md`](agent-practice.md). Full text in [`archive/`](archive/) |
+| 010, 011, 012, 013, 017, 019, 020, 022, 023, 024 | Indexed in [`verdicts.md`](verdicts.md). Full text in [`archive/`](archive/) |
+
+ADR-025 was absent from this index between 2026-08-11 and 2026-08-20. That is the kind of
+drift a 26-entry hand-maintained table produces, and it is part of why the set was split.
+
+## When to write which
+
+**Write a verdict row** when you measured something. That is the common case, and it is the
+default. Six of the ten experiments in this project declined the thing they measured, which is
+the house style working.
+
+**Write an ADR** only when the result changes how the code is built from now on. The ADR
+records that change and cites the verdict row for the evidence. If you cannot name what a
+future contributor would do differently because of it, it is a verdict, not an ADR.
+
+**Amend an existing record** rather than adding a new one when the subject already has an
+owner. A dated amendment inside the ADR that owns the topic is preferred over a new number.
+If a change makes a documented claim false, correct that claim in the same pull request:
+that is part of the change, not unrelated editing.
 
 ## Format
 
@@ -38,5 +65,6 @@ Each ADR follows this structure:
 - **Decision** — what was chosen
 - **Consequences** — what the decision enables, what it costs, what it forecloses
 - **Alternatives Considered** — what was ruled out and why
+- **Downstream surfaces** — the files a change to this decision would move
 
 Statuses: `Proposed` → `Accepted` → `Superseded` / `Deprecated`

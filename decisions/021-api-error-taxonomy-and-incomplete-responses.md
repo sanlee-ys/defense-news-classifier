@@ -5,7 +5,7 @@
 **Deciders:** San Lee
 
 **Related:** [ADR-008](008-strict-structured-outputs.md) (strict tool use — what this
-backstops) · [ADR-013](013-decline-tiered-routing.md) (cost is reported in relative
+backstops) · [ADR-013](archive/013-decline-tiered-routing.md) (cost is reported in relative
 workhorse-call units, not dollars) · [ADR-007](007-evals-as-ci-gate.md) (the gated floors
 this must not move) · pi agent harness
 ([`packages/ai/src/utils/retry.ts`](https://github.com/earendil-works/pi/blob/main/packages/ai/src/utils/retry.ts),

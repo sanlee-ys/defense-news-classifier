@@ -22,6 +22,13 @@ list may only shrink. New ADRs must comply. This mirrors the architecture
 repo's non-retroactivity stance -- fix the rule going forward rather than
 backfilling fifteen documents nobody is about to re-derive.
 
+SCANS THE ARCHIVE TOO. The 2026-08-20 restructure moved fifteen superseded
+ADRs into ``decisions/archive/``. An archived ADR is still an ADR: its number
+was issued and its text is unchanged, so it must stay visible to the ratchet.
+A top-level-only scan reported five grandfathered numbers as "no such ADR
+exists" and turned a file move into a lint failure, which is the linter
+losing track of the documents rather than a real problem with them.
+
 Usage:
     uv run python scripts/lint_decisions.py
 """
@@ -34,6 +41,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DECISIONS = REPO_ROOT / "decisions"
+ARCHIVE = DECISIONS / "archive"
 
 REQUIRED_SECTION = "## Downstream surfaces"
 
@@ -65,8 +73,20 @@ STATUS = re.compile(r"^\*\*Status:\*\*\s*(.+)$", re.MULTILINE)
 
 
 def adr_files() -> list[Path]:
-    """Every numbered ADR, sorted. Excludes README.md and templates."""
-    return sorted(p for p in DECISIONS.glob("[0-9][0-9][0-9]-*.md"))
+    """Every numbered ADR, live or archived, sorted by number.
+
+    Both directories are scanned. ``decisions/`` holds the ADRs still in
+    force; ``decisions/archive/`` holds the superseded ones, whose numbers
+    were still issued and whose text is unchanged.
+    """
+    found = list(DECISIONS.glob("[0-9][0-9][0-9]-*.md"))
+    found += list(ARCHIVE.glob("[0-9][0-9][0-9]-*.md"))
+    return sorted(found, key=lambda path: path.name)
+
+
+def adr_rel(path: Path) -> str:
+    """Repo-relative path, so a message points at the file that actually moved."""
+    return path.relative_to(REPO_ROOT).as_posix()
 
 
 def adr_id(path: Path) -> str:
@@ -81,7 +101,7 @@ def lint() -> list[str]:
 
     for path in adr_files():
         num = adr_id(path)
-        rel = f"decisions/{path.name}"
+        rel = adr_rel(path)
         text = path.read_text(encoding="utf-8")
 
         if num in seen:
@@ -115,7 +135,7 @@ def lint() -> list[str]:
             text = path.read_text(encoding="utf-8")
             if REQUIRED_SECTION in text:
                 problems.append(
-                    f"decisions/{path.name} has '{REQUIRED_SECTION}' but is still "
+                    f"{adr_rel(path)} has '{REQUIRED_SECTION}' but is still "
                     f"grandfathered in LEGACY_NO_DOWNSTREAM. Remove {num} from the "
                     f"list so the ratchet keeps its meaning."
                 )
@@ -135,9 +155,11 @@ def main() -> int:
 
     total = len(adr_files())
     grandfathered = len(LEGACY_NO_DOWNSTREAM)
+    archived = len(list(ARCHIVE.glob("[0-9][0-9][0-9]-*.md")))
     print(
-        f"OK - decisions clean. {total} ADRs, {grandfathered} grandfathered out of "
-        f"the '{REQUIRED_SECTION}' rule, {total - grandfathered} enforced."
+        f"OK - decisions clean. {total} ADRs ({total - archived} live, {archived} "
+        f"archived), {grandfathered} grandfathered out of the "
+        f"'{REQUIRED_SECTION}' rule, {total - grandfathered} enforced."
     )
     return 0
 

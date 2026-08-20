@@ -12,7 +12,7 @@ leaving the lane on-demand via `@claude` only (2026-07-26, *Amendment 1*)
 This repo already runs two CI lanes, both **deterministic gates**: `tests.yml` (lint, types,
 contract/metrics artifact freshness, ADR lint, coverage floor) and `evals.yml` (an offline
 capability gate on every PR, plus a paid live gate on dispatch/schedule per
-[ADR-007](007-evals-as-ci-gate.md)). Between them they answer "did this change break something
+[ADR-007](../007-evals-as-ci-gate.md)). Between them they answer "did this change break something
 we can measure."
 
 They cannot answer "is this change *good*" — whether a metric moved without its artifact being
@@ -45,7 +45,7 @@ Concretely, in `.github/workflows/claude-review.yml`:
 
 The prompt is aimed at this repo's actual failure modes rather than generic code review: metric
 drift without an artifact regen, hand-typed eval numbers, unpinned model IDs, ADRs missing
-downstream surfaces, non-public-domain text ([ADR-015](015-public-domain-data-sourcing.md)).
+downstream surfaces, non-public-domain text ([ADR-015](../015-public-domain-data-sourcing.md)).
 
 ## Consequences
 
@@ -149,7 +149,7 @@ Surfaces this decision touches, and their state as of 2026-07-24:
 | `.github/workflows/claude-review.yml` | **New.** The lane itself. Note it cannot review its own changes (see Consequences) — edits here need human review and post-merge `@claude` verification. |
 | `ANTHROPIC_API_KEY` repo secret | Already set (2026-07-11, for `evals.yml`'s live lane). Reused, not re-provisioned. |
 | The review prompt inside the workflow | **Maintained surface.** Names `src/classify.py`, `src/gold_eval.py`, `src/eval_gate.py`, `src/classify_rag.py`, `evals/metrics.json`, ADR-010, ADR-015, and the `## Downstream surfaces` rule. Update it when any of those move or retire. |
-| [ADR-007](007-evals-as-ci-gate.md) | Unchanged. That ADR governs the *gates*; this one adds a lane that deliberately is not one. |
+| [ADR-007](../007-evals-as-ci-gate.md) | Unchanged. That ADR governs the *gates*; this one adds a lane that deliberately is not one. |
 | [ADR-012](012-retire-bm25-grounding.md) | Referenced by the prompt so the reviewer does not flag the dormant grounding code's `claude-sonnet-4-6` pins (`src/classify_rag.py`'s `RAG_MODEL`, `src/generate.py`'s `MODEL`) as stale. [ADR-010](010-rag-path-model-pin.md), which originally set that pin, is superseded by 012 — the prompt cites the live authority, not the superseded one. If the dormant code is ever deleted, drop that prompt clause. |
 | `README.md` CI section | **Not updated here.** The README describes the two gates; this lane is advisory and does not change what CI enforces. Worth a line if the lane proves it earns one. |
 | `tests.yml`, `evals.yml` | Unchanged. No interaction — separate workflows, separate concurrency groups. |

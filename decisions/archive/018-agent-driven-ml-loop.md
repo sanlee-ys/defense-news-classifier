@@ -6,7 +6,7 @@
 
 **Related:** [ADR-005](005-agentic-prompt-optimization-loop.md) (rung 1's loop architecture,
 reused wholesale) · [ADR-017](017-classical-baseline-bakeoff.md) (the substrate) ·
-[autonomy-ladder](../docs/specs/autonomy-ladder.md) (this completes L3's build)
+[autonomy-ladder](../../docs/specs/autonomy-ladder.md) (this completes L3's build)
 
 ---
 

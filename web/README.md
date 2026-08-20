@@ -1,6 +1,6 @@
 # `web/` — the classical baseline, portable
 
-Two files that let the [ADR-017](../decisions/017-classical-baseline-bakeoff.md)
+Two files that let the [ADR-017](../decisions/archive/017-classical-baseline-bakeoff.md)
 classical baseline run in a browser tab with no server, no build step and no
 dependencies:
 

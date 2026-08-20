@@ -1,7 +1,7 @@
 """A/B the `global`-boundary prompt clause against the v3.2.0 n=300 ruler.
 
 VERDICT, AND WHAT THIS MODULE IS NOW. The clause was written, pre-registered, run, and
-**reverted** -- see `decisions/023-global-boundary-clause-verdict.md`. The region lift
+**reverted** -- see `decisions/archive/023-global-boundary-clause-verdict.md`. The region lift
 was real (88.5% -> 92.2%, 12 of 17 named pulls fixed) but landed at **McNemar
 p=0.0522** against a decision rule pre-registered at p<0.05, and that rule says a
 marginal result reverts. So `classify.SYSTEM_PROMPT` on `main` does NOT carry the

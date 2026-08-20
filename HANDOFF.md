@@ -43,8 +43,8 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   | L1 single call | shipped | the production path, still the measured optimum |
   | L2 augmented | built, retired | three retrieval shapes, three failures (below) |
   | L3 rung 1 (prompt loop) | shipped `v2.1.0` | works; the honesty architecture it established is now shared code |
-  | L3 rung 2 (ML loop) | built + run | **negative transfer, caught live** ([ADR-018](decisions/018-agent-driven-ml-loop.md)) |
-  | L4 multi-agent | built + measured | **hypothesis confirmed, pipeline declined** ([ADR-020](decisions/020-l4-multi-agent-pipeline.md)) |
+  | L3 rung 2 (ML loop) | built + run | **negative transfer, caught live** ([ADR-018](decisions/archive/018-agent-driven-ml-loop.md)) |
+  | L4 multi-agent | built + measured | **hypothesis confirmed, pipeline declined** ([ADR-020](decisions/archive/020-l4-multi-agent-pipeline.md)) |
 
 - **Rung 2 is the repo's Goodhart centerpiece, demonstrated rather than designed
   for.** First live run, six iterations, stopped on plateau: the best-by-B
@@ -60,15 +60,15 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   91.3 → 86.7, **p=0.016**, the first statistically significant harm any
   experiment here has produced, at ~4× calls per row. Restraint that lives only
   in a prompt did not hold.
-- **The LLM spend is finally priced** ([ADR-017](decisions/017-classical-baseline-bakeoff.md)).
+- **The LLM spend is finally priced** ([ADR-017](decisions/archive/017-classical-baseline-bakeoff.md)).
   TF-IDF + logistic regression on the 300 judge-graded snippets, scored once
   against human gold: category 72.2% vs the LLM's 92.6% (p=0.013), domain 66.7%
   vs 92.6% (p=0.0005). The foundational spend is justified with a number instead
   of an assumption.
 - **The retrieval question is closed in three shapes.** Neighbor documents
-  harmful ([ADR-012](decisions/012-retire-bm25-grounding.md)), mined keyword
-  features harmful off-distribution ([ADR-018](decisions/018-agent-driven-ml-loop.md)),
-  labeled exemplars inert ([ADR-019](decisions/019-knn-exemplar-fewshot.md):
+  harmful ([ADR-012](decisions/archive/012-retire-bm25-grounding.md)), mined keyword
+  features harmful off-distribution ([ADR-018](decisions/archive/018-agent-driven-ml-loop.md)),
+  labeled exemplars inert ([ADR-019](decisions/archive/019-knn-exemplar-fewshot.md):
   91.0% vs 90.0%, p=0.70). **Do not propose retrieval augmentation again** absent
   a materially bigger human-labeled ruler.
 - **The shipped classifier is unchanged through all of it** — single model,
@@ -175,7 +175,7 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   it, a base-image bump could go fully green without the shipped artifact ever
   being built. The PR deliberately broke the image on a second commit to prove the
   job goes red, then reverted. #144 and #150 walked the advisory review lane back
-  to on-demand ([ADR-016](decisions/016-claude-code-action-pr-review.md) Amendment
+  to on-demand ([ADR-016](decisions/archive/016-claude-code-action-pr-review.md) Amendment
   1): #144 dropped the automatic `pull_request: [opened]` pass, and #150 fixed the
   gap that made the remaining gate a fiction — supplying a `prompt:` puts the
   action in **agent mode**, which bypasses `@claude` mention checking entirely, so
@@ -199,7 +199,7 @@ file is a point-in-time snapshot and goes stale the moment work lands._
    domain 89.3%. The CI narrows from 18 points at n=54 to 7. Verdict and both
    design forks (published as frozen dated prose per the bake-off precedent; **no
    `thresholds.toml` floor** — one run has no run-to-run noise under it) are in
-   [ADR-022](decisions/022-scaled-region-eval-verdict.md); report in
+   [ADR-022](decisions/archive/022-scaled-region-eval-verdict.md); report in
    `evals/scale_eval_v3.txt`. The `[Unreleased]` CHANGELOG gap flagged in State
    was closed in the same release. **What is left is owner-only: the tag and the
    GitHub release** (below).
@@ -216,7 +216,7 @@ file is a point-in-time snapshot and goes stale the moment work lands._
    against 3 broken, every `thresholds.toml` floor clear. The rule's own text
    calls a marginal result a revert; San ruled 2026-08-02 to honor it. Verdict,
    rationale and both arms' tables:
-   [ADR-023](decisions/023-global-boundary-clause-verdict.md). At that point the
+   [ADR-023](decisions/archive/023-global-boundary-clause-verdict.md). At that point the
    shipped classifier was unchanged (`SYSTEM_PROMPT` still `a59689e8…`), so nothing
    published moved. **This was reopened deliberately on 2026-08-02 — see job 3 —
    and job 3 then closed it the other way.**
@@ -231,7 +231,7 @@ file is a point-in-time snapshot and goes stale the moment work lands._
    shipped as **`v3.2.1`**, with a full paid gold re-run, all eight floors passing
    as written, and the marker cascade executed across architecture, portfolio,
    learning-notes and kb-agent.
-   [ADR-024](decisions/024-global-boundary-clause-adopted.md).
+   [ADR-024](decisions/archive/024-global-boundary-clause-adopted.md).
 
    **Do not read this as "the revert was a mistake."** ADR-023's verdict was right
    on its date and under its design; what was wrong was the design, at ~49% power.
@@ -240,7 +240,7 @@ file is a point-in-time snapshot and goes stale the moment work lands._
    same 295 rows to break a tie — that is still the p-hacking the rule forbids.
 3. ~~**The higher-power re-run.**~~ **DONE — run 2026-08-02/03, clause ADOPTED as
    `v3.2.1`.** All four rules passed at effective n=595; see job 2 for the numbers
-   and [ADR-024](decisions/024-global-boundary-clause-adopted.md) for the verdict.
+   and [ADR-024](decisions/archive/024-global-boundary-clause-adopted.md) for the verdict.
    Reports: `evals/region_clause_rerun.txt` (scale) and
    `evals/region_clause_gold_rerun.txt` (the rule-3 gold arm, 54 workhorse calls,
    zero judge calls). **The harness is now dormant and refuses every run and report
@@ -283,7 +283,7 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 
 5. **The first LIVE outer-loop run (added 2026-08-19; owner-driven by the
    standing caution below).** The Ralph outer loop shipped 2026-08-11
-   ([ADR-026](decisions/026-ralph-loop-honest-ruler.md)) with a smoke test only —
+   ([ADR-026](decisions/archive/026-ralph-loop-honest-ruler.md)) with a smoke test only —
    no live optimization run exists and `src/classify.py` is unchanged. The
    research input for reviewing its output is
    `desk/research/2026-08-19-prompt-optimizer-landscape.md` (private desk repo):

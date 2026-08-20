@@ -4,10 +4,10 @@
 **Date:** 2026-07-25
 **Deciders:** San Lee
 
-**Related:** [ADR-004](004-no-ml-framework-for-eval.md) (amended scope: sklearn may model,
+**Related:** [ADR-004](../004-no-ml-framework-for-eval.md) (amended scope: sklearn may model,
 it may not measure) · [ADR-012](012-retire-bm25-grounding.md) / [ADR-013](013-decline-tiered-routing.md)
-(the prior measure-before-escalate verdicts) · [spec](../docs/specs/ml-baseline-bakeoff.md) ·
-[autonomy-ladder](../docs/specs/autonomy-ladder.md) (this harness is rung 2's substrate)
+(the prior measure-before-escalate verdicts) · [spec](../../docs/specs/ml-baseline-bakeoff.md) ·
+[autonomy-ladder](../../docs/specs/autonomy-ladder.md) (this harness is rung 2's substrate)
 
 ---
 
