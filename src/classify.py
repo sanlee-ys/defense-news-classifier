@@ -91,10 +91,13 @@ story -- label it procurement, even when the winning company is named in the hea
 industry only when the story is the company's own business (earnings, mergers and \
 acquisitions, stock moves, workforce or corporate strategy) with no government purchase at \
 its center.
-- procurement vs technology: a contract to buy, develop, or field a system is procurement; \
-the system itself -- its capabilities, tests, demonstrations, R&D milestones -- is \
-technology. If the money event is the story, choose procurement; if the machine is the \
-story, choose technology.
+- procurement vs technology: a contract to buy or field an existing system is procurement. \
+A contract to develop a new system is technology when the snippet goes on to describe that \
+system's capabilities -- what it does, how it works, what it replaces -- rather than staying \
+on the award itself; it stays procurement only when the snippet stays on the contract's own \
+terms (value, timeline, awarding authority) with no technical description of the system being \
+developed. If the money event is the story, choose procurement; if the machine is the story, \
+choose technology.
 - policy is the rule, not the doing: label policy only when the story is about a policy, \
 strategy, treaty, piece of legislation, doctrine, or formal rule ITSELF (its creation, \
 change, review, or articulation). A unit or official implementing, exercising, or merely \
