@@ -40,40 +40,65 @@ which is exactly the failure ADR-026's amendment found by hand. It is the gate t
 first, so a human's attention goes to a smaller, correctly-triaged set of runs.
 
 `scripts/morning_review.py` reads a run's JSONL log
-(`evals/loop/run_<UTC>.jsonl`) plus the loop worktree's git state and returns one of
-four verdicts, in this priority order, so a run can only ever satisfy one class:
+(`evals/loop/run_<UTC>.jsonl`) plus the loop worktree's git state and evaluates four
+checks in this strict priority order, each returning immediately -- a precedence
+partition, not a claim that the underlying conditions never overlap (a scope violation
+on a run that also never improved B satisfies both DRIFTED's and STUCK's condition; the
+first check to match is simply the one that returns):
 
-1. **DRIFTED** -- the log is structurally malformed (a missing baseline, a
-   non-contiguous iteration sequence, an unparseable line); or the worktree touched a
-   file outside `loop/blast-radius.txt` (re-checked independently of the loop's own
-   rail-8 revert, not trusted from it); or a claimed stopping signal does not match the
-   ledger's own evidence (`loop/state/stuck.json` claiming three identical failures the
-   log's tail does not show, or both a stuck halt and a `LOOP-COMPLETE:` sigil claimed
-   at once).
-2. **STUCK** -- no accepted iteration ever beat the baseline B score (every iteration
-   rejected, or none moved the bar).
-3. **SHIPPED** -- B improved over baseline, the run ended on a real stopping signal
-   (the agent's own `LOOP-COMPLETE:`, or the loop's stuck-halt firing *after* real
-   improvement already landed), and C did not fall more than the tolerance below.
-4. **PARTIAL** -- B improved, but either the run only ended because it hit
-   `-MaxIterations`/`-BudgetUsd`/`-MaxMinutes` rather than a real signal, or C fell past
-   tolerance while B rose (the Goodhart pattern ADR-026's amendment already named:
-   `A and B moved 0.13 while C moved 0.000`).
+1. **DRIFTED** -- the log is structurally malformed (a missing or misplaced baseline, a
+   non-contiguous iteration sequence, an unrecognized `kind` or `verdict`, a `macro_f1`
+   outside `[0, 1]`, an unparseable line); or the worktree touched a file outside the
+   blast radius **as declared at the run's own base commit** (never at HEAD -- reading
+   the declaration from HEAD would let a run that edits
+   `loop/blast-radius.txt` to cover its own tracks certify itself); or a claimed
+   stopping signal does not match the ledger's own evidence (`loop/state/stuck.json`
+   claiming three identical failures the log's tail does not show, or both a stuck halt
+   and a `LOOP-COMPLETE:` sigil claimed at once).
+2. **STUCK** -- no accepted iteration ever improved B past the measured noise floor
+   (every iteration rejected, or the only "gain" is smaller than run-to-run noise).
+3. **SHIPPED** -- B improved past the noise floor, the run ended on a real stopping
+   signal (the agent's own `LOOP-COMPLETE:`, or the loop's stuck-halt firing *after*
+   real improvement already landed), C did not fall past tolerance, **and C did not sit
+   flat inside the noise floor despite the B gain** -- the exact pattern ADR-026's
+   amendment found by hand (B +0.131, C +0.000) and named a defect signature, not a
+   success.
+4. **PARTIAL** -- B improved, but any of: the run only ended because it hit
+   `-MaxIterations`/`-BudgetUsd`/`-MaxMinutes` rather than a real signal; C fell past
+   tolerance; or C stayed flat while B moved (unconfirmed, not disqualifying -- a
+   diagnostic flag, never a gate, matching ADR-026's own proposed "alarm, not a vote").
 
 Exit code encodes the verdict for a wrapper to gate on: 0 SHIPPED, 1 PARTIAL, 2 STUCK, 3
 DRIFTED.
 
-### Design call: the C tolerance is the repo's own noise floor, not a new number
+### Design call: the noise floor is the repo's own measured figure, applied to both sides
 
-The Goodhart check (SHIPPED/PARTIAL step 4) needs a line between "C moved" and "C
-wobbled." Rather than invent one, `DEFAULT_C_TOLERANCE = 0.004` reuses the figure this
-repo already measured for exactly this question: `evals/stability.txt`'s 3-run
-stability pass puts `category_accuracy`'s run-to-run standard deviation at 0.0019 (0.19
-points), and the repo already treats 2x that (~0.4 points, 0.004 on the 0-1 scale) as
-the line between a real move and noise (CLAUDE.md's known-issue note cites the same
-figure). A C drop smaller than that is not evidence the loop touched a split it cannot
-see; a drop past it is. The flag is `--c-tolerance`, overridable if a future run's own
-noise floor is measured differently.
+A macro-F1 delta needs a line between "moved" and "wobbled" for two different
+questions: is a B "improvement" real, and is a C move (in either direction, including
+none) distinguishable from noise? Rather than invent a threshold, `NOISE_FLOOR = 0.0024`
+reuses the figure `evals/stability.txt` already measured for this exact metric family:
+a 3-run stability pass puts `category_macro_f1`'s run-to-run standard deviation at
+0.0012, and 2x that is the line the report itself draws between a real move and
+sampling noise. (An earlier draft of this constant cited `category_accuracy`'s
+std -- 0.0019, 2x ≈ 0.0038 -- a different metric on the same report; caught in review
+and corrected, since C and B are scored as macro-F1, not accuracy.) `DEFAULT_C_TOLERANCE`
+is the same constant: a C drop smaller than the noise floor is not evidence of anything,
+a drop past it is. Both are overridable via `--c-tolerance` if a future run's own noise
+floor is measured differently.
+
+### Design call: a flat C is an alarm, not a fall -- reusing ADR-026's own reading
+
+The tolerance above only catches C *falling*. It was pointed out in review that this
+missed ADR-026's actual, sharper finding: "a large A/B gain with a flat C is a defect
+signature, not a success" -- its one live run moved B by 0.131 and C by exactly 0.000,
+and a flat C reads as *healthy* under a fall-only tolerance. The fix adds a second,
+independent condition: when B clears the noise floor and `|c_delta|` sits inside it
+(C moved by an amount indistinguishable from nothing), that is flagged explicitly and
+the run cannot read as SHIPPED -- it is PARTIAL, with the reason spelled out. This is
+still a diagnostic, not a gate (ADR-026's "C should get an alarm, not a vote," restated
+in the Alternatives below): it changes what a human is told, never a commit the loop
+already made, and it does not fire when C **also** improves past the noise floor
+alongside B -- only when C sits still while B does not.
 
 ### Design call: "threshold or plateau" maps onto two concrete files, not a new signal
 
@@ -141,9 +166,11 @@ the repo does not have.
 - A completed run gets a verdict and an exit code before anyone reads
   `loop/state/log.md`. A wrapper can gate on the exit code (0-2 review, 3 investigate)
   without parsing prose.
-- The four verdicts are mutually exclusive by construction (checked in a fixed priority
-  order, one return per branch) -- this is asserted in
-  `tests/test_morning_review.py`, not merely intended.
+- The four verdicts are always exactly one per run, by evaluation order (checked in a
+  fixed priority, one return per branch) -- this is asserted in
+  `tests/test_morning_review.py`, not merely intended. This is a precedence
+  guarantee on the *output*, not a claim that the four checks' conditions partition the
+  input space -- see the priority list above.
 - The scorer adds no new runtime behavior to the loop and does not read or write
   `LOOP_LEDGER`, `loop/state/report_A.md`, or `loop/state/verdict.md`. It is a read-only
   consumer of files the loop already produces.
@@ -160,12 +187,30 @@ the repo does not have.
 - `loop/state/status.md`, `loop/state/stuck.json` -- read as the done-signal evidence.
   A change to `loop.ps1`'s stuck-detection shape (ADR-026's rail 4) or the `LOOP-COMPLETE:`
   sigil changes what `read_stop_signal` looks for.
-- `loop/blast-radius.txt` -- read for the scope check, parsed the same way
-  `loop.ps1`'s `Test-InBlastRadius` does. A change to that parsing (e.g. glob support)
-  must move both places or they will disagree about what is in bounds.
-- `evals/stability.txt` -- the source of `DEFAULT_C_TOLERANCE`. A re-measured noise
-  floor should update the constant and this ADR's cited figure together.
-- `tests/test_morning_review.py` -- pins the exit-code contract, the mutual-exclusivity
-  ordering, and the four verdicts plus a malformed-log case, all against synthetic
-  ledgers and a throwaway git fixture (no API spend, no dependency on a real loop run
-  existing on disk).
+- `loop/blast-radius.txt` -- read for the scope check **at the run's base commit**,
+  parsed the same way `loop.ps1`'s `Test-InBlastRadius` does. A change to that parsing
+  (e.g. glob support) must move both places or they will disagree about what is in
+  bounds.
+- `evals/stability.txt` -- the source of `NOISE_FLOOR` / `DEFAULT_C_TOLERANCE`
+  (`category_macro_f1`'s std, specifically -- not `category_accuracy`'s, a different row
+  in the same report). A re-measured noise floor should update the constant and this
+  ADR's cited figure together.
+- `tests/test_morning_review.py` -- pins the exit-code contract, the priority ordering,
+  the flat-C alarm, the base-commit blast-radius read, the noise-floor gate on "B
+  improved," and the four verdicts plus several malformed-log cases, all against
+  synthetic ledgers and a throwaway git fixture (no API spend, no dependency on a real
+  loop run existing on disk).
+
+## Review
+
+A read-only cross-model review (`codex exec`) of the diff against `main`, focused on
+whether SHIPPED correctly reuses ADR-026's B-gate/C-honesty semantics, whether a run can
+game the verdict, and whether the four classes are mutually exclusive, found four `P1`
+issues and two `P2` issues, all confirmed against this repo's own files and fixed before
+merge: the flat-C alarm was missing (SHIPPED could fire on the exact ADR-026 defect
+pattern); the noise-floor constant was computed from the wrong row of
+`evals/stability.txt`; the blast-radius declaration was read from HEAD rather than the
+run's base commit (self-authorizing); a rogue record `kind` was invisible to the
+contiguity check yet visible to the B-ratchet; and the "mutually exclusive" language
+overstated what a priority-ordered check guarantees. All five are reflected above and
+pinned by a named test in `tests/test_morning_review.py`.

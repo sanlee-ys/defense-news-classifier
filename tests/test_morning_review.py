@@ -76,9 +76,11 @@ def _accept_commit(worktree, path_within, content):
 
 
 def test_shipped_requires_a_real_stop_signal_and_b_improvement(tmp_path):
+    # C moves up too (not flat, not fallen) -- a genuine generalizing win,
+    # distinct from the ADR-026 pattern where B/A moved and C sat still.
     records = [
         _record("baseline", 0, "baseline", 0.70, 0.70, 0.90),
-        _record("iteration", 1, "accept", 0.80, 0.80, 0.90),
+        _record("iteration", 1, "accept", 0.80, 0.80, 0.93),
     ]
     log = _write_log(tmp_path, records)
     worktree = _make_worktree(tmp_path)
@@ -115,6 +117,31 @@ def test_partial_when_b_improves_but_the_run_ends_on_a_resource_cap(tmp_path):
     assert review.exit_code == 1
     assert review.done_signal == "budget_or_iteration_cap"
     assert review.b_improved
+
+
+def test_partial_when_c_stays_flat_despite_a_real_b_gain(tmp_path):
+    # The exact pattern ADR-026's amendment found by hand in the one live
+    # run this repo has produced: B +0.131, C +0.000. A flat C alongside a
+    # real B gain is the shared-defect signature, not a confirmed win, even
+    # with a clean done_signal -- so this must not be SHIPPED.
+    records = [
+        _record("baseline", 0, "baseline", 0.741, 0.748, 0.936),
+        _record("iteration", 1, "accept", 0.873, 0.879, 0.936),
+    ]
+    log = _write_log(tmp_path, records)
+    worktree = _make_worktree(tmp_path)
+    (worktree / "loop" / "state").mkdir(parents=True, exist_ok=True)
+    (worktree / "loop" / "state" / "status.md").write_text(
+        "LOOP-COMPLETE: iteration 1\n", encoding="utf-8"
+    )
+    _accept_commit(worktree, "src/classify.py", "PROMPT = 'v1'\n")
+
+    review = mr.review_run(log, worktree)
+
+    assert review.verdict == mr.PARTIAL
+    assert review.b_improved
+    assert not review.goodhart_ok
+    assert any("noise floor" in r for r in review.reasons)
 
 
 def test_partial_when_c_degrades_past_tolerance_despite_a_clean_signal(tmp_path):
@@ -154,6 +181,22 @@ def test_stuck_when_every_iteration_is_rejected(tmp_path):
 
     assert review.verdict == mr.STUCK
     assert review.exit_code == 2
+    assert not review.b_improved
+
+
+def test_stuck_when_the_only_b_gain_is_inside_the_noise_floor(tmp_path):
+    # 0.0005 is smaller than the measured noise floor (0.0024): a wiggle,
+    # not an improvement. Counting it as "improved" would let a run that
+    # did nothing real read as a candidate SHIPPED/PARTIAL win.
+    records = [
+        _record("baseline", 0, "baseline", 0.70, 0.700, 0.90),
+        _record("iteration", 1, "accept", 0.70, 0.7005, 0.90),
+    ]
+    log = _write_log(tmp_path, records)
+
+    review = mr.review_run(log, worktree=None)
+
+    assert review.verdict == mr.STUCK
     assert not review.b_improved
 
 
@@ -232,6 +275,73 @@ def test_drifted_on_a_scope_violation_outside_the_blast_radius(tmp_path):
     assert review.verdict == mr.DRIFTED
     assert review.scope.violation
     assert "src/optimize.py" in review.scope.detail
+
+
+def test_scope_check_reads_the_declaration_from_the_base_ref_not_head(tmp_path):
+    # A run that edits loop/blast-radius.txt to cover its own tracks must not
+    # be able to certify itself: the declaration is read from the pre-run
+    # commit, never from whatever HEAD says after the run.
+    records = [
+        _record("baseline", 0, "baseline", 0.70, 0.70, 0.90),
+        _record("iteration", 1, "accept", 0.80, 0.80, 0.90),
+    ]
+    log = _write_log(tmp_path, records)
+    worktree = _make_worktree(tmp_path)
+    _accept_commit(worktree, "src/optimize.py", "TOUCHED = True\n")
+    # Widen the declaration to cover BOTH the file just touched AND itself --
+    # under a check that reads the declaration from HEAD, this laundering
+    # commit would read as clean (the diff is exactly what the widened list
+    # now allows). Reading from the pre-run base_ref must still see the
+    # original, narrower declaration and flag both changes.
+    _accept_commit(
+        worktree,
+        "loop/blast-radius.txt",
+        "src/classify.py\nloop/state/\nsrc/optimize.py\nloop/blast-radius.txt\n",
+    )
+
+    review = mr.review_run(log, worktree)
+
+    assert review.verdict == mr.DRIFTED
+    assert review.scope.violation
+    assert "src/optimize.py" in review.scope.detail
+
+
+def test_drifted_on_an_unrecognized_record_kind(tmp_path):
+    # A rogue record with some other 'kind' is invisible to the contiguity
+    # check (which only tracks kind == "iteration"), but must not be able to
+    # slip a bogus high-B "accept" record past validation.
+    records = [
+        _record("baseline", 0, "baseline", 0.70, 0.70, 0.90),
+        _record("iteration", 1, "accept", 0.75, 0.75, 0.90),
+        {
+            "kind": "sidecar",
+            "iteration": 999,
+            "verdict": "accept",
+            "a": {"macro_f1": 0.99},
+            "b": {"macro_f1": 0.99},
+            "c": {"macro_f1": 0.99},
+            "tokens": 0,
+        },
+    ]
+    log = _write_log(tmp_path, records)
+
+    review = mr.review_run(log, worktree=None)
+
+    assert review.verdict == mr.DRIFTED
+    assert any("unrecognized 'kind'" in r for r in review.malformed)
+
+
+def test_drifted_on_a_macro_f1_score_outside_zero_one(tmp_path):
+    records = [
+        _record("baseline", 0, "baseline", 0.70, 0.70, 0.90),
+        _record("iteration", 1, "accept", 0.80, 1.50, 0.90),
+    ]
+    log = _write_log(tmp_path, records)
+
+    review = mr.review_run(log, worktree=None)
+
+    assert review.verdict == mr.DRIFTED
+    assert any("outside [0, 1]" in r for r in review.malformed)
 
 
 def test_drifted_when_a_stuck_halt_is_claimed_without_matching_evidence(tmp_path):

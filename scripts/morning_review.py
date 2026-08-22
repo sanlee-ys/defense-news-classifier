@@ -8,18 +8,25 @@ worktree's git state and classifies the run into one of four verdicts:
 
 - **SHIPPED** -- the run ended on a real stopping signal (the agent declared
   done, or the loop's own stuck-halt fired), the best accepted iteration beat
-  the baseline on the hidden B split, and the held-out C split did not fall
-  more than a small tolerance (the Goodhart check).
+  the baseline on the hidden B split past the measured noise floor, and the
+  held-out C split neither fell past tolerance nor sat suspiciously flat
+  despite the B gain (the Goodhart check -- ADR-026's amendment found exactly
+  that pattern to be a shared annotation defect, not a real win).
 - **PARTIAL** -- B improved, but either the run ended on a resource cap
-  (iterations, budget, or time) rather than a real stopping signal, or C fell
-  past tolerance.
-- **STUCK** -- no accepted iteration ever beat the baseline B score.
+  (iterations, budget, or time) rather than a real stopping signal, C fell
+  past tolerance, or C stayed flat while B moved (unconfirmed, not
+  disqualified: this is a diagnostic flag, never a gate).
+- **STUCK** -- no accepted iteration ever beat the baseline B score by more
+  than noise.
 - **DRIFTED** -- the run log is malformed, the worktree touched a file outside
-  ``loop/blast-radius.txt``, or a stopping signal is claimed without the
-  ledger evidence that would substantiate it.
+  ``loop/blast-radius.txt`` (checked against the pre-run declaration, not
+  whatever the run's own commits left it saying), or a stopping signal is
+  claimed without the ledger evidence that would substantiate it.
 
-The four checks run in that priority order and each returns exactly one
-verdict, so a run can never satisfy more than one class at once. Usage::
+The four checks are evaluated in that priority order and each returns
+immediately, so the *output* is always exactly one verdict -- see
+:func:`classify` for why that is a precedence partition, not a claim that
+the underlying conditions never overlap. Usage::
 
     uv run python scripts/morning_review.py evals/loop/run_20260820T011747Z.jsonl
     uv run python scripts/morning_review.py <run.jsonl> --worktree ../dnc-loop --json
@@ -43,14 +50,22 @@ DRIFTED = "DRIFTED"
 
 EXIT_CODES = {SHIPPED: 0, PARTIAL: 1, STUCK: 2, DRIFTED: 3}
 
-# The Goodhart tolerance for the held-out C split, in macro-F1 points.
+# The noise floor for a macro-F1 delta, and the Goodhart tolerance derived
+# from it.
 #
-# Reused, not invented: the repo's own stability report (evals/stability.txt,
-# cited in CLAUDE.md) measures a 3-run noise floor of category_accuracy std
-# 0.0019 (0.19 points) and treats 2x that (~0.4 points, 0.004 on the 0-1
-# scale) as the line between "moved" and "noise". A C drop smaller than that
-# is not evidence the loop spent the split it cannot see; a drop past it is.
-DEFAULT_C_TOLERANCE = 0.004
+# Reused, not invented: the repo's own stability report (evals/stability.txt)
+# measures a 3-run noise floor for THIS metric family -- category_macro_f1
+# std 0.0012 -- and the report itself treats 2x that as the line between "moved"
+# and "noise" (0.0024 here; not category_accuracy's 0.0019/0.0038, a different
+# metric the earlier draft of this constant mistakenly cited). Two things reuse
+# this floor:
+#   - A B "improvement" must clear it, or a noise-level wiggle would read as
+#     a real gain.
+#   - A C move smaller than it is indistinguishable from noise in either
+#     direction -- which matters for the Goodhart alarm below, not only for
+#     "C fell."
+NOISE_FLOOR = 0.0024
+DEFAULT_C_TOLERANCE = NOISE_FLOOR
 
 SIGIL = "LOOP-COMPLETE:"
 
@@ -114,11 +129,32 @@ def _malformed_reasons(records: list[dict]) -> list[str]:
     if not records:
         return ["empty log: no records"]
 
+    valid_kinds = {"baseline", "iteration"}
+    valid_verdicts = {"baseline", "accept", "reject"}
+
+    # A record with a kind neither "baseline" nor "iteration" is otherwise
+    # invisible to the contiguity check below, yet _best_by_b matches on
+    # verdict alone -- an unrecognized kind must be caught here, or a bogus
+    # extra record (verdict="accept", an inflated b) could win best-by-B
+    # without ever being counted as an iteration.
+    for record in records:
+        kind = record.get("kind")
+        if kind not in valid_kinds:
+            reasons.append(f"record has an unrecognized 'kind': {kind!r}")
+        verdict = record.get("verdict")
+        if verdict is not None and verdict not in valid_verdicts:
+            reasons.append(f"record has an unrecognized 'verdict': {verdict!r}")
+
     baselines = [r for r in records if r.get("kind") == "baseline"]
     if len(baselines) != 1:
         reasons.append(f"expected exactly one baseline record, found {len(baselines)}")
     elif records[0].get("kind") != "baseline":
         reasons.append("the baseline record is not first in the log")
+    elif baselines[0].get("iteration") != 0:
+        reasons.append(
+            f"the baseline record's iteration is "
+            f"{baselines[0].get('iteration')!r}, not 0"
+        )
 
     seen: list[int] = []
     for record in records:
@@ -140,10 +176,11 @@ def _malformed_reasons(records: list[dict]) -> list[str]:
                 reasons.append(f"{label}: missing '{key}'")
         for split in ("a", "b", "c"):
             value = record.get(split)
-            if not isinstance(value, dict) or not isinstance(
-                value.get("macro_f1"), (int, float)
-            ):
+            score = value.get("macro_f1") if isinstance(value, dict) else None
+            if not isinstance(score, (int, float)) or isinstance(score, bool):
                 reasons.append(f"{label}: missing numeric '{split}.macro_f1'")
+            elif not 0.0 <= score <= 1.0:
+                reasons.append(f"{label}: '{split}.macro_f1' {score} is outside [0, 1]")
         if record.get("verdict") == "reject" and "reject_gate" not in record:
             reasons.append(f"{label}: rejected with no 'reject_gate'")
 
@@ -313,19 +350,17 @@ def _run_git(worktree: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def _parse_blast_radius(path: Path) -> list[str]:
-    """Parse ``loop/blast-radius.txt`` the same way ``loop.ps1`` does.
+def _parse_blast_radius(text: str) -> list[str]:
+    """Parse ``loop/blast-radius.txt`` content the same way ``loop.ps1`` does.
 
     Args:
-        path: Path to the blast-radius file.
+        text: The file's content.
 
     Returns:
         The declared entries, comments and blank lines dropped.
     """
-    if not path.exists():
-        return []
     lines = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         entry = line.strip()
         if entry and not entry.startswith("#"):
             lines.append(entry)
@@ -362,6 +397,12 @@ def check_scope(worktree: Path | None, base_ref: str) -> ScopeCheck:
     second measurement, not a re-trust of the ledger) and the current working
     tree (uncommitted leftovers a halted run can leave behind).
 
+    The declaration itself is read from ``base_ref`` -- the pre-run commit --
+    never from the worktree's current state. Reading it from HEAD would let a
+    run that edited ``loop/blast-radius.txt`` (to add back whatever it
+    touched) certify itself: the boundary must be fixed before the run, not
+    derived from what the run did.
+
     Args:
         worktree: The loop's git worktree root, or ``None`` to skip the
             check (it is reported as unchecked, never as clean).
@@ -373,19 +414,27 @@ def check_scope(worktree: Path | None, base_ref: str) -> ScopeCheck:
     if worktree is None or not _run_git(worktree, "rev-parse", "--git-dir"):
         return ScopeCheck(checked=False, violation=False, detail="no worktree given")
 
-    blast = _parse_blast_radius(worktree / "loop" / "blast-radius.txt")
-    if not blast:
+    merge_base = _run_git(worktree, "merge-base", base_ref, "HEAD")
+    if not merge_base:
         return ScopeCheck(
-            checked=False, violation=False, detail="loop/blast-radius.txt not found"
+            checked=False,
+            violation=False,
+            detail=f"could not resolve base ref {base_ref!r}",
         )
 
-    merge_base = _run_git(worktree, "merge-base", base_ref, "HEAD")
-    outside: list[str] = []
-    if merge_base:
-        committed = _run_git(worktree, "diff", f"{merge_base}..HEAD", "--name-only")
-        outside += [
-            p for p in committed.splitlines() if p and not _in_blast_radius(p, blast)
-        ]
+    blast_text = _run_git(worktree, "show", f"{merge_base}:loop/blast-radius.txt")
+    blast = _parse_blast_radius(blast_text)
+    if not blast:
+        return ScopeCheck(
+            checked=False,
+            violation=False,
+            detail=f"loop/blast-radius.txt not found at {base_ref} ({merge_base[:8]})",
+        )
+
+    committed = _run_git(worktree, "diff", f"{merge_base}..HEAD", "--name-only")
+    outside: list[str] = [
+        p for p in committed.splitlines() if p and not _in_blast_radius(p, blast)
+    ]
 
     porcelain = _run_git(worktree, "status", "--porcelain")
     for line in porcelain.splitlines():
@@ -436,7 +485,8 @@ class Review:
         c_at_best: C macro-F1 at the best-by-B iteration.
         c_delta: ``c_at_best - c_baseline``.
         c_tolerance: The tolerance ``c_delta`` was checked against.
-        goodhart_ok: Whether ``c_delta`` stayed within tolerance.
+        goodhart_ok: Whether C neither fell past tolerance nor sat flat
+            despite a B gain (the shared-defect pattern).
         total_tokens: Tokens spent across every scored record.
         scope: The blast-radius check result.
         malformed: Structural defects found in the log, if any.
@@ -538,16 +588,23 @@ def classify(
 ) -> Review:
     """Apply the four-way rubric to a parsed run.
 
-    The checks run in this order, and each returns exactly one verdict, so
-    the four classes are mutually exclusive by construction:
+    The checks below are evaluated in this strict priority order and each
+    one returns immediately, so the *output* is always exactly one verdict --
+    this is a precedence partition, not a claim that the four classes'
+    underlying conditions never overlap (a scope violation and a stalled B
+    can both be true of the same run; DRIFTED is simply checked first):
 
     1. A malformed log, or a claimed stopping signal the ledger does not
        substantiate -> DRIFTED.
     2. A file touched outside the declared blast radius -> DRIFTED.
-    3. No accepted iteration beat the baseline B -> STUCK.
-    4. B improved: SHIPPED if the run ended on a real signal (threshold or
-       plateau) and C held within tolerance; PARTIAL otherwise (a resource
-       cap ended the run, or C fell past tolerance).
+    3. No accepted iteration improved B past the noise floor -> STUCK.
+    4. B improved: SHIPPED only if the run ended on a real signal (threshold
+       or plateau), C did not fall past tolerance, AND C did not stay flat
+       despite the B gain (ADR-026's amendment: "a large A/B gain with a flat
+       C is a defect signature, not a success" -- exactly what its one live
+       run produced). Anything short of all three is PARTIAL, never DRIFTED:
+       this is a diagnostic, not a gate, matching ADR-026's own "C should get
+       an alarm, not a vote."
 
     Args:
         iterations: The parsed run log.
@@ -591,9 +648,21 @@ def classify(
     signal_evidence = _check_done_signal_evidence(done_signal, iterations, worktree)
     signal_problems = signal_problems + signal_evidence
     best = _best_by_b(iterations)
-    b_improved = best.iteration != 0 and best.b > baseline.b
+    b_gain = best.b - baseline.b
+    # "Improved" must clear the measured noise floor (evals/stability.txt),
+    # not just be positive -- a 0.0005 wiggle is not a gain, it is the same
+    # run-to-run noise the stability report exists to name.
+    b_improved = best.iteration != 0 and b_gain > NOISE_FLOOR
     c_delta = best.c - baseline.c
-    goodhart_ok = c_delta >= -c_tolerance
+    c_fell_past_tolerance = c_delta < -c_tolerance
+    # The defect signature ADR-026's amendment found by hand: B clears the
+    # noise floor while C sits inside it (up, down, or dead flat -- the
+    # run that prompted this ADR moved C by exactly +0.000). C is not a
+    # gate here, only a flag: this never blocks a commit, it only keeps a
+    # run from reading as SHIPPED on the strength of a split that never
+    # actually moved.
+    c_flat_despite_b_gain = b_improved and abs(c_delta) <= NOISE_FLOOR
+    goodhart_ok = not c_fell_past_tolerance and not c_flat_despite_b_gain
 
     if signal_problems:
         return Review(
@@ -660,20 +729,27 @@ def classify(
     reasons = []
     if done_signal not in ("threshold", "plateau"):
         reasons.append(
-            f"B improved (+{best.b - baseline.b:.3f}) but the run ended on "
+            f"B improved (+{b_gain:.3f}) but the run ended on "
             f"'{done_signal}', not a clean stopping signal"
         )
-    if not goodhart_ok:
+    if c_fell_past_tolerance:
         reasons.append(
             f"C fell {-c_delta:.3f} past the {c_tolerance:.3f} tolerance "
             "(the loop improved a split it cannot see)"
         )
+    if c_flat_despite_b_gain:
+        reasons.append(
+            f"B gained +{b_gain:.3f} while C moved only {c_delta:+.3f} -- "
+            f"within the {NOISE_FLOOR:.4f} noise floor. ADR-026's amendment "
+            "found exactly this pattern to be a shared annotation defect, "
+            "not a generalizing improvement; treat as unconfirmed"
+        )
     verdict = SHIPPED if not reasons else PARTIAL
     if verdict == SHIPPED:
         reasons = [
-            f"B improved +{best.b - baseline.b:.3f} over baseline, C held "
-            f"({c_delta:+.3f} within {c_tolerance:.3f} tolerance), "
-            f"done_signal='{done_signal}'"
+            f"B improved +{b_gain:.3f} over baseline, C held "
+            f"({c_delta:+.3f}, outside the noise floor and within "
+            f"{c_tolerance:.3f} tolerance), done_signal='{done_signal}'"
         ]
 
     return Review(
@@ -750,8 +826,8 @@ def _print_human(review: Review) -> None:
         f"(B {review.b_best:.3f}, {review.b_best - review.b_baseline:+.3f} vs baseline)"
     )
     print(
-        f"C at best: {review.c_at_best:.3f} ({review.c_delta:+.3f}, "
-        f"tolerance {review.c_tolerance:.3f}) -> "
+        f"C at best: {review.c_at_best:.3f} ({review.c_delta:+.4f}, "
+        f"tolerance {review.c_tolerance:.4f}) -> "
         f"{'OK' if review.goodhart_ok else 'FAILED'}"
     )
     scope_state = (
