@@ -94,7 +94,10 @@ its center.
 - procurement vs technology: a contract to buy, develop, or field a system is procurement; \
 the system itself -- its capabilities, tests, demonstrations, R&D milestones -- is \
 technology. If the money event is the story, choose procurement; if the machine is the \
-story, choose technology.
+story, choose technology. A company unveiling, rolling out, or marketing a new system at a \
+launch or trade show is technology even when the story uses sales language such as \
+"marketed for export" -- procurement needs an actual buyer, award, or contract named in the \
+story, not just a system being offered or promoted for sale.
 - policy is the rule, not the doing: label policy only when the story is about a policy, \
 strategy, treaty, piece of legislation, doctrine, or formal rule ITSELF (its creation, \
 change, review, or articulation). A unit or official implementing, exercising, or merely \
@@ -110,7 +113,13 @@ Reserve operations for when the unit's activity itself (a deployment, a drill, a
 engagement) is the story, with no new system at its center.
 - industry vs technology: a company unveiling or developing a system is technology when the \
 capability is the point, industry when the business result (revenue, market position, a \
-merger) is the point.
+merger) is the point. A partnership, teaming agreement, joint venture, or MoU between two or \
+more parties is industry only when the news is the arrangement's formation -- the deal, the \
+teaming, the MoU signing itself -- even when the resulting system is described in technical \
+detail. When two or more parties are instead shown jointly demonstrating, testing, deploying, \
+or operating a system, label technology: the capability being proven is the story, not the \
+alliance that produced it. Label technology only when a single system's own capabilities, \
+performance, or unveiling -- not the deal that will produce it -- is the actual news.
 - budget boundary: debate over or passage of budget legislation is policy (the rule being \
 made); an executed award or program decision spending an existing budget is procurement.
 
