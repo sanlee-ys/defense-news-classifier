@@ -43,6 +43,17 @@ classifier is unchanged: `src/classify.py` carries the same `SYSTEM_PROMPT`, and
   ADR-024 adopted that clause on measured evidence, so a loop that optimizes `category` may
   not rewrite it. The loop therefore cannot improve `region` by construction, which ADR-026
   records as an accepted capability cost.
+- **A mechanical morning review for unattended loop runs, plus ground-truth reconcile
+  records in the ledger** ([ADR-027](decisions/027-morning-review-scorer.md),
+  `scripts/morning_review.py`, `loop/loop.ps1`). The scorer reads a completed run's ledger
+  and classifies the run SHIPPED / PARTIAL / STUCK / DRIFTED (exit codes 0-3) before a
+  human reads the agent's own summary. The flat-C-with-B-gain shape is a named defect
+  signature and downgrades a run to PARTIAL; it scored the first live run PARTIAL for
+  exactly that shape. Per the ADR-027 amendment, `loop/loop.ps1` also appends a
+  `reconcile` record after each iteration and at run end: a git ground-truth snapshot
+  taken by the sibling agent-ops `scripts/reconcile.py`, so the ledger carries evidence a
+  self-report cannot fake. A missing or failing reconcile appends `reconcile_unavailable`
+  and never stops a run. The scorer treats both record kinds as informational.
 - **An agent task lane: dispatch a scoped task, get back a draft PR**
   ([ADR-025](decisions/archive/025-agent-task-lane.md), `.github/workflows/agent-task.yml`). This is
   the proposing counterpart to ADR-016's advisory review lane, assembled per agent-ops
