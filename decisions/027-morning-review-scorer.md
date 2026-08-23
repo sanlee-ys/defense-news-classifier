@@ -269,9 +269,39 @@ way `dotfiles/claude/setup-windows.ps1` resolves it for the credential-guard fam
 one directory above this repo's root, then into `agent-ops`. This holds for the loop
 worktree too, because `loop/README.md`'s own setup command
 (`git worktree add ../dnc-loop -b loop/prompt-optimize`) places the worktree directly
-beside `agent-ops` under the code root.
+beside `agent-ops` under the code root. Before running anything from that path, the
+function also checks the directory is a git working copy whose origin remote looks
+like `agent-ops` -- lexical resolution alone would run whatever code sits in a
+directory that happens to have that name, wherever a worktree happens to be created.
+A directory with no `.git`, or a git repo whose origin does not match, is treated the
+same as a missing script: a `reconcile_unavailable` record, never a run.
 
 **Not a redline gate.** This amendment does not touch ADR-016's seven rails or this
 ADR's own four-way verdict. A reconcile snapshot cannot halt a run, cannot revert a
 commit, and cannot change SHIPPED to PARTIAL. It is read by a human at the same time
 as everything else in the ledger.
+
+**Review.** A read-only cross-model review (`codex exec`) of this diff against `main`
+found two issues, confirmed against this repo's own files and fixed before merge:
+
+- **A reconcile call had no wall-clock bound of its own.** The internal 30s timeout
+  inside `reconcile.py`'s own `git`/`gh` calls does not protect the caller if the
+  interpreter launch itself stalls, or if a subprocess `gh` spawns (a browser window
+  for an interactive auth prompt, say) survives past its parent's own timeout on
+  Windows. A feedback hook that can hang is a hook that can wedge the very run it was
+  added to observe, which is exactly what this amendment's "fail open, loudly" framing
+  had promised could not happen. Fixed: the call now runs inside a background job
+  (`Start-Job`), bounded by a new `-ReconcileTimeoutSeconds` parameter (default 45,
+  generous over the few seconds a real snapshot takes). A timed-out job is stopped and
+  reported as a `reconcile_unavailable` record, same as any other failure.
+- **The sibling-clone path resolution had no identity check.** Confirmed above.
+
+Fixing the first issue surfaced a second, unrelated bug the manual smoke test caught
+before either review pass: the background job's scriptblock originally declared its
+parameter as `$Args`, which collides with PowerShell's automatic `$args` variable and
+silently bound to an empty array instead of the argument list `-ArgumentList` passed.
+`python` then ran `reconcile.py` with no `--repo` at all, producing a syntactically
+valid but empty snapshot (`{"repos": []}`) -- a record that would have looked like
+success while carrying nothing. Renamed to `$PythonArgs`; the smoke test's Case 2
+(the real-repo success path) is what caught it, by asserting `snapshot.repos` is
+non-empty rather than only that the record's `kind` is `"reconcile"`.

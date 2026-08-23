@@ -71,7 +71,14 @@ param(
 
     # Keep the run local. Rail 6 is "never push to main", which this does not
     # weaken: the loop still commits to its own branch and merges nothing.
-    [switch]$NoPush
+    [switch]$NoPush,
+
+    # Wall-clock bound on ONE reconcile call (Invoke-Reconcile). A feedback
+    # hook that can hang is a hook that can wedge the run it was added to
+    # observe -- this is what keeps a stalled sibling script or a stuck `gh`
+    # auth prompt from doing that. Generous over the few seconds a real
+    # snapshot takes, per the manual smoke test.
+    [int]$ReconcileTimeoutSeconds = 45
 )
 
 $ErrorActionPreference = "Stop"
@@ -241,6 +248,17 @@ function Invoke-Reconcile {
         then into "agent-ops". That holds for both the main clone and a loop
         worktree, because `git worktree add ../dnc-loop ...` (loop/README.md)
         places the worktree directly beside agent-ops under the code root.
+        Before running anything from it, the sibling directory is checked to
+        actually be a git working copy whose origin remote looks like
+        agent-ops -- lexical path resolution alone would run whatever code
+        happens to sit in a directory named "agent-ops", wherever a
+        worktree happens to be created.
+
+        The reconcile call itself runs in a background job with a hard
+        wall-clock bound (-ReconcileTimeoutSeconds). A feedback hook that can
+        hang is a hook that can wedge the very run it was added to observe;
+        a timed-out call is reported the same way any other failure is, and
+        the loop moves on.
     #>
     param(
         [Parameter(Mandatory)][ValidateSet("post_iteration", "run_end")][string]$Phase,
@@ -269,16 +287,75 @@ function Invoke-Reconcile {
             return
         }
 
+        # Identity check before executing anything from $agentOpsRoot: the
+        # path above is lexical (parent-of-worktree/agent-ops), so confirm
+        # it is actually a git working copy whose origin looks like
+        # agent-ops, not merely a directory that happens to have that name.
+        if (-not (Test-Path (Join-Path $agentOpsRoot ".git"))) {
+            Write-ReconcileRecord ([ordered]@{
+                kind      = "reconcile_unavailable"
+                iteration = $Iteration
+                phase     = $Phase
+                timestamp = $timestamp
+                reason    = "$agentOpsRoot is not a git working copy -- refusing to run a script from it"
+            })
+            Write-Step "reconcile ($Phase, iteration $Iteration): unavailable -- $agentOpsRoot has no .git"
+            return
+        }
+        $remoteUrl = (& git -C $agentOpsRoot remote get-url origin 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $remoteUrl -notmatch "agent-ops") {
+            Write-ReconcileRecord ([ordered]@{
+                kind      = "reconcile_unavailable"
+                iteration = $Iteration
+                phase     = $Phase
+                timestamp = $timestamp
+                reason    = "$agentOpsRoot's origin remote ('$remoteUrl') does not look like agent-ops -- refusing to run a script from it"
+            })
+            Write-Step "reconcile ($Phase, iteration $Iteration): unavailable -- $agentOpsRoot origin does not match agent-ops"
+            return
+        }
+
         # The window only needs to cover this run; +10 min of slack over the
         # run's own wall-clock cap is generous without being unbounded.
         $sinceMinutes = $MaxMinutes + 10
-        $reconcileArgs = @("--repo", $RepoRoot, "--since", "${sinceMinutes}m")
+        $reconcileArgs = @($reconcileScript, "--repo", $RepoRoot, "--since", "${sinceMinutes}m")
 
         $stdout = $null
         $exit = $null
         try {
-            $stdout = & python $reconcileScript @reconcileArgs 2>$null
-            $exit = $LASTEXITCODE
+            # Run in a background job so a hang (a stalled `gh` auth prompt,
+            # a frozen interpreter launch) cannot wedge the loop: Wait-Job's
+            # timeout is the hard bound, enforced by this process, not by
+            # whatever reconcile.py or python does internally.
+            # The scriptblock param is deliberately NOT named $Args: that
+            # name collides with PowerShell's automatic $args variable and
+            # silently binds to an empty array instead of what -ArgumentList
+            # passed (caught live in the manual smoke test -- python then
+            # ran reconcile.py with no --repo at all).
+            $job = Start-Job -ScriptBlock {
+                param($PythonArgs)
+                $out = & python @PythonArgs 2>$null
+                [pscustomobject]@{ Output = $out; ExitCode = $LASTEXITCODE }
+            } -ArgumentList (, $reconcileArgs)
+
+            if (-not (Wait-Job -Job $job -Timeout $ReconcileTimeoutSeconds)) {
+                Stop-Job -Job $job -ErrorAction SilentlyContinue | Out-Null
+                Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+                Write-ReconcileRecord ([ordered]@{
+                    kind      = "reconcile_unavailable"
+                    iteration = $Iteration
+                    phase     = $Phase
+                    timestamp = $timestamp
+                    reason    = "reconcile.py did not finish within ${ReconcileTimeoutSeconds}s (timed out)"
+                })
+                Write-Step "reconcile ($Phase, iteration $Iteration): unavailable -- timed out after ${ReconcileTimeoutSeconds}s"
+                return
+            }
+
+            $result = Receive-Job -Job $job
+            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+            $stdout = $result.Output
+            $exit = $result.ExitCode
         }
         catch {
             Write-ReconcileRecord ([ordered]@{
@@ -292,15 +369,16 @@ function Invoke-Reconcile {
             return
         }
 
-        if ($exit -ne 0) {
+        if ($null -eq $exit -or $exit -ne 0) {
+            $exitDesc = if ($null -eq $exit) { "no exit code (job produced no result)" } else { "exited $exit" }
             Write-ReconcileRecord ([ordered]@{
                 kind      = "reconcile_unavailable"
                 iteration = $Iteration
                 phase     = $Phase
                 timestamp = $timestamp
-                reason    = "reconcile.py exited $exit"
+                reason    = "reconcile.py $exitDesc"
             })
-            Write-Step "reconcile ($Phase, iteration $Iteration): unavailable -- script exited $exit"
+            Write-Step "reconcile ($Phase, iteration $Iteration): unavailable -- $exitDesc"
             return
         }
 
