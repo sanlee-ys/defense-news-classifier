@@ -10,6 +10,8 @@ sys.path.insert(0, str(SCRIPTS))
 
 import loop_metrics as lm  # noqa: E402
 
+import optimize  # noqa: E402  (importable via the src path loop_metrics inserts)
+
 # ---------------------------------------------------------------------------
 # The ledger must never default into the worktree: that is the whole of the
 # "the agent cannot read B and C" guarantee.
@@ -223,3 +225,49 @@ def test_state_dir_is_inside_the_repo_but_the_ledger_is_not():
     assert "LOOP_LEDGER" not in os.environ or not str(
         Path(os.environ["LOOP_LEDGER"]).resolve()
     ).startswith(str(lm.REPO_ROOT))
+
+
+def test_score_all_surfaces_errored_counts_per_split():
+    # A truncated/refused row is excluded from scoring (ADR-021), which
+    # changes that split's denominator -- the ledger record must say so, or
+    # a reviewer comparing B across iterations cannot see the ruler moved.
+    class _DropMarkedRowsBackend:
+        """Perfect predictions; rows whose text is "DROP" error out instead."""
+
+        def score(self, prompt, df):
+            kept = df[df["text"] != "DROP"]
+            merged = kept.assign(
+                pred_category=kept["category"],
+                pred_operational_domain=kept["operational_domain"],
+                pred_region=kept["region"],
+            )
+            return optimize.ScoreOutcome(
+                merged=merged,
+                tokens=1,
+                errored_ids=list(df.loc[df["text"] == "DROP", "id"]),
+            )
+
+    def _df(ids, drop_first=False):
+        rows = []
+        for i, row_id in enumerate(ids):
+            rows.append(
+                {
+                    "id": row_id,
+                    "text": "DROP" if (drop_first and i == 0) else f"t{row_id}",
+                    "category": "policy",
+                    "operational_domain": "air",
+                    "region": "europe",
+                }
+            )
+        return pd.DataFrame(rows)
+
+    split = optimize.Split(
+        a=_df([1, 2, 3], drop_first=True),
+        b=_df([10, 11]),
+        c=_df([20, 21]),
+        hashes={"A": "ha", "B": "hb", "C": "hc"},
+    )
+    record = lm.score_all("PROMPT", _DropMarkedRowsBackend(), split)
+
+    assert record["errored"] == {"A": 1, "B": 0, "C": 0}
+    assert list(record["merged_a"]["id"]) == [2, 3]  # the errored row is absent

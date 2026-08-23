@@ -272,6 +272,15 @@ def score_all(prompt: str, backend, split) -> dict:
         "c": c.as_dict(),
         "region_guardrail": region_guardrail(c.merged),
         "tokens": a.tokens + b.tokens + c.tokens,
+        # Harness health, not a score: rows excluded because the call was
+        # truncated or refused (ADR-021). Nonzero counts mean the split
+        # denominators differ from other iterations -- a reviewer must see
+        # that before trusting a B delta.
+        "errored": {
+            "A": len(a.errored_ids),
+            "B": len(b.errored_ids),
+            "C": len(c.errored_ids),
+        },
         "merged_a": a.merged,
     }
 

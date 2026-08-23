@@ -56,6 +56,8 @@ from classify import (
     MODEL,
     REGIONS,
     SYSTEM_PROMPT,
+    ClassificationRefusalError,
+    IncompleteResponseError,
     InvalidLabelError,
     classify,
     make_client,
@@ -165,11 +167,19 @@ class ScoreOutcome:
     were affected at all", which is the question a reader scanning a run
     actually asks. Always `[]` for `DryRunBackend`, which never produces an
     invalid label.
+
+    `errored_ids` lists the row ids (if any) whose call raised
+    `IncompleteResponseError` or `ClassificationRefusalError`. Those rows are
+    NOT in `merged`: a truncated or refused response is a harness failure,
+    never a label, so it is excluded from every metric rather than scored as
+    a miss (ADR-021; `route_eval`'s REFUSED precedent). Always `[]` for
+    `DryRunBackend`.
     """
 
     merged: pd.DataFrame
     tokens: int
     unclassified_ids: list = field(default_factory=list)
+    errored_ids: list = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -301,6 +311,7 @@ class SplitScore:
     per_class_f1: dict
     tokens: int
     unclassified_ids: list = field(default_factory=list)
+    errored_ids: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
         """JSON-serializable view for the run log (drops the predictions DataFrame)."""
@@ -433,6 +444,7 @@ def score_split(prompt: str, backend: OptimizerBackend, df: pd.DataFrame) -> Spl
         per_class_f1=per_class_f1,
         tokens=int(outcome.tokens),
         unclassified_ids=list(outcome.unclassified_ids),
+        errored_ids=list(outcome.errored_ids),
     )
 
 
@@ -754,6 +766,7 @@ def make_iteration_record(
     tokens_spent: int,
     done_signal: str | None,
     unclassified: dict | None = None,
+    errored: dict | None = None,
     region_guard: dict | None = None,
 ) -> dict:
     """Build one run-log iteration record (spec section 8 schema).
@@ -782,6 +795,12 @@ def make_iteration_record(
             zeros when not passed, so a record with no unclassified rows is
             still schema-valid and existing readers (the portfolio viewer,
             older run logs) are unaffected.
+        errored: Per-split count of rows excluded from scoring because the
+            call raised `IncompleteResponseError` or
+            `ClassificationRefusalError` (see `ScoreOutcome.errored_ids`),
+            e.g. `{"A": 0, "B": 0, "C": 1}`. Additive/optional with the
+            same all-zeros default as `unclassified`, for the same reader
+            compatibility reason.
         region_guard: `region_guardrail(split C)` for this iteration, or
             `None` when region was not scoreable. Deliberately a sibling of
             `scores`, not a member of it: `scores` holds the metrics the loop
@@ -806,6 +825,7 @@ def make_iteration_record(
         "tokens_spent": int(tokens_spent),
         "done_signal": done_signal,
         "unclassified": unclassified or {"A": 0, "B": 0, "C": 0},
+        "errored": errored or {"A": 0, "B": 0, "C": 0},
         "region_guardrail": region_guard,
     }
 
@@ -1203,6 +1223,18 @@ class AnthropicBackend:
         surfaces the row count via `ScoreOutcome.unclassified_ids` into the
         run log's `unclassified` field.
 
+        A row whose call raises `IncompleteResponseError` (truncated) or
+        `ClassificationRefusalError` (safety refusal) is different again:
+        the model gave no answer, so per ADR-021 the row is EXCLUDED from
+        the metrics rather than scored as a miss, and its id is surfaced
+        via `ScoreOutcome.errored_ids`. The distinction from
+        `UNCLASSIFIED` is deliberate -- an invalid label is the model
+        answering wrongly (a miss, San's chosen semantics); a truncation
+        or refusal is the harness failing to obtain an answer, and a
+        harness failure attributed to the model is a fabricated error
+        rate. A split where EVERY row errors raises `RuntimeError` --
+        an empty split has no honest score.
+
         Args:
             prompt: System prompt to score.
             df: Ground-truth DataFrame with `id` and `text` columns.
@@ -1215,8 +1247,10 @@ class AnthropicBackend:
         rows = []
         tokens = 0
         unclassified_ids: list = []
+        errored_ids: list = []
         total = len(df)
         for i, (_, row) in enumerate(df.iterrows()):
+            row_errored = False
             try:
                 pred = _classify_retry(
                     self.client, row["text"], model=self.model, system_prompt=prompt
@@ -1242,20 +1276,50 @@ class AnthropicBackend:
                     "axis as a miss",
                     flush=True,
                 )
-            rows.append(
-                {
-                    "id": row["id"],
-                    "pred_category": pred_category,
-                    "pred_operational_domain": pred_domain,
-                    "pred_region": pred_region,
-                }
-            )
+            except (ClassificationRefusalError, IncompleteResponseError) as exc:
+                # Unlike an invalid label (the model answering wrongly), a
+                # truncated or refused call produced no answer at all --
+                # scoring it as a miss would fabricate an error rate, and
+                # letting it propagate aborts the whole unattended run on
+                # one row (both observed live: s151, and the 2026-08-23
+                # baseline halt). ADR-021's rule: excluded from every
+                # metric, surfaced separately as harness health.
+                row_errored = True
+                errored_ids.append(row["id"])
+                kind = (
+                    "refused"
+                    if isinstance(exc, ClassificationRefusalError)
+                    else "incomplete"
+                )
+                print(
+                    f"    row {row['id']}: {kind} response, excluding the row "
+                    f"from scoring (harness failure, not a miss): {exc}",
+                    flush=True,
+                )
+            if not row_errored:
+                rows.append(
+                    {
+                        "id": row["id"],
+                        "pred_category": pred_category,
+                        "pred_operational_domain": pred_domain,
+                        "pred_region": pred_region,
+                    }
+                )
             tokens += _estimate_tokens(prompt, row["text"])
             if (i + 1) % 25 == 0 or i + 1 == total:
                 print(f"    scored {i + 1:3d}/{total}", flush=True)
+        if not rows:
+            raise RuntimeError(
+                f"every row of the split errored ({len(errored_ids)} of "
+                f"{total} refused or incomplete); refusing to score an "
+                "empty split"
+            )
         merged = df.merge(pd.DataFrame(rows), on="id")
         return ScoreOutcome(
-            merged=merged, tokens=tokens, unclassified_ids=unclassified_ids
+            merged=merged,
+            tokens=tokens,
+            unclassified_ids=unclassified_ids,
+            errored_ids=errored_ids,
         )
 
     def propose(
@@ -1590,6 +1654,11 @@ def run_optimization(
             "B": len(score_b.unclassified_ids),
             "C": len(score_c.unclassified_ids),
         },
+        errored={
+            "A": len(score_a.errored_ids),
+            "B": len(score_b.errored_ids),
+            "C": len(score_c.errored_ids),
+        },
         region_guard=region_guard,
     )
     append_run_log(run_log_path, record)
@@ -1672,6 +1741,11 @@ def run_optimization(
                 "A": len(score_a.unclassified_ids),
                 "B": len(score_b.unclassified_ids),
                 "C": len(score_c.unclassified_ids),
+            },
+            errored={
+                "A": len(score_a.errored_ids),
+                "B": len(score_b.errored_ids),
+                "C": len(score_c.errored_ids),
             },
             region_guard=region_guard,
         )
