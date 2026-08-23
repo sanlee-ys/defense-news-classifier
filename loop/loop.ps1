@@ -26,6 +26,13 @@
     loop does not inherit the standing merge authorization: it accumulates
     commits on its own branch for a human to review.
 
+    After each iteration, and once more at run end, the loop also appends a
+    mechanical reconcile snapshot to the ledger (ADR-027's 2026-08-22
+    amendment): a ground-truth git/gh read from the sibling agent-ops
+    clone's scripts/reconcile.py. This is evidence for the human reviewing
+    the run, never a gate -- a missing clone or a failed snapshot never
+    halts the loop; it only records that the check could not run.
+
 .EXAMPLE
     # Smoke test: two iterations, zero-API scoring.
     pwsh loop/loop.ps1 -MaxIterations 2 -DryRunMetrics
@@ -209,6 +216,138 @@ function Invoke-Metrics {
     }
 }
 
+function Invoke-Reconcile {
+    <#
+    .SYNOPSIS
+        Append a ground-truth reconcile snapshot to the ledger, or say why not.
+
+    .DESCRIPTION
+        A self-report is a claim, not a record (agent-ops
+        conventions/reconcile-claims.md). This runs the sibling agent-ops
+        clone's stdlib-only scripts/reconcile.py, read-only, against the loop
+        worktree, and appends either a "reconcile" record (the snapshot) or a
+        "reconcile_unavailable" record (why the snapshot could not be taken).
+
+        This is a feedback hook, not a redline gate (agent-ops
+        conventions/feedback-hooks-are-not-guards.md): it never halts the
+        loop. Any failure -- a missing sibling clone, a missing script, a
+        nonzero exit, unparseable output, or an unexpected exception -- is
+        caught here and turned into a "reconcile_unavailable" record so the
+        run continues.
+
+        The sibling clone is resolved the same way dotfiles'
+        claude/setup-windows.ps1 resolves the agent-ops sibling for the
+        credential-guard family: one directory up from this repo's root,
+        then into "agent-ops". That holds for both the main clone and a loop
+        worktree, because `git worktree add ../dnc-loop ...` (loop/README.md)
+        places the worktree directly beside agent-ops under the code root.
+    #>
+    param(
+        [Parameter(Mandatory)][ValidateSet("post_iteration", "run_end")][string]$Phase,
+        [Parameter(Mandatory)][int]$Iteration
+    )
+
+    function Write-ReconcileRecord {
+        param($Record)
+        ($Record | ConvertTo-Json -Compress -Depth 12) | Add-Content -Path $Ledger -Encoding utf8
+    }
+
+    try {
+        $timestamp = (Get-Date).ToUniversalTime().ToString("o")
+        $agentOpsRoot = Join-Path (Split-Path $RepoRoot -Parent) "agent-ops"
+        $reconcileScript = Join-Path $agentOpsRoot "scripts/reconcile.py"
+
+        if (-not (Test-Path $reconcileScript)) {
+            Write-ReconcileRecord ([ordered]@{
+                kind      = "reconcile_unavailable"
+                iteration = $Iteration
+                phase     = $Phase
+                timestamp = $timestamp
+                reason    = "sibling clone or script not found: $reconcileScript"
+            })
+            Write-Step "reconcile ($Phase, iteration $Iteration): unavailable -- $reconcileScript not found"
+            return
+        }
+
+        # The window only needs to cover this run; +10 min of slack over the
+        # run's own wall-clock cap is generous without being unbounded.
+        $sinceMinutes = $MaxMinutes + 10
+        $reconcileArgs = @("--repo", $RepoRoot, "--since", "${sinceMinutes}m")
+
+        $stdout = $null
+        $exit = $null
+        try {
+            $stdout = & python $reconcileScript @reconcileArgs 2>$null
+            $exit = $LASTEXITCODE
+        }
+        catch {
+            Write-ReconcileRecord ([ordered]@{
+                kind      = "reconcile_unavailable"
+                iteration = $Iteration
+                phase     = $Phase
+                timestamp = $timestamp
+                reason    = "invoking python failed: $($_.Exception.Message)"
+            })
+            Write-Step "reconcile ($Phase, iteration $Iteration): unavailable -- python invocation failed"
+            return
+        }
+
+        if ($exit -ne 0) {
+            Write-ReconcileRecord ([ordered]@{
+                kind      = "reconcile_unavailable"
+                iteration = $Iteration
+                phase     = $Phase
+                timestamp = $timestamp
+                reason    = "reconcile.py exited $exit"
+            })
+            Write-Step "reconcile ($Phase, iteration $Iteration): unavailable -- script exited $exit"
+            return
+        }
+
+        try {
+            $snapshot = ($stdout -join "`n") | ConvertFrom-Json
+        }
+        catch {
+            Write-ReconcileRecord ([ordered]@{
+                kind      = "reconcile_unavailable"
+                iteration = $Iteration
+                phase     = $Phase
+                timestamp = $timestamp
+                reason    = "reconcile.py output was not valid JSON: $($_.Exception.Message)"
+            })
+            Write-Step "reconcile ($Phase, iteration $Iteration): unavailable -- output was not JSON"
+            return
+        }
+
+        Write-ReconcileRecord ([ordered]@{
+            kind      = "reconcile"
+            iteration = $Iteration
+            phase     = $Phase
+            timestamp = $timestamp
+            snapshot  = $snapshot
+        })
+        Write-Step "reconcile ($Phase, iteration $Iteration): snapshot appended"
+    }
+    catch {
+        # The backstop: nothing above should reach here, but a feedback hook
+        # must never take the run down with it.
+        $message = $_.Exception.Message
+        Write-Step "reconcile ($Phase, iteration $Iteration): unavailable -- unexpected error: $message"
+        try {
+            Write-ReconcileRecord ([ordered]@{
+                kind      = "reconcile_unavailable"
+                iteration = $Iteration
+                phase     = $Phase
+                timestamp = (Get-Date).ToUniversalTime().ToString("o")
+                reason    = "unexpected error: $message"
+            })
+        }
+        catch {
+            Write-Step "reconcile ($Phase, iteration $Iteration): could not even write the unavailable record"
+        }
+    }
+}
+
 # --- baseline -------------------------------------------------------------
 Write-Step "config: max=$MaxIterations iterations, budget=`$$BudgetUsd, cap=$MaxMinutes min, branch=$Branch"
 Write-Step "ledger (outside the worktree): $Ledger"
@@ -220,6 +359,7 @@ $spent = 0.0
 $signatures = @()
 $accepted = 0
 $stopReason = "iteration cap reached"
+$lastIteration = 0
 
 for ($i = 1; $i -le $MaxIterations; $i++) {
     # --- Rail 2: the caps, checked here, before spending anything ---------
@@ -227,6 +367,7 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     if ($spent -ge $BudgetUsd) { $stopReason = "budget cap reached"; break }
 
     Write-Step "iteration $i of $MaxIterations (spent so far: `$$([math]::Round($spent,4)))"
+    $lastIteration = $i
 
     # --- a FRESH agent, under normal permissions, on the frozen prompt ----
     $prompt = Get-Content $PromptFile -Raw
@@ -317,12 +458,19 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
         }
     }
 
+    # --- reconcile: a mechanical ground-truth snapshot, feedback not a gate
+    Invoke-Reconcile -Phase "post_iteration" -Iteration $i
+
     # --- the completion sigil --------------------------------------------
     if ((Test-Path $StatusFile) -and (Select-String -Path $StatusFile -SimpleMatch $SIGIL -Quiet)) {
         $stopReason = "the agent wrote $SIGIL"
         break
     }
 }
+
+# --- reconcile: once more at run end, so the persisted ledger below carries
+# the final snapshot too --------------------------------------------------
+Invoke-Reconcile -Phase "run_end" -Iteration $lastIteration
 
 # --- publish the ledger as the run's evidence -----------------------------
 $evalDir = Join-Path $RepoRoot "evals/loop"

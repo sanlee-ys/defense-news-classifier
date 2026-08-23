@@ -200,6 +200,13 @@ the repo does not have.
   improved," and the four verdicts plus several malformed-log cases, all against
   synthetic ledgers and a throwaway git fixture (no API spend, no dependency on a real
   loop run existing on disk).
+- `INFORMATIONAL_KINDS` in `scripts/morning_review.py` (2026-08-22 amendment below) --
+  the set of record `kind`s the parser recognizes but never scores. Adding a third kind
+  of side-channel record to the ledger means adding it here too, or it trips DRIFTED.
+- the sibling `agent-ops` clone's `scripts/reconcile.py` -- the 2026-08-22 amendment's
+  snapshot source. A change to that script's JSON output shape changes what the
+  `"reconcile"` record's `snapshot` field carries; this repo does not parse inside it,
+  so drift there does not break the scorer, only a human reading it.
 
 ## Review
 
@@ -214,3 +221,57 @@ run's base commit (self-authorizing); a rogue record `kind` was invisible to the
 contiguity check yet visible to the B-ratchet; and the "mutually exclusive" language
 overstated what a priority-ordered check guarantees. All five are reflected above and
 pinned by a named test in `tests/test_morning_review.py`.
+
+## Amendment 2026-08-22: the loop appends a mechanical reconcile record every cycle
+
+**Context.** An agent's self-report is a claim, not a record (agent-ops
+`conventions/reconcile-claims.md`). The sibling agent-ops clone carries
+`scripts/reconcile.py`, a stdlib-only, read-only script. It prints a ground-truth JSON
+snapshot of a repo: open pull requests, pull requests merged in a window, remote
+branches from `git ls-remote`, the current branch, uncommitted paths, and the last
+commit. This repo has hit the failure class that script guards against: fabricated or
+orphaned work, found late. The loop runs unattended for several iterations. Nothing in
+it checked its own git state against the systems of record.
+
+**Decision.** `loop/loop.ps1` runs `reconcile.py` against the loop worktree after each
+iteration, and once more at run end. Each run appends one ledger record:
+
+- `{"kind": "reconcile", "iteration": N, "phase": "post_iteration" | "run_end",
+  "timestamp": ..., "snapshot": {...}}` on success. `snapshot` is `reconcile.py`'s own
+  JSON output, unchanged.
+- `{"kind": "reconcile_unavailable", "iteration": N, "phase": ..., "timestamp": ...,
+  "reason": "..."}` when the snapshot could not be taken.
+
+**The reconcile record is evidence, not a gate.** It matches agent-ops
+`conventions/feedback-hooks-are-not-guards.md`: a feedback hook informs a human, a
+redline gate blocks an action. This is the first kind. It never changes a verdict in
+`classify()`, and it never touches `loop.ps1`'s own accept/reject/halt logic. A human
+reading `evals/loop/run_<UTC>.jsonl` gets the loop's self-report and a mechanical
+check of it, side by side, for the same run.
+
+**Fail open, loudly.** The sibling clone or the script may be missing, and the script
+may exit nonzero. None of these may kill a run. `Invoke-Reconcile` in `loop/loop.ps1`
+catches every failure path and writes a `reconcile_unavailable` record with a reason
+instead. The function also carries an outer catch as a backstop, so an unexpected
+exception cannot escape it either. The run continues either way.
+
+**The scorer stays tolerant of the two new kinds.** `scripts/morning_review.py`
+recognizes `"reconcile"` and `"reconcile_unavailable"` as `INFORMATIONAL_KINDS`: the
+"unrecognized kind" DRIFTED check does not fire on them, and every check that reads a
+verdict or an a/b/c score skips them. They do not count as ledger iterations, and they
+do not enter the B-ratchet or the token total. `tests/test_morning_review.py` pins
+this: a SHIPPED run and a STUCK run each keep their verdict with reconcile records
+interleaved, and an arbitrary unrecognized kind (already covered before this
+amendment) still trips DRIFTED.
+
+**Path resolution.** `Invoke-Reconcile` resolves the sibling agent-ops clone the same
+way `dotfiles/claude/setup-windows.ps1` resolves it for the credential-guard family:
+one directory above this repo's root, then into `agent-ops`. This holds for the loop
+worktree too, because `loop/README.md`'s own setup command
+(`git worktree add ../dnc-loop -b loop/prompt-optimize`) places the worktree directly
+beside `agent-ops` under the code root.
+
+**Not a redline gate.** This amendment does not touch ADR-016's seven rails or this
+ADR's own four-way verdict. A reconcile snapshot cannot halt a run, cannot revert a
+commit, and cannot change SHIPPED to PARTIAL. It is read by a human at the same time
+as everything else in the ledger.
