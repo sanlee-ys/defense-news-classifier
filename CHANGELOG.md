@@ -82,6 +82,26 @@ classifier is unchanged: `src/classify.py` carries the same `SYSTEM_PROMPT`, and
   spec file by a test, so post-hoc cell selection cannot happen quietly.
 
 ### Fixed
+- **The outer loop halts loudly when an accepted iteration fails to commit**
+  (`loop/loop.ps1`). Caught live 2026-08-23, run `run_20260823T182804Z`: the pre-commit
+  mypy hook shells out to uv, the loop worktree has no `.env`, so a global `UV_ENV_FILE`
+  made the hook fail and git abort every per-iteration commit -- and the loop, which never
+  checked the exit code, printed "ACCEPTED, committed" three times with zero commits made.
+  The commit now runs with `UV_ENV_FILE` removed (the same removal `Invoke-Metrics` already
+  does, for the same reason), and a failed commit halts the run instead of continuing on a
+  corrupted audit trail. The run's accepted state survived in the index and was committed
+  after the fact on the loop branch.
+
+- **A truncated or refused row no longer aborts a live scoring pass**
+  (`src/optimize.py`, `scripts/loop_metrics.py`). Caught live 2026-08-23: one gold row hit
+  the ADR-021 truncation guard (`stop_reason='max_tokens'`) and `AnthropicBackend.score()`
+  let the error propagate, killing the baseline pass after splits A and B were already paid
+  for. The row is now excluded from every metric per ADR-021's rule (a harness failure
+  scored as a miss is a fabricated error rate) and surfaced as a per-split `errored` count
+  in both run logs, because an excluded row changes that split's denominator and a B delta
+  is not comparable without that fact. Distinct from `InvalidLabelError`, which stays a
+  counted miss. A split where every row errors raises instead of scoring nothing.
+
 - **Two stale claims that had outlived the code they described, in seven documents**
   (`decisions/001-llm-provider.md`, `decisions/002-structured-output-via-tool-use.md`,
   `decisions/009-message-batches-for-bulk-runs.md`, `decisions/README.md`,

@@ -490,7 +490,27 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     if ($code -eq 0) {
         if ($changed) {
             git -C $RepoRoot add -- src/classify.py
-            git -C $RepoRoot commit -m "loop(iter ${i}): accepted -- hidden validation gate passed" | Out-Null
+            # The pre-commit hooks shell out to uv, and this worktree has no
+            # .env -- with a global UV_ENV_FILE set, the mypy hook fails on
+            # the missing file and git aborts the commit. Same removal as
+            # Invoke-Metrics, for the same reason. Caught live 2026-08-23:
+            # three iterations printed "ACCEPTED, committed" with zero
+            # commits made.
+            $savedCommitEnvFile = $env:UV_ENV_FILE
+            if (Test-Path Env:UV_ENV_FILE) { Remove-Item Env:UV_ENV_FILE }
+            try {
+                git -C $RepoRoot commit -m "loop(iter ${i}): accepted -- hidden validation gate passed" | Out-Host
+            }
+            finally {
+                if ($null -ne $savedCommitEnvFile) { $env:UV_ENV_FILE = $savedCommitEnvFile }
+            }
+            # An accepted iteration that fails to commit corrupts the audit
+            # trail silently: the loop reports progress, the branch records
+            # none, and the next reject's checkout restores whatever the
+            # index happens to hold. Halting is the honest behavior.
+            if ($LASTEXITCODE -ne 0) {
+                Stop-Loop "iteration ${i} was accepted but 'git commit' failed (exit $LASTEXITCODE), likely a pre-commit hook -- see the output above. The accepted edit is still staged."
+            }
             Write-Step "iteration ${i}: ACCEPTED, committed"
             $accepted++
         }
