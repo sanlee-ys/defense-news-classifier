@@ -388,6 +388,122 @@ def test_drifted_when_both_threshold_and_plateau_are_claimed_at_once(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# "reconcile" / "reconcile_unavailable" records (ADR-027 amendment,
+# 2026-08-22): loop.ps1's Invoke-Reconcile appends one of these after each
+# iteration and once at run end. Neither carries a verdict or an a/b/c
+# score, and neither should move a verdict this rubric already reached from
+# the baseline/iteration records alone.
+# ---------------------------------------------------------------------------
+
+
+def _reconcile_record(iteration, phase="post_iteration"):
+    return {
+        "kind": "reconcile",
+        "iteration": iteration,
+        "phase": phase,
+        "timestamp": "2026-08-22T00:00:00+00:00",
+        "snapshot": {
+            "repos": [{"path": ".", "current_branch": "loop/prompt-optimize"}]
+        },
+    }
+
+
+def _reconcile_unavailable_record(
+    iteration, phase="post_iteration", reason="script exited 1"
+):
+    return {
+        "kind": "reconcile_unavailable",
+        "iteration": iteration,
+        "phase": phase,
+        "timestamp": "2026-08-22T00:00:00+00:00",
+        "reason": reason,
+    }
+
+
+def test_reconcile_records_are_recognized_not_drifted():
+    # Contrast with test_drifted_on_an_unrecognized_record_kind above: an
+    # arbitrary kind still trips DRIFTED, but these two specific kinds do not.
+    records = [
+        _record("baseline", 0, "baseline", 0.70, 0.70, 0.90),
+        _reconcile_record(0, phase="post_iteration"),
+        _record("iteration", 1, "accept", 0.80, 0.80, 0.93),
+        _reconcile_record(1, phase="post_iteration"),
+        _reconcile_record(1, phase="run_end"),
+    ]
+    assert mr._malformed_reasons(records) == []
+
+
+def test_reconcile_record_missing_iteration_is_still_a_defect():
+    # Recognized does not mean unchecked: the one field these kinds are
+    # expected to carry is still required.
+    records = [
+        _record("baseline", 0, "baseline", 0.70, 0.70, 0.90),
+        {"kind": "reconcile", "phase": "run_end", "snapshot": {}},
+    ]
+    reasons = mr._malformed_reasons(records)
+    assert any("missing 'iteration'" in r for r in reasons)
+
+
+def test_shipped_verdict_unchanged_with_reconcile_records_interleaved(tmp_path):
+    records = [
+        _record("baseline", 0, "baseline", 0.70, 0.70, 0.90),
+        _reconcile_record(0),
+        _record("iteration", 1, "accept", 0.80, 0.80, 0.93),
+        _reconcile_record(1),
+        _reconcile_record(1, phase="run_end"),
+    ]
+    log = _write_log(tmp_path, records)
+    worktree = _make_worktree(tmp_path)
+    (worktree / "loop" / "state").mkdir(parents=True, exist_ok=True)
+    (worktree / "loop" / "state" / "status.md").write_text(
+        "LOOP-COMPLETE: iteration 1\n", encoding="utf-8"
+    )
+    _accept_commit(worktree, "src/classify.py", "PROMPT = 'v1'\n")
+
+    review = mr.review_run(log, worktree)
+
+    assert review.verdict == mr.SHIPPED
+    assert review.exit_code == 0
+    assert review.b_improved
+    assert review.goodhart_ok
+    # The reconcile records must not be counted as ledger iterations.
+    assert [row["iteration"] for row in review.table] == [0, 1]
+
+
+def test_stuck_verdict_unchanged_with_reconcile_unavailable_records(tmp_path):
+    records = [
+        _record("baseline", 0, "baseline", 0.70, 0.70, 0.90),
+        _reconcile_unavailable_record(0, reason="sibling clone or script not found"),
+        _record("iteration", 1, "reject", 0.60, 0.60, 0.90, reject_gate="b_regression"),
+        _reconcile_unavailable_record(1, reason="script exited 1"),
+        _reconcile_unavailable_record(1, phase="run_end", reason="script exited 1"),
+    ]
+    log = _write_log(tmp_path, records)
+
+    review = mr.review_run(log, worktree=None)
+
+    assert review.verdict == mr.STUCK
+    assert review.exit_code == 2
+    assert [row["iteration"] for row in review.table] == [0, 1]
+
+
+def test_reconcile_records_excluded_from_total_tokens(tmp_path):
+    # Informational records carry no "tokens" field; they must not be
+    # silently coerced into the sum (or crash trying).
+    records = [
+        _record("baseline", 0, "baseline", 0.70, 0.70, 0.90, tokens=100),
+        _reconcile_record(0),
+        _record("iteration", 1, "accept", 0.80, 0.80, 0.93, tokens=150),
+        _reconcile_record(1, phase="run_end"),
+    ]
+    log = _write_log(tmp_path, records)
+
+    review = mr.review_run(log, worktree=None)
+
+    assert review.total_tokens == 250
+
+
+# ---------------------------------------------------------------------------
 # The rubric's own internal contracts.
 # ---------------------------------------------------------------------------
 

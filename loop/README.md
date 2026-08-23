@@ -51,6 +51,14 @@ git -C ..\dnc-loop log --oneline loop/prompt-optimize
 Get-Content evals/loop/run_<UTC>.jsonl | ConvertFrom-Json | Format-Table iteration, verdict
 ```
 
+The ledger also carries `kind: "reconcile"` records (one after each iteration, one at
+run end) and `kind: "reconcile_unavailable"` records when the sibling `agent-ops`
+clone's `scripts/reconcile.py` could not run. Each `reconcile` record holds a
+ground-truth git/gh snapshot of the loop worktree, for checking the loop's own commits
+against what the remote and the forge actually show. This is evidence for the human
+reading the run, not a gate: it never changes an iteration's accept/reject, and
+`scripts/morning_review.py` never scores it (ADR-027's 2026-08-22 amendment).
+
 ## Grade one prompt by hand
 
 The ruler runs on its own. The ledger path must be outside the worktree,

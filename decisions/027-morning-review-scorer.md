@@ -200,6 +200,13 @@ the repo does not have.
   improved," and the four verdicts plus several malformed-log cases, all against
   synthetic ledgers and a throwaway git fixture (no API spend, no dependency on a real
   loop run existing on disk).
+- `INFORMATIONAL_KINDS` in `scripts/morning_review.py` (2026-08-22 amendment below) --
+  the set of record `kind`s the parser recognizes but never scores. Adding a third kind
+  of side-channel record to the ledger means adding it here too, or it trips DRIFTED.
+- the sibling `agent-ops` clone's `scripts/reconcile.py` -- the 2026-08-22 amendment's
+  snapshot source. A change to that script's JSON output shape changes what the
+  `"reconcile"` record's `snapshot` field carries; this repo does not parse inside it,
+  so drift there does not break the scorer, only a human reading it.
 
 ## Review
 
@@ -214,3 +221,87 @@ run's base commit (self-authorizing); a rogue record `kind` was invisible to the
 contiguity check yet visible to the B-ratchet; and the "mutually exclusive" language
 overstated what a priority-ordered check guarantees. All five are reflected above and
 pinned by a named test in `tests/test_morning_review.py`.
+
+## Amendment 2026-08-22: the loop appends a mechanical reconcile record every cycle
+
+**Context.** An agent's self-report is a claim, not a record (agent-ops
+`conventions/reconcile-claims.md`). The sibling agent-ops clone carries
+`scripts/reconcile.py`, a stdlib-only, read-only script. It prints a ground-truth JSON
+snapshot of a repo: open pull requests, pull requests merged in a window, remote
+branches from `git ls-remote`, the current branch, uncommitted paths, and the last
+commit. This repo has hit the failure class that script guards against: fabricated or
+orphaned work, found late. The loop runs unattended for several iterations. Nothing in
+it checked its own git state against the systems of record.
+
+**Decision.** `loop/loop.ps1` runs `reconcile.py` against the loop worktree after each
+iteration, and once more at run end. Each run appends one ledger record:
+
+- `{"kind": "reconcile", "iteration": N, "phase": "post_iteration" | "run_end",
+  "timestamp": ..., "snapshot": {...}}` on success. `snapshot` is `reconcile.py`'s own
+  JSON output, unchanged.
+- `{"kind": "reconcile_unavailable", "iteration": N, "phase": ..., "timestamp": ...,
+  "reason": "..."}` when the snapshot could not be taken.
+
+**The reconcile record is evidence, not a gate.** It matches agent-ops
+`conventions/feedback-hooks-are-not-guards.md`: a feedback hook informs a human, a
+redline gate blocks an action. This is the first kind. It never changes a verdict in
+`classify()`, and it never touches `loop.ps1`'s own accept/reject/halt logic. A human
+reading `evals/loop/run_<UTC>.jsonl` gets the loop's self-report and a mechanical
+check of it, side by side, for the same run.
+
+**Fail open, loudly.** The sibling clone or the script may be missing, and the script
+may exit nonzero. None of these may kill a run. `Invoke-Reconcile` in `loop/loop.ps1`
+catches every failure path and writes a `reconcile_unavailable` record with a reason
+instead. The function also carries an outer catch as a backstop, so an unexpected
+exception cannot escape it either. The run continues either way.
+
+**The scorer stays tolerant of the two new kinds.** `scripts/morning_review.py`
+recognizes `"reconcile"` and `"reconcile_unavailable"` as `INFORMATIONAL_KINDS`: the
+"unrecognized kind" DRIFTED check does not fire on them, and every check that reads a
+verdict or an a/b/c score skips them. They do not count as ledger iterations, and they
+do not enter the B-ratchet or the token total. `tests/test_morning_review.py` pins
+this: a SHIPPED run and a STUCK run each keep their verdict with reconcile records
+interleaved, and an arbitrary unrecognized kind (already covered before this
+amendment) still trips DRIFTED.
+
+**Path resolution.** `Invoke-Reconcile` resolves the sibling agent-ops clone the same
+way `dotfiles/claude/setup-windows.ps1` resolves it for the credential-guard family:
+one directory above this repo's root, then into `agent-ops`. This holds for the loop
+worktree too, because `loop/README.md`'s own setup command
+(`git worktree add ../dnc-loop -b loop/prompt-optimize`) places the worktree directly
+beside `agent-ops` under the code root. Before running anything from that path, the
+function also checks the directory is a git working copy whose origin remote looks
+like `agent-ops` -- lexical resolution alone would run whatever code sits in a
+directory that happens to have that name, wherever a worktree happens to be created.
+A directory with no `.git`, or a git repo whose origin does not match, is treated the
+same as a missing script: a `reconcile_unavailable` record, never a run.
+
+**Not a redline gate.** This amendment does not touch ADR-016's seven rails or this
+ADR's own four-way verdict. A reconcile snapshot cannot halt a run, cannot revert a
+commit, and cannot change SHIPPED to PARTIAL. It is read by a human at the same time
+as everything else in the ledger.
+
+**Review.** A read-only cross-model review (`codex exec`) of this diff against `main`
+found two issues, confirmed against this repo's own files and fixed before merge:
+
+- **A reconcile call had no wall-clock bound of its own.** The internal 30s timeout
+  inside `reconcile.py`'s own `git`/`gh` calls does not protect the caller if the
+  interpreter launch itself stalls, or if a subprocess `gh` spawns (a browser window
+  for an interactive auth prompt, say) survives past its parent's own timeout on
+  Windows. A feedback hook that can hang is a hook that can wedge the very run it was
+  added to observe, which is exactly what this amendment's "fail open, loudly" framing
+  had promised could not happen. Fixed: the call now runs inside a background job
+  (`Start-Job`), bounded by a new `-ReconcileTimeoutSeconds` parameter (default 45,
+  generous over the few seconds a real snapshot takes). A timed-out job is stopped and
+  reported as a `reconcile_unavailable` record, same as any other failure.
+- **The sibling-clone path resolution had no identity check.** Confirmed above.
+
+Fixing the first issue surfaced a second, unrelated bug the manual smoke test caught
+before either review pass: the background job's scriptblock originally declared its
+parameter as `$Args`, which collides with PowerShell's automatic `$args` variable and
+silently bound to an empty array instead of the argument list `-ArgumentList` passed.
+`python` then ran `reconcile.py` with no `--repo` at all, producing a syntactically
+valid but empty snapshot (`{"repos": []}`) -- a record that would have looked like
+success while carrying nothing. Renamed to `$PythonArgs`; the smoke test's Case 2
+(the real-repo success path) is what caught it, by asserting `snapshot.repos` is
+non-empty rather than only that the record's `kind` is `"reconcile"`.

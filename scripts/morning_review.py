@@ -26,7 +26,14 @@ worktree's git state and classifies the run into one of four verdicts:
 The four checks are evaluated in that priority order and each returns
 immediately, so the *output* is always exactly one verdict -- see
 :func:`classify` for why that is a precedence partition, not a claim that
-the underlying conditions never overlap. Usage::
+the underlying conditions never overlap.
+
+The log may also carry ``"reconcile"`` and ``"reconcile_unavailable"``
+records (ADR-027 amendment, 2026-08-22): a ground-truth git/gh snapshot
+``loop.ps1`` appends after each iteration and once at run end, or a note
+that the snapshot could not be taken. See :data:`INFORMATIONAL_KINDS`.
+These are read as evidence for a human, never as input to a verdict --
+they carry no score and are excluded from every check below. Usage::
 
     uv run python scripts/morning_review.py evals/loop/run_20260820T011747Z.jsonl
     uv run python scripts/morning_review.py <run.jsonl> --worktree ../dnc-loop --json
@@ -68,6 +75,16 @@ NOISE_FLOOR = 0.0024
 DEFAULT_C_TOLERANCE = NOISE_FLOOR
 
 SIGIL = "LOOP-COMPLETE:"
+
+# Record kinds the loop appends for reconciliation (loop.ps1's Invoke-Reconcile,
+# ADR-027 amendment 2026-08-22): a ground-truth snapshot from the sibling
+# agent-ops clone's scripts/reconcile.py, or a note that the snapshot could
+# not be taken. Neither carries a/b/c scores or a verdict, and neither is an
+# "iteration" the B-ratchet or the contiguity check should see -- they are
+# recognized here so they do not trip the "unrecognized kind" DRIFTED check,
+# and skipped everywhere else. This is evidence for a human reading the run,
+# never a gate: a missing or failed reconcile never changes a verdict.
+INFORMATIONAL_KINDS = {"reconcile", "reconcile_unavailable"}
 
 
 @dataclass
@@ -129,14 +146,16 @@ def _malformed_reasons(records: list[dict]) -> list[str]:
     if not records:
         return ["empty log: no records"]
 
-    valid_kinds = {"baseline", "iteration"}
+    valid_kinds = {"baseline", "iteration"} | INFORMATIONAL_KINDS
     valid_verdicts = {"baseline", "accept", "reject"}
 
     # A record with a kind neither "baseline" nor "iteration" is otherwise
     # invisible to the contiguity check below, yet _best_by_b matches on
     # verdict alone -- an unrecognized kind must be caught here, or a bogus
     # extra record (verdict="accept", an inflated b) could win best-by-B
-    # without ever being counted as an iteration.
+    # without ever being counted as an iteration. The two INFORMATIONAL_KINDS
+    # are recognized here but carry no verdict/a/b/c of their own -- they are
+    # excluded from every check below that reads those fields.
     for record in records:
         kind = record.get("kind")
         if kind not in valid_kinds:
@@ -170,7 +189,14 @@ def _malformed_reasons(records: list[dict]) -> list[str]:
         reasons.append(f"non-contiguous or duplicate iteration numbers: got {seen}")
 
     for record in records:
-        label = f"{record.get('kind', '?')} {record.get('iteration', '?')}"
+        kind = record.get("kind")
+        label = f"{kind or '?'} {record.get('iteration', '?')}"
+        if kind in INFORMATIONAL_KINDS:
+            # No verdict, no a/b/c: only "iteration" is expected, so the
+            # B-ratchet and evidence table can still label the record.
+            if "iteration" not in record:
+                reasons.append(f"{label}: missing 'iteration'")
+            continue
         for key in ("kind", "iteration", "verdict"):
             if key not in record:
                 reasons.append(f"{label}: missing '{key}'")
@@ -221,6 +247,10 @@ def load_run_log(path: Path) -> tuple[list[Iteration], list[str]]:
 
     iterations: list[Iteration] = []
     for record in records:
+        if record.get("kind") in INFORMATIONAL_KINDS:
+            # Carries no verdict or a/b/c score; not a defect, just not an
+            # Iteration this rubric scores against.
+            continue
         try:
             iterations.append(
                 Iteration(
