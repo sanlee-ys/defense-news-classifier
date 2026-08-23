@@ -771,6 +771,7 @@ def test_make_iteration_record_has_full_section8_schema():
         "tokens_spent",
         "done_signal",
         "unclassified",
+        "errored",
         "region_guardrail",
     }
     assert set(rec.keys()) == expected_keys
@@ -780,6 +781,9 @@ def test_make_iteration_record_has_full_section8_schema():
     # still has the key, defaulted to all-zero counts, so older callers and
     # the portfolio viewer never see a missing field.
     assert rec["unclassified"] == {"A": 0, "B": 0, "C": 0}
+    # Same additive contract for `errored` (rows excluded as truncated or
+    # refused, ADR-021) -- all-zero default, never a missing key.
+    assert rec["errored"] == {"A": 0, "B": 0, "C": 0}
     # Same additive contract for the region guardrail, except its "not
     # passed" default is None ("not measured"), never 0.0 -- a zero would
     # read as "measured, and the region axis collapsed".
@@ -994,6 +998,74 @@ def test_anthropic_backend_score_survives_persistent_invalid_label(monkeypatch, 
     out = capsys.readouterr().out
     assert "row 2" in out
     assert "invalid label on category, operational_domain, region" in out
+
+
+def test_anthropic_backend_score_excludes_truncated_and_refused_rows(
+    monkeypatch, capsys
+):
+    # A truncated (IncompleteResponseError) or refused
+    # (ClassificationRefusalError) call produced no answer at all -- unlike
+    # an invalid label, there is nothing to score. ADR-021's rule: the row
+    # is EXCLUDED from the metrics (scoring it as a miss would fabricate an
+    # error rate) and its id lands in errored_ids, and the run continues.
+    # Before this handling, one truncated gold row aborted a whole live
+    # baseline scoring pass (observed 2026-08-23).
+    def flaky_classify(client, text, model=None, system_prompt=None):
+        if text == "cut off":
+            raise optimize.IncompleteResponseError("stop_reason='max_tokens'")
+        if text == "declined":
+            raise optimize.ClassificationRefusalError("model declined the request")
+        return {"category": "policy", "operational_domain": "air", "region": "europe"}
+
+    monkeypatch.setattr(optimize, "classify", flaky_classify)
+
+    df = pd.DataFrame(
+        [
+            {"id": 1, "text": "t1", "category": "policy", "operational_domain": "air"},
+            {
+                "id": 2,
+                "text": "cut off",
+                "category": "policy",
+                "operational_domain": "air",
+            },
+            {
+                "id": 3,
+                "text": "declined",
+                "category": "policy",
+                "operational_domain": "air",
+            },
+            {"id": 4, "text": "t4", "category": "policy", "operational_domain": "air"},
+        ]
+    )
+    backend = optimize.AnthropicBackend(client=object(), model="claude-sonnet-4-6")
+    outcome = backend.score("MY PROMPT", df)
+
+    assert list(outcome.merged["id"]) == [1, 4]  # errored rows are absent
+    assert outcome.errored_ids == [2, 3]
+    assert outcome.unclassified_ids == []  # a different failure mode, untouched
+    assert (outcome.merged["pred_category"] == "policy").all()
+
+    out = capsys.readouterr().out
+    assert "row 2: incomplete response" in out
+    assert "row 3: refused response" in out
+    assert "not a miss" in out
+
+
+def test_anthropic_backend_score_refuses_an_all_errored_split(monkeypatch):
+    # A split where EVERY row errored has no rows left to score. Returning
+    # an empty ScoreOutcome would let downstream metrics run on nothing and
+    # report a number that measures nothing -- refuse loudly instead.
+    def always_truncated(client, text, model=None, system_prompt=None):
+        raise optimize.IncompleteResponseError("stop_reason='max_tokens'")
+
+    monkeypatch.setattr(optimize, "classify", always_truncated)
+
+    df = pd.DataFrame(
+        [{"id": 1, "text": "t1", "category": "policy", "operational_domain": "air"}]
+    )
+    backend = optimize.AnthropicBackend(client=object(), model="claude-sonnet-4-6")
+    with pytest.raises(RuntimeError, match="every row of the split errored"):
+        backend.score("MY PROMPT", df)
 
 
 def test_run_optimization_surfaces_unclassified_count_in_iteration_record(tmp_path):
