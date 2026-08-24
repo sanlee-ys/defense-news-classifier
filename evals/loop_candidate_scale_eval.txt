@@ -1,0 +1,69 @@
+==============================================================
+LOOP-CANDIDATE CATEGORY CLAUSES -- POWERED A/B (loop run 2)
+==============================================================
+
+Snippets scored   : 595   (effective, after duplicate removal)
+  excluded as exact duplicates: 5
+Workhorse         : claude-sonnet-5
+Answer key        : claude-opus-4-8 judge labels, FROZEN (v3.0.0-era
+                    configuration; both arms graded against the same key,
+                    so the paired lift is internally consistent)
+Answer-key digest : 4148a7d7cf8dcaa3
+Baseline arm      : the SHIPPED prompt (b0202d06a876cc06...),
+                    reused from evals/region_clause_candidate.csv (+ ext)
+Candidate arm     : the loop prompt (7386953ca9365855...),
+                    composed at run time and pinned to the run-2 arm
+
+-- Design power, stated before the numbers -----------------
+Computed by src/mcnemar_power.py at this exact n. Unlike ADR-023
+there is no prior discordant structure on real text for THIS
+candidate, so the registered figures are a sensitivity band, not
+an anchor. A null here rules out the top of the band, not the
+bottom -- see the spec's rule 0.
+
+  power at net +1% @ 5% discordant   : 0.141
+  power at net +2% @ 5% discordant   : 0.520
+  power at net +3% @ 5% discordant   : 0.898
+
+-- Paired comparison, per axis -----------------------------
+Category is the target. Domain and region are GUARDRAILS (ADR-020).
+McNemar p is over ALL discordant pairs on the axis.
+
+axis                    base    cand     lift      c/b/tie   McNemar p
+category               94.1%   94.8%    +0.7%     10/6/579      0.4545
+operational_domain     92.9%   92.9%    +0.0%    16/16/563      1.0000
+region                 94.1%   93.6%    -0.5%      6/9/580      0.6072
+
+-- Pre-registered rules, as measured -----------------------
+  rule 1 (category lift > 0 at p < 0.05): FAILS
+  rule 2 (no guardrail harmed at p < 0.05): PASSES
+  rule 3 (gold non-regression) is the gold arm's question -- run
+  --run-gold / --gold-report only if rules 1 and 2 pass.
+
+-- Per-claim rows, category vs the judge key ---------------
+Fixed  (baseline wrong -> candidate right): 10
+  s003, s115, s123, s141, s158, s165, s166, s368, s402, s490
+Broken (baseline right -> candidate wrong): 6
+  s099, s111, s364, s409, s504, s505
+
+-- Harness health ------------------------------------------
+A lift computed over a harness that dropped rows is not a finding.
+Sentinel rows (__incomplete__/__refused__/__unclassified__) pair as
+errored: excluded from every metric, counted here.
+
+  category             groups=595  pairs=595  eligible=595
+                       clean -- every group paired and scored
+  operational_domain   groups=595  pairs=595  eligible=595
+                       clean -- every group paired and scored
+  region               groups=595  pairs=595  eligible=595
+                       clean -- every group paired and scored
+
+-- How to read this ----------------------------------------
+Accuracy is agreement with the JUDGE, not with a human. The paired
+lift is the finding; the absolute numbers inherit the key's
+documented self-inconsistencies (ADR-023 section 2.1). Rule 3's
+human-graded arm is the non-regression check, not the headline.
+
+The decision rule is pre-registered in
+docs/specs/loop-candidate-category-eval.md and is canonical there.
+==============================================================
