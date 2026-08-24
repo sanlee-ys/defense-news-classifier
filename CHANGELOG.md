@@ -14,6 +14,20 @@ classifier is unchanged: `src/classify.py` carries the same `SYSTEM_PROMPT`, and
 `evals/metrics.json` carries the same published numbers.
 
 ### Added
+- **A pre-registered, powered A/B for the loop's run-2 candidate — measured and declined
+  the same day** (`src/loop_candidate_eval.py`,
+  [the spec](docs/specs/loop-candidate-category-eval.md), report
+  `evals/loop_candidate_scale_eval.txt`, verdict row in
+  [decisions/verdicts.md](decisions/verdicts.md)). The loop's two category clauses
+  (B +0.106 on synthetic text) were composed at run time against the shipped prompt,
+  digest-pinned to the arm the loop measured, and tested against the frozen judge key over
+  the 595-row combined scale set — the baseline arm reused from the paid ADR-024
+  artifacts, so the whole experiment cost one ~600-call arm. Result: category +0.7%
+  (10 fixed / 6 broken), McNemar p=0.4545 against a pre-registered p<0.05 — **declined**;
+  the synthetic-set gain did not transfer at any size the registered design can decide.
+  The gold arm never ran, by rule. The runners record ADR-021 sentinels for truncated,
+  refused, and invalid rows, so a per-row harness failure can no longer abort a paid pass.
+
 - **A Ralph-style outer loop around the classifier prompt, graded on a split the agent
   never sees** ([ADR-026](decisions/archive/026-ralph-loop-honest-ruler.md), `loop/loop.ps1`,
   `loop/PROMPT_optimize.md`, `scripts/loop_metrics.py`, `loop/README.md`). The agent reads
