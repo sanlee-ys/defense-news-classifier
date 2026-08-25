@@ -29,6 +29,7 @@ them apart. **Nothing was deleted**: every superseded ADR keeps its full origina
 | [015](015-public-domain-data-sourcing.md) | All text is public-domain or synthetic — DVIDS + SEC + generated, never scraped or licensed | Accepted |
 | [021](021-api-error-taxonomy-and-incomplete-responses.md) | One API error taxonomy, plus a stop-reason assertion so a truncated response is never scored | Accepted |
 | [027](027-morning-review-scorer.md) | A mechanical morning review scores a loop run before a human reads it | Accepted |
+| [028](028-domain-key-adjudication.md) | `multi` is the domain-neutral catch-all, and the domain key gets a corrections overlay | Accepted |
 
 ## Number map
 
@@ -36,7 +37,7 @@ Every number ever issued, and where its record lives now.
 
 | # | Now |
 |---|---|
-| 001–004, 006–009, 014, 015, 021, 027 | Live, above |
+| 001–004, 006–009, 014, 015, 021, 027, 028 | Live, above |
 | 005, 016, 018, 025, 026 | Superseded as the statement of the rule by [`agent-practice.md`](agent-practice.md). Full text in [`archive/`](archive/) |
 | 010, 011, 012, 013, 017, 019, 020, 022, 023, 024 | Indexed in [`verdicts.md`](verdicts.md). Full text in [`archive/`](archive/) |
 
