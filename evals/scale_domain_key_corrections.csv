@@ -1,0 +1,16 @@
+id,judge_operational_domain_old,judge_operational_domain_new,rule,reason
+s147,multi,air,amd-is-air,IBCS integrated air and missile defense mission command delivery; an AMD story is air regardless of the owning program office
+s468,land,air,amd-is-air,ADA battalion annual training; the key already labels the same battalion type air on s478/s479 for equally generic activity
+s421,multi,land,jointness-is-naming,ramp operations at an airport are ground cargo handling; Joint Task Force in the unit name is naming not two domains
+s295,sea,multi,institution-is-not-a-domain,an AI/ML prize-challenge announcement has no physical medium; NSWC Dahlgren as host does not supply one
+s252,sea,multi,institution-is-not-a-domain,a leadership visit with a program-portfolio enumeration has no activity medium; the lab name is not a domain
+s246,air,multi,zero-domain-is-multi,a leadership visit whose enumeration spans aeropropulsion hypersonics space and nuclear test missions; spans several media and anchors none
+s351,sea,multi,zero-domain-is-multi,a medical-readiness programme story has no physical medium; Navy in the corps name is not a domain
+s259,space,multi,zero-domain-is-multi,an R&D portfolio enumeration spanning directed energy space hypersonics and AMD; spans several media and anchors none
+s288,space,multi,institution-is-not-a-domain,a laboratory-opening story about directed-energy weapons; SMDC in the command name is not a domain
+s138,cyber,multi,zero-domain-is-multi,a software-acquisition process essay has no operational medium; acquisition policy is not a cyber operation
+s056,space,cyber,cyber-capability-is-the-subject,cybersecurity of space operations; the rubric's cyber-versus-host bullet makes the cyber capability the subject
+s297,sea,multi,institution-is-not-a-domain,a CNO visit briefed on electric weapons and cybersecurity; two areas and no activity medium; Dahlgren is not a domain
+s541,land,multi,zero-domain-is-multi,Senate testimony about force-structure numbers has no physical medium
+s400,land,multi,zero-domain-is-multi,an academic lecture on the National Security Strategy has no physical medium
+s370,land,multi,zero-domain-is-multi,a policy change about media filming; duplicate snippet s371 is already keyed multi and one snippet must have one label
