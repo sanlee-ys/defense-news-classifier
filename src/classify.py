@@ -429,13 +429,13 @@ def classify(
             first-class ``search_result`` blocks; either is forwarded to the
             API's user-message ``content`` field unchanged.
         temperature: Optional sampling temperature. Left at the API default
-            (the SDK ``omit`` sentinel) when ``None``. NOTE: Sonnet 5 and the
-            other current models reject any *non-default* sampling value with an
-            HTTP 400, so in practice this must stay ``None`` -- it is retained
-            only so a caller on an older model can still pin it. Determinism is
-            no longer sought via temperature: ``strict: true`` already guarantees
-            a schema-valid label, and run-to-run stability is measured
-            empirically (see ``stability.py``).
+            when ``None``, which sends no ``temperature`` key at all. NOTE:
+            Sonnet 5 and the other current models reject any *non-default*
+            sampling value with an HTTP 400, so in practice this must stay
+            ``None`` -- it is retained only so a caller on an older model can
+            still pin it. Determinism is no longer sought via temperature:
+            ``strict: true`` already guarantees a schema-valid label, and
+            run-to-run stability is measured empirically (see ``stability.py``).
         model: Which Claude model classifies. Defaults to the workhorse
             (claude-sonnet-5); pass a higher tier (e.g. the Opus judge) to run
             the same task on a stronger model.
@@ -491,8 +491,13 @@ def classify(
     with tracer.start_as_current_span(f"chat {model}") as span:
         span.set_attribute("gen_ai.operation.name", "chat")
         span.set_attribute("gen_ai.request.model", model)
-        # Pass the SDK's `omit` sentinel when no temperature is requested, so the
-        # API uses its own default rather than us forcing a value.
+        # `temperature` left the `messages.create` signature in anthropic 1.x
+        # (the parameter left the SDK, not the API), so a pinned value now rides
+        # in `extra_body`, which the SDK merges into the request JSON as-is. Send
+        # nothing when no temperature is requested, exactly as the old `omit`
+        # sentinel did: the default path's request body is unchanged, so every
+        # eval figure measured on it still holds.
+        extra_body = None if temperature is None else {"temperature": temperature}
         response = client.messages.create(
             model=model,
             max_tokens=256,
@@ -501,7 +506,7 @@ def classify(
             tool_choice={"type": "tool", "name": "classify_article"},
             messages=[{"role": "user", "content": text}],
             output_config=OUTPUT_CONFIG,
-            temperature=anthropic.omit if temperature is None else temperature,
+            extra_body=extra_body,
         )
         if span.is_recording():
             set_usage_attributes(span, getattr(response, "usage", None))
@@ -574,7 +579,8 @@ def build_batch_request(
         system_prompt: The instruction block sent as the system prompt.
             Defaults to the module ``SYSTEM_PROMPT``.
         temperature: Optional sampling temperature; omitted (API default)
-            when ``None``, matching classify()'s behavior.
+            when ``None``, matching classify()'s behavior. The same HTTP 400
+            caveat applies: current models reject a non-default value.
 
     Returns:
         A ``Request`` ready to append to the ``requests`` list passed to
@@ -595,7 +601,12 @@ def build_batch_request(
         "output_config": OUTPUT_CONFIG,
     }
     if temperature is not None:
-        params["temperature"] = temperature
+        # A batch request carries no `extra_body` hatch, and `temperature` left
+        # MessageCreateParamsNonStreaming in anthropic 1.x. The SDK still
+        # forwards an extra key in `params` to the wire unchanged, so the escape
+        # hatch here is a cast rather than a different request shape. The default
+        # path still writes no `temperature` key (see test_classify.py).
+        cast(dict[str, object], params)["temperature"] = temperature
     return Request(custom_id=custom_id, params=params)
 
 
