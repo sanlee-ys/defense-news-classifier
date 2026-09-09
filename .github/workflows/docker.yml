@@ -17,10 +17,11 @@ on:
       - 'Dockerfile'
       - 'requirements-api.txt'
       - '.github/workflows/docker.yml'
-      # The image COPYs these two modules; an import error in either is exactly
+      # The image COPYs these three modules; an import error in any of them is
       # the failure mode the smoke test exists to catch.
       - 'src/api.py'
       - 'src/classify.py'
+      - 'src/telemetry.py'
   pull_request:
     paths:
       - 'Dockerfile'
@@ -28,6 +29,7 @@ on:
       - '.github/workflows/docker.yml'
       - 'src/api.py'
       - 'src/classify.py'
+      - 'src/telemetry.py'
 
 permissions:
   contents: read
