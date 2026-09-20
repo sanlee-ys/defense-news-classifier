@@ -197,6 +197,11 @@ escalation twice with data — BM25 grounding (ADR-012) and tiered routing (ADR-
   bar. Borderline minor-vs-major if ever picked up.
 - RAG over real public text — shipped in `v2.0.0`, then **retired** (ADR-012); the grounding
   code is kept dormant as the record.
+- **L4 control-flow design vocabulary**: a design-input note, not a build order. It names the
+  handoff primitive, the typed state graph, and the workflow-vs-agent distinction as inputs for
+  a possible future L4 re-attempt (HANDOFF's job 4, "a structurally narrowed critic"). L4 v1
+  already shipped and was declined as configured (ADR-020); this note parks prior art only. See
+  [docs/specs/l4-design-vocabulary.md](docs/specs/l4-design-vocabulary.md).
 
 <!-- shared:links-verify v1 -->
 ## Links — verify before sending (hard rule)
