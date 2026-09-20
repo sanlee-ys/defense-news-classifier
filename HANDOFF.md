@@ -17,7 +17,8 @@ file is a point-in-time snapshot and goes stale the moment work lands._
     `CHANGELOG.md` entry is `[3.2.1]`. The `v3.2.0` and `v3.2.1` tags and both
     GitHub releases are published.
   - Pull requests #206, #207, #208 and #209 are open. All four are Dependabot
-    dependency bumps. No other pull request is open.
+    dependency bumps. Pull request #211 carries this refresh. No other pull
+    request is open.
   - 37 pull requests merged after the `v3.2.1` tag, the newest of them #210.
     The State text below this bullet is the 2026-08-02 record, and it does not
     describe them.
@@ -27,10 +28,16 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   region fix and the published contract artifact. MINOR, because all of it is
   eval and experiment machinery — `src/api.py` and `SYSTEM_PROMPT` are untouched
   since `v3.0.0`, so the `{category, operational_domain, region}` contract holds.
+- **Corrected 2026-09-20: ~~`src/api.py` and `SYSTEM_PROMPT` are untouched since
+  `v3.0.0`~~.** That claim was true on 2026-07-25. It is false now, and this
+  section repeats it once more below. `v3.2.1` shipped the `global`-boundary
+  clause into `classify.SYSTEM_PROMPT` (`a59689e8…` → `b0202d06…`), and
+  `src/api.py` now reports `version="3.2.1"`. The
+  `{category, operational_domain, region}` contract still holds.
 - **Corrected 2026-09-20: ~~`v3.1.0` is still the released tag~~. The released
-  tag is now `v3.2.1`.** Sixteen PRs merged between the `v3.1.0` tag and
-  2026-08-02 (#137 to #154, less #139, which #142 superseded after it closed).
-  Three of them refreshed this file, and #147 has since merged. The rest are runtime
+  tag is now `v3.2.1`.** Seventeen PRs merged after the `v3.1.0` tag, in the
+  range #137 to #154. Only #139 did not merge, because #142 superseded it and
+  it closed. Three of them refreshed this file. The rest are runtime
   hardening, two provenance pins, three new offline layers, two CI lanes, and the
   `v3.2.0` harness. None of it moved a published number: all eight gated floors
   are byte-identical (category 0.926, category-F1 0.911, domain 0.926, domain-F1
@@ -333,10 +340,11 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 
    **Corrected 2026-09-20: a live run has been made.** The `[Unreleased]` block
    in `CHANGELOG.md` supersedes the "no live optimization run exists" claim on
-   2026-08-20, and it records the run-2 candidate as measured and declined at
-   McNemar p=0.4545. `src/classify.py` is still unchanged, so the shipped prompt
-   did not move. Read that block and the ADR-026 amendment before you plan
-   another run.
+   2026-08-20. That block records the run-2 candidate as measured and declined
+   at McNemar p=0.4545. The prompt in `src/classify.py` is still unchanged, so
+   the shipped classifier did not move. The file itself did change after
+   `v3.2.1`, in the anthropic 1.x bump (#202). Read that block and the ADR-026
+   amendment before you plan another run.
 
 ## Escalate if
 
@@ -426,9 +434,9 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 
 - **Corrected 2026-09-20: two asks removed, because both were done.** This list
   asked the owner to tag a release and to start job 3. The remote carries the
-  `v3.2.0` tag and its GitHub release (2026-08-02), and the `v3.2.1` tag and its
-  GitHub release (2026-08-03), so the release ask is closed. Job 3 ran on
-  2026-08-02 and 2026-08-03 and shipped as `v3.2.1`
+  `v3.2.0` tag and its GitHub release (2026-08-02). The remote also carries the
+  `v3.2.1` tag and its GitHub release (2026-08-03). The release ask is closed.
+  Job 3 ran on 2026-08-02 and 2026-08-03 and shipped as `v3.2.1`
   ([ADR-024](decisions/archive/024-global-boundary-clause-adopted.md)), so that
   ask is closed too.
 - Deciding whether the narrowed-critic experiment (job 4) is worth a spec at all.
