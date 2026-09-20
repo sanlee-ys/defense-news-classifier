@@ -7,16 +7,30 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 
 ## State
 
+- **Refreshed 2026-09-20 against `git` and `gh`** with
+  `agent-ops/scripts/handoff_check.py`. The dated lines in this file correct the
+  claims that tool derives. The refresh does not re-narrate the work that landed
+  after the `v3.2.1` tag. Live values on 2026-09-20:
+  - Branch: `docs/handoff-refresh-2026-09-20`, which carries this refresh. A
+    later refresh must set this line to its own branch.
+  - Newest tag on the remote: `v3.2.1` (2026-08-03). The top released
+    `CHANGELOG.md` entry is `[3.2.1]`. The `v3.2.0` and `v3.2.1` tags and both
+    GitHub releases are published.
+  - Pull requests #206, #207, #208 and #209 are open. All four are Dependabot
+    dependency bumps. No other pull request is open.
+  - 37 pull requests merged after the `v3.2.1` tag, the newest of them #210.
+    The State text below this bullet is the 2026-08-02 record, and it does not
+    describe them.
 - **`v3.1.0` is shipped and released** (2026-07-25, PR #136; tag on the remote,
   GitHub release "The autonomy ladder, built to the top"). It tagged the
   accumulated `[Unreleased]` block: ADR-017 through ADR-020, plus the optimizer
   region fix and the published contract artifact. MINOR, because all of it is
   eval and experiment machinery — `src/api.py` and `SYSTEM_PROMPT` are untouched
   since `v3.0.0`, so the `{category, operational_domain, region}` contract holds.
-- **`v3.1.0` is still the released tag; everything below it landed after and is
-  unreleased.** Sixteen PRs have merged since the tag (#137–#154, less #139 —
-  closed, superseded by #142 — and #147, still open), three of them refreshes to
-  this file. The rest are runtime
+- **Corrected 2026-09-20: ~~`v3.1.0` is still the released tag~~. The released
+  tag is now `v3.2.1`.** Sixteen PRs merged between the `v3.1.0` tag and
+  2026-08-02 (#137 to #154, less #139, which #142 superseded after it closed).
+  Three of them refreshed this file, and #147 has since merged. The rest are runtime
   hardening, two provenance pins, three new offline layers, two CI lanes, and the
   `v3.2.0` harness. None of it moved a published number: all eight gated floors
   are byte-identical (category 0.926, category-F1 0.911, domain 0.926, domain-F1
@@ -187,10 +201,10 @@ file is a point-in-time snapshot and goes stale the moment work lands._
   no longer unconditional — checkpoint where a wrong turn is expensive (design
   calls, the gold set, published numbers, API spend), batch what an ADR already
   specifies.
-- **In flight, not yours unless it stalls:** two Dependabot PRs, both **green on
-  every check**, both open — #147 (`codeql-action` 4 → 4.37.3) and #123 (the
-  python-minor-patch group, 6 updates, open since 2026-07-25). Neither touches
-  runtime behavior or a published number. They are the only open PRs.
+- **Corrected 2026-09-20: ~~in flight, #147 and #123~~.** Both merged. Four
+  Dependabot pull requests are open now, and the refresh bullet at the top of
+  this file names them. Neither #147 nor #123 touched runtime behavior or a
+  published number.
 
 ## Next jobs, in order (each its own branch → PR)
 
@@ -317,6 +331,13 @@ file is a point-in-time snapshot and goes stale the moment work lands._
    writing down. A prompt adoption from this loop follows the ADR-024 shape:
    pre-registered rule, paid gold re-run, PATCH version.
 
+   **Corrected 2026-09-20: a live run has been made.** The `[Unreleased]` block
+   in `CHANGELOG.md` supersedes the "no live optimization run exists" claim on
+   2026-08-20, and it records the run-2 candidate as measured and declined at
+   McNemar p=0.4545. `src/classify.py` is still unchanged, so the shipped prompt
+   did not move. Read that block and the ADR-026 amendment before you plan
+   another run.
+
 ## Escalate if
 
 - Anything wants a threshold that isn't derived from a measured run.
@@ -403,23 +424,13 @@ file is a point-in-time snapshot and goes stale the moment work lands._
 
 ## Owner-only actions pending
 
-- **Tagging and releasing `v3.2.0`.** The release commit is on `main`; everything
-  else in job 1 is done. Tags never work from a container (proxy 403), so this is
-  owner-only:
-
-  ```bash
-  git -C <repo> checkout main
-  git -C <repo> pull
-  git -C <repo> tag -a v3.2.0 -m "v3.2.0 - the ruler shrinks: the region axis, measured at n=300"
-  git -C <repo> push origin v3.2.0
-  gh release create v3.2.0 -R sanlee-ys/defense-news-classifier --title "The ruler shrinks" --notes-file <notes>
-  ```
-
-  Release notes point at the `[3.2.0]` CHANGELOG entry and ADR-022.
-- **Running the higher-power re-run (job 3).** The harness, the collector and the
-  pre-registration are merged and run-ready; every command that spends is owner-driven
-  by repo contract. Start at the spec's §7 step 0 (free), and check the achieved
-  extension size against the n=545 floor before step 2.
+- **Corrected 2026-09-20: two asks removed, because both were done.** This list
+  asked the owner to tag a release and to start job 3. The remote carries the
+  `v3.2.0` tag and its GitHub release (2026-08-02), and the `v3.2.1` tag and its
+  GitHub release (2026-08-03), so the release ask is closed. Job 3 ran on
+  2026-08-02 and 2026-08-03 and shipped as `v3.2.1`
+  ([ADR-024](decisions/archive/024-global-boundary-clause-adopted.md)), so that
+  ask is closed too.
 - Deciding whether the narrowed-critic experiment (job 4) is worth a spec at all.
   The honest default is no. The ladder is complete, measured, and now fully
   published — there is no documentation debt left to trade against, so this
